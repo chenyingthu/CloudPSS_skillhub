@@ -21,7 +21,7 @@ CloudPSS API 增强工具包 - 为电力系统仿真研究提供高级 Python �
 pip install cloudpss-toolkit
 
 # 从源码安装
-git clone https://github.com/your-org/cloudpss-toolkit.git
+git clone https://git.tsinghua.edu.cn/chen_ying/cloudpss-toolkit.git
 cd cloudpss-toolkit
 pip install -e .
 
@@ -73,7 +73,7 @@ pytest --cov=cloudpss_skills --cov-report=html
 
 ## 相关项目
 
-- [cloudpss-sim-skill](https://github.com/your-org/cloudpss-sim-skill) - Claude Code Skill 版本
+- [cloudpss-sim-skill](https://git.tsinghua.edu.cn/chen_ying/cloudpss-sim-skill) - Claude Code Skill 版本
 
 ## 许可证
 
