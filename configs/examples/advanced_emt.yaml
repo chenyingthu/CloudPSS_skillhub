@@ -1,0 +1,29 @@
+# 高级EMT仿真配置
+# 自定义仿真参数和输出通道
+
+skill: emt_simulation
+
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/IEEE3
+  source: cloud
+
+simulation:
+  duration: 5.0           # 5秒仿真
+  step_size: 0.00005      # 50μs步长
+  timeout: 600            # 10分钟超时
+
+output:
+  format: json            # JSON格式便于后续处理
+  path: ./results/advanced/
+  prefix: ieee3_detailed
+  timestamp: true
+  channels:               # 只导出关心的通道
+    - "Bus1_Va"
+    - "Bus1_Vb"
+    - "Bus1_Vc"
+    - "Bus2_Va"
+    - "Bus2_Vb"
+    - "Bus2_Vc"

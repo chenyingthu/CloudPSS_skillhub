@@ -1,0 +1,20 @@
+skill: batch_powerflow
+auth:
+  token_file: .cloudpss_token
+models:
+  - rid: model/holdme/IEEE39
+    name: IEEE39
+    source: cloud
+  - rid: model/holdme/IEEE3
+    name: IEEE3
+    source: cloud
+algorithm:
+  type: newton_raphson
+  tolerance: 1.0e-6
+  max_iterations: 100
+output:
+  format: json
+  path: ./results/
+  prefix: batch_powerflow
+  timestamp: true
+  aggregate: true     # 是否生成汇总报告

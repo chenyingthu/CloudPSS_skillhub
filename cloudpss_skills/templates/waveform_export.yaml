@@ -1,0 +1,43 @@
+# 波形导出配置模板
+# 从已有仿真任务导出波形数据
+
+skill: waveform_export
+
+# 数据源设置
+source:
+  # 仿真任务ID（必填）
+  job_id: "your_job_id_here"
+
+  # 认证设置（可选，如未设置则从环境获取）
+  auth:
+    token_file: ".cloudpss_token"
+
+# 导出设置
+export:
+  # 要导出的波形分组（空数组表示全部）
+  plots: []
+  # plots:
+  #   - 0
+  #   - 1
+
+  # 要导出的通道（空数组表示全部）
+  channels: []
+  # channels:
+  #   - "Bus1_Va"
+  #   - "Bus1_Vb"
+
+  # 时间范围切片（可选）
+  # time_range:
+  #   start: 0.0
+  #   end: 10.0
+
+# 输出设置
+output:
+  # 输出格式: csv | json
+  format: "csv"
+
+  # 输出目录
+  path: "./results/"
+
+  # 输出文件名（可选，默认自动生成）
+  # filename: "my_waveforms.csv"

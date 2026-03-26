@@ -1,0 +1,16 @@
+skill: param_scan
+auth:
+  token_file: .cloudpss_token
+model:
+  rid: model/holdme/IEEE3
+  source: cloud
+scan:
+  component: ""       # 元件ID或名称，如 "Bus1_Load"
+  parameter: ""       # 参数名，如 "P"（有功功率）
+  values: []          # 参数值列表，如 [10, 20, 30, 40, 50]
+  simulation_type: power_flow  # power_flow 或 emt
+output:
+  format: json
+  path: ./results/
+  prefix: param_scan
+  timestamp: true

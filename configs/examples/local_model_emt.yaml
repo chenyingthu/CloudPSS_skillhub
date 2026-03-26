@@ -1,0 +1,21 @@
+# 本地模型EMT仿真
+# 使用准备好的本地YAML文件
+
+skill: emt_simulation
+
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: ./models/ieee3_prepared.yaml
+  source: local
+
+simulation:
+  duration: 10.0
+  timeout: 300
+
+output:
+  format: json
+  path: ./results/local_model/
+  prefix: local_emt
+  timestamp: true

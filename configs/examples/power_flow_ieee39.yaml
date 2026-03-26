@@ -1,0 +1,22 @@
+# 潮流计算配置
+# IEEE39系统的潮流分析
+
+skill: power_flow
+
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/IEEE39
+  source: cloud
+
+algorithm:
+  type: newton_raphson
+  tolerance: 1.0e-6
+  max_iterations: 100
+
+output:
+  format: json
+  path: ./results/power_flow/
+  prefix: ieee39_pf
+  timestamp: true

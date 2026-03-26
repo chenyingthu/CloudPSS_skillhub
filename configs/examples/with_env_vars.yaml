@@ -1,0 +1,21 @@
+# 使用环境变量的配置
+# 适用于CI/CD或共享配置
+
+skill: emt_simulation
+
+auth:
+  token: "${CLOUDPSS_TOKEN}"  # 从环境变量读取
+
+model:
+  rid: "${MODEL_RID:-model/holdme/IEEE3}"  # 支持默认值
+  source: cloud
+
+simulation:
+  duration: ${SIM_DURATION:-10.0}
+  timeout: 300
+
+output:
+  format: csv
+  path: "${OUTPUT_PATH:-./results/}"
+  prefix: "${PREFIX:-emt_}"
+  timestamp: true

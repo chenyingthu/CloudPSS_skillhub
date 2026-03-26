@@ -1,0 +1,19 @@
+skill: result_compare
+auth:
+  token_file: .cloudpss_token
+source:
+  - job_id: "abc123"
+    label: "Case A"
+  - job_id: "def456"
+    label: "Case B"
+compare:
+  channels: []        # 空表示所有通道，或指定 ["Bus1_Va", "Bus2_Va"]
+  metrics: [max, min, mean, rms]
+  time_range:
+    start: 0.0
+    end: 10.0
+output:
+  format: markdown    # json 或 markdown
+  path: ./results/
+  filename: comparison_report
+  timestamp: true

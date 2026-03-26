@@ -1,0 +1,16 @@
+# 基础EMT仿真配置
+# 最简单的配置，使用所有默认值
+
+skill: emt_simulation
+
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/IEEE3
+  source: cloud
+
+output:
+  format: csv
+  path: ./results/
+  prefix: basic_emt

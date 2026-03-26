@@ -1,0 +1,17 @@
+skill: n1_security
+auth:
+  token_file: .cloudpss_token
+model:
+  rid: model/holdme/IEEE39
+  source: cloud
+analysis:
+  branches: []  # 空列表表示检查所有支路，或指定 ["Line_1", "Line_2"]
+  check_voltage: true
+  check_thermal: true
+  voltage_threshold: 0.05  # 电压越限阈值（标幺值）
+  thermal_threshold: 1.0   # 热稳定阈值（标幺值）
+output:
+  format: json
+  path: ./results/
+  prefix: n1_security
+  timestamp: true

@@ -1,0 +1,16 @@
+skill: emt_simulation
+auth:
+  token_file: .cloudpss_token
+model:
+  rid: model/holdme/IEEE3
+  source: cloud
+simulation:
+  duration: 10.0
+  step_size: 0.0001
+  timeout: 300
+output:
+  format: csv
+  path: ./results/
+  prefix: emt_output
+  timestamp: true
+  channels: []

@@ -1,0 +1,21 @@
+# 波形导出配置
+# 从已有任务导出特定时间段波形
+
+skill: waveform_export
+
+source:
+  job_id: "your_job_id_here"  # 替换为实际任务ID
+  auth:
+    token_file: .cloudpss_token
+
+export:
+  plots: [0]                # 只导出第一个分组
+  channels: []              # 导出所有通道
+  time_range:
+    start: 1.5              # 从1.5秒开始
+    end: 3.5                # 到3.5秒结束
+
+output:
+  format: csv
+  path: ./results/exported/
+  filename: fault_period.csv

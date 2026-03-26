@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cloudpss-toolkit"
+version = "0.2.0"
+description = "CloudPSS API 增强工具包 - 电力系统仿真研究的高级封装"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "CloudPSS Research Team"}
+]
+keywords = ["cloudpss", "power system", "simulation", "emt", "power flow"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "cloudpss>=4.5.28",
+    "pyyaml>=5.4",
+    "numpy>=1.20",
+    "pandas>=1.3",
+    "matplotlib>=3.4",
+    "requests>=2.25",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.2",
+    "pytest-cov>=2.12",
+    "black>=21.0",
+    "flake8>=3.9",
+    "mypy>=0.9",
+]
+docs = [
+    "sphinx>=4.0",
+    "sphinx-rtd-theme>=0.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-org/cloudpss-toolkit"
+Documentation = "https://cloudpss-toolkit.readthedocs.io"
+Repository = "https://github.com/your-org/cloudpss-toolkit"
+Issues = "https://github.com/your-org/cloudpss-toolkit/issues"
+
+[project.scripts]
+cloudpss-run = "cloudpss_skills.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cloudpss_skills*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38']
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
