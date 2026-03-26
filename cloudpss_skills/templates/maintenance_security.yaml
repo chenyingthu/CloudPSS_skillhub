@@ -1,0 +1,31 @@
+# Maintenance Security - 检修方式安全校核
+# 计划停运 + 残余N-1复核
+
+skill: maintenance_security
+
+# 认证配置
+auth:
+  token_file: .cloudpss_token
+
+# 模型配置
+model:
+  rid: model/holdme/IEEE39
+  source: cloud
+
+# 检修配置
+maintenance:
+  branch_id: ""                  # 计划停运的支路ID（必填）
+  description: "计划检修"         # 检修说明
+
+# 残余N-1配置
+residual_n1:
+  branches: []                   # 残余N-1复核支路列表，空表示自动发现
+  include_transformers: true     # 是否包含变压器
+  limit: null                    # 最大复核支路数
+
+# 输出配置
+output:
+  format: json
+  path: ./results/
+  prefix: maintenance_security
+  generate_report: true
