@@ -1,0 +1,51 @@
+# EMT Fault Study Test for IEEE39
+skill: emt_fault_study
+
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/IEEE39
+  source: cloud
+
+scenarios:
+  baseline:
+    enabled: true
+    fs: 2.5
+    fe: 2.7
+    chg: 0.01
+    description: "基线故障: fe=2.7, chg=0.01"
+
+  delayed_clearing:
+    enabled: true
+    fs: 2.5
+    fe: 2.9
+    chg: 0.01
+    description: "延长故障切除: fe=2.9, chg=0.01"
+
+  mild_fault:
+    enabled: false
+    fs: 2.5
+    fe: 2.7
+    chg: 10000.0
+    description: "较轻故障: fe=2.7, chg=1e4"
+
+analysis:
+  trace_name: "#Gen31.VT:0"
+  voltage_channel_name: "#Gen31.VT"
+  sampling_freq: 2000
+  time_windows:
+    prefault: [2.42, 2.44]
+    fault: [2.56, 2.58]
+    postfault: [2.92, 2.94]
+    late_recovery: [2.96, 2.98]
+
+output:
+  format: json
+  path: ./results/
+  prefix: emt_fault_study_ieee39
+  export_waveforms: true
+  waveform_window:
+    - 2.4
+    - 3.0
+  generate_report: true

@@ -106,6 +106,7 @@ class EmtFaultStudySkill(SkillBase):
                     "type": "object",
                     "properties": {
                         "trace_name": {"type": "string", "default": "vac:0"},
+                        "voltage_channel_name": {"type": "string", "default": "vac"},
                         "sampling_freq": {"type": "integer", "default": 2000},
                         "time_windows": {
                             "type": "object",
@@ -272,8 +273,9 @@ class EmtFaultStudySkill(SkillBase):
                 log("INFO", f"  故障参数: fs={scenario['fs']}, fe={scenario['fe']}, chg={scenario['chg']}")
 
                 # 准备模型
+                voltage_channel_name = analysis_config.get("voltage_channel_name", VOLTAGE_CHANNEL_NAME)
                 working_model = self._prepare_model(
-                    base_model, scenario, sampling_freq, log
+                    base_model, scenario, sampling_freq, voltage_channel_name, log
                 )
 
                 # 运行EMT
@@ -409,7 +411,7 @@ class EmtFaultStudySkill(SkillBase):
                 error=str(e),
             )
 
-    def _prepare_model(self, base_model, scenario: Dict, sampling_freq: int, log_func) -> Any:
+    def _prepare_model(self, base_model, scenario: Dict, sampling_freq: int, voltage_channel_name: str, log_func) -> Any:
         """准备工况模型"""
         from cloudpss import Model
 
@@ -423,7 +425,7 @@ class EmtFaultStudySkill(SkillBase):
             if getattr(comp, "definition", None) == FAULT_DEFINITION:
                 fault = comp
             if getattr(comp, "definition", None) == CHANNEL_DEFINITION:
-                if comp.args.get("Name") == VOLTAGE_CHANNEL_NAME:
+                if comp.args.get("Name") == voltage_channel_name:
                     voltage_channel = comp
 
         if not fault:

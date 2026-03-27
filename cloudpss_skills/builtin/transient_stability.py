@@ -334,47 +334,60 @@ class TransientStabilitySkill(SkillBase):
         for plot_idx in range(len(result.getPlots())):
             channel_names = result.getPlotChannelNames(plot_idx)
 
+            # 尝试两种方式获取速度数据：1) 直接通道名 2) 分组通道
+            speed_data_list = []
+
+            # 方式1: 直接通道名 (IEEE3格式: #wr1:0, #wr2:0...)
             for speed_ch in speed_channels:
                 if speed_ch in channel_names:
                     trace = result.getPlotChannelData(plot_idx, speed_ch)
-                    xs = trace.get("x", [])
-                    ys = trace.get("y", [])
+                    if trace and trace.get("y"):
+                        speed_data_list.append((speed_ch, trace.get("x", []), trace.get("y", [])))
 
-                    if not xs or not ys:
-                        continue
+            # 方式3: 自动检测发电机转速通道 (IEEE39格式: #Gen31.wr:0, #Gen32.wr:0...)
+            if not speed_data_list:
+                for ch in channel_names:
+                    if ".wr:" in ch or ch.endswith(".wr") or ".omega:" in ch or ".speed:" in ch:
+                        trace = result.getPlotChannelData(plot_idx, ch)
+                        if trace and trace.get("y"):
+                            speed_data_list.append((ch, trace.get("x", []), trace.get("y", [])))
 
-                    # 分析窗口内的数据
-                    window_data = [(t, v) for t, v in zip(xs, ys) if analysis_window[0] <= t <= analysis_window[1]]
-                    if not window_data:
-                        continue
+            for speed_ch, xs, ys in speed_data_list:
+                if not xs or not ys:
+                    continue
 
-                    times = [d[0] for d in window_data]
-                    values = [d[1] for d in window_data]
+                # 分析窗口内的数据
+                window_data = [(t, v) for t, v in zip(xs, ys) if analysis_window[0] <= t <= analysis_window[1]]
+                if not window_data:
+                    continue
 
-                    # 计算基准转速（故障前稳态）
-                    pre_fault = [v for t, v in zip(xs, ys) if 2.0 <= t <= 2.4]
-                    base_speed = sum(pre_fault) / len(pre_fault) if pre_fault else 1.0
+                times = [d[0] for d in window_data]
+                values = [d[1] for d in window_data]
 
-                    # 最大转速偏差
-                    deviations = [abs(v - base_speed) for v in values]
-                    max_dev = max(deviations) if deviations else 0
-                    metrics["max_speed_deviation"] = max(metrics["max_speed_deviation"], max_dev)
+                # 计算基准转速（故障前稳态）
+                pre_fault = [v for t, v in zip(xs, ys) if 2.0 <= t <= 2.4]
+                base_speed = sum(pre_fault) / len(pre_fault) if pre_fault else 1.0
 
-                    # 估算稳定时间
-                    settling_time = analysis_window[1]
-                    for i, (t, v) in enumerate(window_data):
-                        if abs(v - base_speed) < settling_threshold * base_speed:
-                            settling_time = t
-                            break
-                    if settling_time > metrics["settling_time"]:
-                        metrics["settling_time"] = settling_time
+                # 最大转速偏差
+                deviations = [abs(v - base_speed) for v in values]
+                max_dev = max(deviations) if deviations else 0
+                metrics["max_speed_deviation"] = max(metrics["max_speed_deviation"], max_dev)
 
-                    # 估算阻尼比和振荡频率
-                    damping, freq = self._estimate_damping(values, times)
-                    if damping > 0:
-                        metrics["damping_ratio"] = damping
-                    if freq > 0:
-                        metrics["oscillation_freq"] = freq
+                # 估算稳定时间
+                settling_time = analysis_window[1]
+                for i, (t, v) in enumerate(window_data):
+                    if abs(v - base_speed) < settling_threshold * base_speed:
+                        settling_time = t
+                        break
+                if settling_time > metrics["settling_time"]:
+                    metrics["settling_time"] = settling_time
+
+                # 估算阻尼比和振荡频率
+                damping, freq = self._estimate_damping(values, times)
+                if damping > 0:
+                    metrics["damping_ratio"] = damping
+                if freq > 0:
+                    metrics["oscillation_freq"] = freq
 
         # 稳定性判据
         metrics["is_stable"] = (
