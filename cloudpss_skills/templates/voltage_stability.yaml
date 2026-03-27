@@ -1,0 +1,34 @@
+# Voltage Stability Analysis - 电压稳定性分析
+# 通过连续潮流计算PV曲线，识别电压崩溃点
+
+skill: voltage_stability
+
+# 认证配置
+auth:
+  token_file: .cloudpss_token
+
+# 模型配置
+model:
+  rid: model/holdme/IEEE39
+  source: cloud
+
+# 负荷扫描配置
+scan:
+  load_scaling: [1.0, 1.2, 1.4, 1.6, 1.8, 2.0]  # 负荷增长倍数列表
+  load_target: null                                # 目标负荷组件（可选）
+  scale_generation: true                          # 是否同时调整发电机出力
+
+# 监测配置
+monitoring:
+  buses:                                          # 监测电压的母线列表
+    - "canvas_0_10"                               # newBus_3p-1
+    - "canvas_0_171"                              # newBus_3p-30
+  collapse_threshold: 0.7                         # 电压崩溃阈值(pu)
+
+# 输出配置
+output:
+  format: json
+  path: ./results/
+  prefix: voltage_stability
+  generate_report: true
+  export_pv_curve: true
