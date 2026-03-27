@@ -1,0 +1,41 @@
+# Short Circuit Analysis - 短路电流计算
+# 基于EMT仿真计算短路电流
+
+skill: short_circuit
+
+# 认证配置
+auth:
+  token_file: .cloudpss_token
+
+# 模型配置
+model:
+  rid: model/holdme/IEEE39
+  source: cloud
+
+# 故障配置
+fault:
+  location: "Bus7"              # 短路位置
+  type: "three_phase"           # 短路类型: three_phase/line_to_ground/line_to_line
+  resistance: 0.0001            # 短路电阻(Ω)
+  fs: 2.0                       # 故障开始时间(s)
+  fe: 2.1                       # 故障结束时间(s)
+
+# 监测配置
+monitoring:
+  current_channels:             # 监测电流通道
+    - "#Gen38.IT:0"
+  voltage_channels:             # 监测电压通道
+    - "#Gen38.VT:0"
+
+# 计算配置
+calculation:
+  base_voltage: 500             # 基准电压(kV)
+  base_capacity: 100            # 基准容量(MVA)
+  sample_window: [2.0, 2.05]    # 采样时间窗口[s]
+
+# 输出配置
+output:
+  format: json
+  path: ./results/
+  prefix: short_circuit
+  generate_report: true

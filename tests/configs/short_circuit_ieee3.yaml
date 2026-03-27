@@ -1,0 +1,33 @@
+# Short Circuit Test for IEEE3
+skill: short_circuit
+
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/IEEE3
+  source: cloud
+
+fault:
+  location: "Bus7"
+  type: "three_phase"
+  resistance: 0.0001
+  fs: 2.0
+  fe: 2.1
+
+monitoring:
+  current_channels:
+    - "#P1:0"
+  voltage_channels:
+    - "vac:0"
+
+calculation:
+  base_voltage: 230
+  base_capacity: 100
+  sample_window: [2.0, 2.05]
+
+output:
+  format: json
+  path: ./results/
+  prefix: short_circuit_ieee3
+  generate_report: true

@@ -23,6 +23,7 @@ from . import fault_severity_scan
 from . import transient_stability
 from . import parameter_sensitivity
 from . import voltage_stability
+from . import short_circuit
 
 # 导出技能类（方便直接导入）
 from .emt_simulation import EmtSimulationSkill
@@ -43,6 +44,7 @@ from .fault_severity_scan import FaultSeverityScanSkill
 from .transient_stability import TransientStabilitySkill
 from .parameter_sensitivity import ParameterSensitivitySkill
 from .voltage_stability import VoltageStabilitySkill
+from .short_circuit import ShortCircuitSkill
 
 __all__ = [
     "EmtSimulationSkill",
@@ -63,4 +65,5 @@ __all__ = [
     "TransientStabilitySkill",
     "ParameterSensitivitySkill",
     "VoltageStabilitySkill",
+    "ShortCircuitSkill",
 ]
