@@ -1,0 +1,52 @@
+# Frequency Response Analysis - 频率响应分析
+# 基于EMT仿真分析系统频率动态响应特性
+# 支持阶跃负荷变化、发电机跳闸、负荷切除等扰动场景
+
+skill: frequency_response
+
+# 认证配置
+auth:
+  token_file: .cloudpss_token
+
+# 模型配置
+model:
+  rid: model/holdme/IEEE39
+  source: cloud
+
+# 扰动配置
+disturbance:
+  type: "step_load_change"    # 扰动类型: step_load_change(阶跃负荷) / generator_trip(发电机跳闸) / load_shedding(负荷切除)
+  time: 2.0                   # 扰动发生时间(s)
+  # 阶跃负荷变化参数
+  load_change_percent: 10.0   # 负荷变化百分比(%)
+  # load_target: "Load1"      # 目标负荷组件(可选)
+  # 发电机跳闸参数
+  # generator_target: "Gen1"  # 目标发电机组件(可选)
+  # 负荷切除参数
+  # shed_percent: 50          # 切除百分比(%)
+  # shed_load_target: "Load1" # 切除负荷目标(可选)
+
+# 监测配置
+monitoring:
+  frequency_channels:         # 频率/转速信号通道
+    - "#Gen38.wr:0"
+  power_channels:             # 功率信号通道
+    - "#Gen38.IT:0"
+
+# 分析参数配置
+analysis:
+  base_frequency: 60.0        # 基准频率(Hz)
+  analysis_window: [2.0, 10.0]  # 分析时间窗口[s]
+  frequency_deadband: 0.05    # 频率死区(Hz)
+  settling_threshold: 0.1     # 稳定阈值(Hz)
+
+# EMT仿真配置
+emt:
+  duration: 10.0              # 仿真时长(s)
+
+# 输出配置
+output:
+  format: json
+  path: ./results/
+  prefix: frequency_response
+  generate_report: true
