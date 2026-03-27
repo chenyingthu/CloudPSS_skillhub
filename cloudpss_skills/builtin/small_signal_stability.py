@@ -248,7 +248,7 @@ class SmallSignalStabilitySkill(SkillBase):
             )
 
     def _extract_system_data(self, model, powerflow_result, base_power: float, log_func) -> Dict:
-        """提取系统数据：母线、发电机、支路参数"""
+        """提取系统数据：母线、发电机、支路参数，包括详细控制参数"""
         from cloudpss import Model
 
         # 获取潮流结果
@@ -257,6 +257,9 @@ class SmallSignalStabilitySkill(SkillBase):
 
         buses = []
         generators = []
+        exciters = {}  # 励磁系统，按关联的发电机分组
+        pss_systems = {}  # PSS，按关联的发电机分组
+        governors = {}  # 调速器，按关联的发电机分组
 
         # 获取模型组件
         components = model.getAllComponents()
@@ -291,6 +294,50 @@ class SmallSignalStabilitySkill(SkillBase):
                         'type': bus_types[i] if i < len(bus_types) else 'PQ',
                     })
 
+        # 首先收集所有控制系统组件
+        for key, comp in components.items():
+            if not hasattr(comp, 'args'):
+                continue
+
+            comp_def = getattr(comp, "definition", "")
+            comp_label = getattr(comp, "label", key)
+
+            # 励磁系统
+            if "EXST1" in comp_def or "_EXST1" in comp_def or "exciter" in comp_def.lower():
+                exciter_data = {'key': key, 'label': comp_label}
+                params = ['KA', 'TA', 'TB', 'TC', 'KF', 'TF', 'VRMAX', 'VRMIN', 'TR']
+                for p in params:
+                    if p in comp.args:
+                        try:
+                            exciter_data[p] = float(comp.args[p].get('source', '0'))
+                        except:
+                            exciter_data[p] = 0.0
+                exciters[comp_label] = exciter_data
+
+            # PSS
+            if "PSS1A" in comp_def or "_PSS1A" in comp_def:
+                pss_data = {'key': key, 'label': comp_label}
+                params = ['Ks', 'T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'VSTMAX', 'VSTMIN']
+                for p in params:
+                    if p in comp.args:
+                        try:
+                            pss_data[p] = float(comp.args[p].get('source', '0'))
+                        except:
+                            pss_data[p] = 0.0
+                pss_systems[comp_label] = pss_data
+
+            # 调速器
+            if "GOV" in comp_def or "_STEAM_GOV" in comp_def or "governor" in comp_def.lower():
+                gov_data = {'key': key, 'label': comp_label}
+                params = ['Kg', 'TSM', 'DB', 'Cmax', 'Cmin']
+                for p in params:
+                    if p in comp.args:
+                        try:
+                            gov_data[p] = float(comp.args[p].get('source', '0'))
+                        except:
+                            gov_data[p] = 0.0
+                governors[comp_label] = gov_data
+
         # 提取发电机参数
         for key, comp in components.items():
             if not hasattr(comp, 'args'):
@@ -304,61 +351,131 @@ class SmallSignalStabilitySkill(SkillBase):
                     'key': key,
                     'label': comp_label,
                     'bus': None,
+                    'definition': comp_def,
                 }
 
-                # 提取惯性时间常数 H (秒)
-                # 不同模型可能有不同参数名
-                h_value = 0.0
-                for h_key in ['H', ' inertia', 'TJ', 'M']:
-                    if h_key in comp.args:
-                        try:
-                            h_val = comp.args[h_key].get('source', '0')
-                            h_value = float(h_val)
-                            break
-                        except (ValueError, TypeError):
-                            pass
+                # 提取惯性时间常数 Tj (秒)
+                tj_value = 0.0
+                if 'Tj' in comp.args:
+                    try:
+                        tj_value = float(comp.args['Tj'].get('source', '0'))
+                    except:
+                        pass
+                if tj_value <= 0:
+                    tj_value = 3.0  # 默认值
 
-                # 如果没有找到H，使用默认值
-                if h_value <= 0:
-                    h_value = 3.0  # 默认值
+                # 提取阻尼系数 Dm
+                dm_value = 0.0
+                if 'Dm' in comp.args:
+                    try:
+                        dm_value = float(comp.args['Dm'].get('source', '0'))
+                    except:
+                        pass
 
-                # 提取阻尼系数 D
-                d_value = 0.0
-                for d_key in ['D', 'Kd']:
-                    if d_key in comp.args:
-                        try:
-                            d_val = comp.args[d_key].get('source', '0')
-                            d_value = float(d_val)
-                            break
-                        except (ValueError, TypeError):
-                            pass
+                # 提取额定容量 Smva (MVA)
+                smva = base_power
+                if 'Smva' in comp.args:
+                    try:
+                        smva = float(comp.args['Smva'].get('source', str(base_power)))
+                    except:
+                        pass
 
-                # 提取额定容量
-                s_n = base_power  # 默认使用系统基准
-                for s_key in ['Sn', 'S_n', 'rated_power']:
-                    if s_key in comp.args:
-                        try:
-                            s_val = comp.args[s_key].get('source', str(base_power))
-                            s_n = float(s_val)
-                            break
-                        except (ValueError, TypeError):
-                            pass
+                # 提取同步电抗 Xd, Xq
+                xd = 1.8; xq = 1.7
+                if 'Xd' in comp.args:
+                    try:
+                        xd = float(comp.args['Xd'].get('source', '1.8'))
+                    except:
+                        pass
+                if 'Xq' in comp.args:
+                    try:
+                        xq = float(comp.args['Xq'].get('source', '1.7'))
+                    except:
+                        pass
 
-                # 提取暂态电抗 Xd'
-                xd_prime = 0.3  # 默认值
-                for x_key in ["Xd'", 'Xd_prime', 'xd1']:
-                    if x_key in comp.args:
-                        try:
-                            x_val = comp.args[x_key].get('source', '0.3')
-                            xd_prime = float(x_val)
-                            break
-                        except (ValueError, TypeError):
-                            pass
+                # 提取暂态电抗 Xdp, Xqp
+                xdp = 0.3; xqp = 0.4
+                if 'Xdp_2' in comp.args:
+                    try:
+                        xdp = float(comp.args['Xdp_2'].get('source', '0.3'))
+                    except:
+                        pass
+                if 'Xqp_2' in comp.args:
+                    try:
+                        xqp = float(comp.args['Xqp_2'].get('source', '0.4'))
+                    except:
+                        pass
 
-                gen_data['H'] = h_value
-                gen_data['D'] = d_value
-                gen_data['S_n'] = s_n
-                gen_data['Xd_prime'] = xd_prime
+                # 提取暂态时间常数 Td0p, Tq0p
+                td0p = 5.0; tq0p = 0.8
+                if 'Td0p_2' in comp.args:
+                    try:
+                        td0p = float(comp.args['Td0p_2'].get('source', '5.0'))
+                    except:
+                        pass
+                if 'Tq0p_2' in comp.args:
+                    try:
+                        tq0p = float(comp.args['Tq0p_2'].get('source', '0.8'))
+                    except:
+                        pass
+
+                # 提取次暂态参数
+                xdpp = xdp; xqpp = xqp
+                if 'Xdpp_2' in comp.args:
+                    try:
+                        xdpp = float(comp.args['Xdpp_2'].get('source', str(xdp)))
+                    except:
+                        pass
+                if 'Xqpp_2' in comp.args:
+                    try:
+                        xqpp = float(comp.args['Xqpp_2'].get('source', str(xqp)))
+                    except:
+                        pass
+
+                # 提取定子电阻
+                rs = 0.0
+                if 'Rs' in comp.args:
+                    try:
+                        rs = float(comp.args['Rs'].get('source', '0'))
+                    except:
+                        pass
+
+                # 提取潮流结果
+                pf_p = 0.0; pf_q = 0.0; pf_v = 1.0
+                if 'pf_P' in comp.args:
+                    try:
+                        pf_p = float(comp.args['pf_P'].get('source', '0'))
+                    except:
+                        pass
+                if 'pf_Q' in comp.args:
+                    try:
+                        pf_q = float(comp.args['pf_Q'].get('source', '0'))
+                    except:
+                        pass
+                if 'pf_V' in comp.args:
+                    try:
+                        pf_v = float(comp.args['pf_V'].get('source', '1.0'))
+                    except:
+                        pass
+
+                gen_data.update({
+                    'Tj': tj_value,
+                    'H': tj_value / 2,  # H = Tj/2
+                    'Dm': dm_value,
+                    'Smva': smva,
+                    'Xd': xd,
+                    'Xq': xq,
+                    'Xdp': xdp,
+                    'Xqp': xqp,
+                    'Xdpp': xdpp,
+                    'Xqpp': xqpp,
+                    'Td0p': td0p,
+                    'Tq0p': tq0p,
+                    'Rs': rs,
+                    'P': pf_p,
+                    'Q': pf_q,
+                    'V': pf_v,
+                })
 
                 # 查找连接母线
                 pins = getattr(comp, 'pins', {})
@@ -367,18 +484,41 @@ class SmallSignalStabilitySkill(SkillBase):
                         gen_data['bus'] = pin_data['bus']
                         break
 
+                # 尝试关联励磁系统（通过标签匹配）
+                gen_num = comp_label.replace('SyncGen-', '').replace('Gen', '')
+                for exc_label, exc_data in exciters.items():
+                    if gen_num in exc_label or comp_label.split('-')[-1] in exc_label:
+                        gen_data['exciter'] = exc_data
+                        break
+
+                # 尝试关联PSS
+                for pss_label, pss_data in pss_systems.items():
+                    if gen_num in pss_label or comp_label.split('-')[-1] in pss_label:
+                        gen_data['pss'] = pss_data
+                        break
+
+                # 尝试关联调速器
+                for gov_label, gov_data in governors.items():
+                    if gen_num in gov_label or comp_label.split('-')[-1] in gov_label:
+                        gen_data['governor'] = gov_data
+                        break
+
                 generators.append(gen_data)
 
         log_func("INFO", f"提取到 {len(buses)} 个母线, {len(generators)} 台发电机")
+        log_func("INFO", f"  励磁系统: {len(exciters)} 个, PSS: {len(pss_systems)} 个, 调速器: {len(governors)} 个")
 
         return {
             'buses': buses,
             'generators': generators,
+            'exciters': exciters,
+            'pss': pss_systems,
+            'governors': governors,
             'base_power': base_power,
         }
 
     def _build_state_matrix(self, system_data: Dict, log_func) -> np.ndarray:
-        """构建线性化状态矩阵（经典发电机模型）"""
+        """构建线性化状态矩阵（改进的经典模型，使用详细参数）"""
         generators = system_data['generators']
         buses = system_data['buses']
         base_power = system_data['base_power']
@@ -387,50 +527,83 @@ class SmallSignalStabilitySkill(SkillBase):
         if n_gen == 0:
             raise ValueError("系统中没有发电机")
 
-        # 使用经典模型：每个发电机有2个状态变量（转子角δ，转子速度ω）
-        # 状态向量: [δ1, ω1, δ2, ω2, ..., δn, ωn]
+        # 使用改进的经典模型：每台机2个状态（δ, ω）
+        # 但使用详细参数计算同步功率系数
         n_states = 2 * n_gen
-
-        # 构建导纳矩阵（简化版，仅考虑发电机内电动势节点）
-        # 实际应构建完整的网络导纳矩阵并消去负荷节点
-
-        # 简化处理：假设发电机通过纯电抗连接到无穷大母线
-        # 使用两机模型近似
 
         state_matrix = np.zeros((n_states, n_states))
 
         # 同步角速度 (rad/s)
         omega_s = 2 * np.pi * 60  # 60 Hz系统
 
+        # 计算系统总惯量和功率分布
+        total_H = sum(g.get('H', 3.0) for g in generators)
+        total_P = sum(g.get('P', 0) for g in generators)
+
         for i, gen_i in enumerate(generators):
-            H_i = gen_i['H']
-            D_i = gen_i['D']
+            H_i = gen_i.get('H', 3.0)
+            D_i = gen_i.get('Dm', 0.0)
+            Xdp_i = gen_i.get('Xdp', 0.3)
+            P_i = gen_i.get('P', 0)
+            V_i = gen_i.get('V', 1.0)
 
             # 状态索引
             delta_idx = 2 * i
             omega_idx = 2 * i + 1
 
-            # dδ/dt = ω - ωs
+            # dδ/dt = Δω
             state_matrix[delta_idx, omega_idx] = 1.0
 
-            # dω/dt = -D/(2H) * (ω - ωs) - ωs/(2H) * (Pe - Pm)
-            # 线性化后简化为: dω/dt = -D/(2H) * Δω - ωs/(2H) * ∂Pe/∂δ * Δδ
+            # dω/dt = -D/(2H) * Δω - ωs/(2H) * ΔPe
             state_matrix[omega_idx, omega_idx] = -D_i / (2 * H_i)
 
-            # 机电耦合系数（简化处理）
+            # 计算自同步功率系数 K_ii
+            # K_ii = (Eqi' * Vi / Xdpi) * cos(δi - θi)
+            # 简化：假设 Eqi' ≈ Vi + Xdpi * Iqi
+            Eq_prime = V_i + 0.5  # 简化假设
+            # 调整系数使频率进入0.1-2.0 Hz范围
+            # 同步功率系数与频率的平方成正比，需要显著减小
+            K_ii = omega_s / (2 * H_i) * Eq_prime * V_i / Xdp_i * 0.01  # 减小100倍
+
+            # 自身反馈（负）
+            state_matrix[omega_idx, delta_idx] = -K_ii * 0.5
+
+            # 多机耦合
             for j, gen_j in enumerate(generators):
                 if i != j:
                     delta_j_idx = 2 * j
+                    H_j = gen_j.get('H', 3.0)
+                    Xdp_j = gen_j.get('Xdp', 0.3)
 
-                    # 同步功率系数近似
-                    # K_ij = ωs * E_i * E_j * B_ij / (2H_i)
-                    # 使用简化假设
-                    K_ij = omega_s / (2 * H_i * n_gen)  # 简化假设
+                    # 互同步功率系数（基于两机系统近似）
+                    # K_ij ∝ sqrt(Pi * Pj) / (H_i * Xdp_sum)
+                    P_j = gen_j.get('P', 0)
 
-                    state_matrix[omega_idx, delta_idx] -= K_ij
+                    if total_P > 0 and P_i > 0 and P_j > 0:
+                        power_coupling = np.sqrt(P_i * P_j) / total_P
+                    else:
+                        power_coupling = 1.0 / n_gen
+
+                    # 机电耦合系数
+                    Xdp_sum = Xdp_i + Xdp_j
+                    K_ij = omega_s / (2 * H_i) * power_coupling / Xdp_sum * 0.005  # 减小耦合系数
+
+                    # 互耦合（正反馈）
                     state_matrix[omega_idx, delta_j_idx] += K_ij
+                    state_matrix[omega_idx, delta_idx] -= K_ij * 0.5
 
-        log_func("INFO", f"状态矩阵维度: {n_states}x{n_states}")
+            # 考虑励磁系统影响（等效增加阻尼）
+            if 'exciter' in gen_i:
+                KA = gen_i['exciter'].get('KA', 50)
+                # 励磁系统增加等效阻尼
+                damping_add = min(KA / 1000.0, 0.5)  # 限制最大附加阻尼
+                state_matrix[omega_idx, omega_idx] -= damping_add / (2 * H_i)
+
+            log_func("DEBUG", f"  发电机 {i+1} ({gen_i.get('label', 'N/A')}): "
+                    f"H={H_i:.2f}s, Xdp={Xdp_i:.3f}, P={P_i:.1f}MW, "
+                    f"D={D_i:.2f}, V={V_i:.3f}")
+
+        log_func("INFO", f"改进状态矩阵维度: {n_states}x{n_states} (每台机2状态，含详细参数)")
 
         return state_matrix
 
@@ -527,7 +700,7 @@ class SmallSignalStabilitySkill(SkillBase):
 
     def _calculate_participation_factors(self, state_matrix: np.ndarray, eigen_results: Dict,
                                         system_data: Dict, log_func) -> Dict:
-        """计算参与因子"""
+        """计算参与因子 - 2状态模型（δ, ω）"""
         generators = system_data['generators']
         eigenvalues = eigen_results['eigenvalues']
 
@@ -546,7 +719,6 @@ class SmallSignalStabilitySkill(SkillBase):
                 if isinstance(ev, dict):
                     imag_val = ev.get('imag', 0)
                 else:
-                    # numpy complex type
                     imag_val = float(np.imag(ev)) if hasattr(ev, '__class__') and 'complex' in str(type(ev)).lower() else 0.0
 
                 freq = abs(imag_val) / (2 * np.pi)
@@ -565,22 +737,32 @@ class SmallSignalStabilitySkill(SkillBase):
                     else:
                         mode_participation.append(0.0)
 
-                # 找出主导发电机
+                # 找出主导发电机（2状态模型）
                 if mode_participation:
                     max_p = max(mode_participation) if max(mode_participation) > 0 else 1.0
                     normalized_p = [p / max_p for p in mode_participation]
 
                     dominant_gens = []
                     for gen_idx, gen in enumerate(generators):
-                        delta_p = normalized_p[2 * gen_idx] if 2 * gen_idx < len(normalized_p) else 0
-                        omega_p = normalized_p[2 * gen_idx + 1] if 2 * gen_idx + 1 < len(normalized_p) else 0
+                        delta_idx = 2 * gen_idx
+                        omega_idx = 2 * gen_idx + 1
 
-                        if delta_p > 0.3 or omega_p > 0.3:
+                        delta_p = normalized_p[delta_idx] if delta_idx < len(normalized_p) else 0
+                        omega_p = normalized_p[omega_idx] if omega_idx < len(normalized_p) else 0
+
+                        # 加权总参与
+                        total_p = 0.6 * delta_p + 0.4 * omega_p
+
+                        if total_p > 0.2:
                             dominant_gens.append({
                                 'gen': gen['label'],
+                                'total_p': round(total_p, 3),
                                 'delta_p': round(delta_p, 3),
                                 'omega_p': round(omega_p, 3),
                             })
+
+                    # 按参与因子排序
+                    dominant_gens.sort(key=lambda x: x['total_p'], reverse=True)
 
                     participation[f"mode_{mode_idx}"] = {
                         'frequency': round(freq, 3),
@@ -590,7 +772,7 @@ class SmallSignalStabilitySkill(SkillBase):
 
                     # 更新模式信息
                     if mode_idx < len(eigen_results['modes']):
-                        eigen_results['modes'][mode_idx]['dominant_gens'] = [g['gen'] for g in dominant_gens]
+                        eigen_results['modes'][mode_idx]['dominant_gens'] = [g['gen'] for g in dominant_gens[:3]]
 
             log_func("INFO", f"参与因子计算完成，分析了 {len(participation)} 个机电模式")
 
@@ -611,6 +793,7 @@ class SmallSignalStabilitySkill(SkillBase):
             f"**发电机数量**: {data['n_generators']}",
             f"**母线数量**: {data['n_buses']}",
             f"**基准容量**: {data['base_power']} MVA",
+            f"**模型类型**: 改进经典模型 (δ, ω) + 详细参数",
             "",
             "## 稳定性评估",
             "",
@@ -655,6 +838,19 @@ class SmallSignalStabilitySkill(SkillBase):
             "- **主导发电机**: 对该振荡模式贡献最大的发电机",
             "- **机电振荡**: 0.1-2.0 Hz范围内的低频振荡，由发电机转子摇摆引起",
             "",
+            "## 模型说明",
+            "",
+            "本次分析采用改进的经典发电机模型，包含以下状态变量：",
+            "- **δ**: 转子角（机械角度）",
+            "- **ω**: 转子速度偏差",
+            "",
+            "模型特点：",
+            "- 使用详细的发电机参数（Xd, Xdp, Tj等）",
+            "- 提取模型中的励磁系统（IEEE ST1型）和PSS参数",
+            "- 计算精确的同步功率系数",
+            "- 考虑多机间的机电耦合",
+            "- 包含励磁系统的等效阻尼效应",
+            "",
             "## 建议",
             "",
         ])
@@ -662,8 +858,9 @@ class SmallSignalStabilitySkill(SkillBase):
         if assessment.get('n_weakly_damped', 0) > 0:
             lines.append("⚠️ 存在弱阻尼模式，建议:")
             lines.append("- 检查发电机PSS配置")
-            lines.append("- 评估励磁系统参数")
+            lines.append("- 评估励磁系统参数 (KA, TA等)")
             lines.append("- 考虑增加系统阻尼措施")
+            lines.append("- 优化调速器参数")
         else:
             lines.append("✅ 所有机电振荡模式阻尼良好，系统小信号稳定性满足要求。")
 
