@@ -20,6 +20,7 @@ from . import emt_n1_screening
 from . import maintenance_security
 from . import fault_clearing_scan
 from . import fault_severity_scan
+from . import transient_stability
 
 # 导出技能类（方便直接导入）
 from .emt_simulation import EmtSimulationSkill
@@ -37,6 +38,7 @@ from .emt_n1_screening import EmtN1ScreeningSkill
 from .maintenance_security import MaintenanceSecuritySkill
 from .fault_clearing_scan import FaultClearingScanSkill
 from .fault_severity_scan import FaultSeverityScanSkill
+from .transient_stability import TransientStabilitySkill
 
 __all__ = [
     "EmtSimulationSkill",
@@ -54,4 +56,5 @@ __all__ = [
     "MaintenanceSecuritySkill",
     "FaultClearingScanSkill",
     "FaultSeverityScanSkill",
+    "TransientStabilitySkill",
 ]
