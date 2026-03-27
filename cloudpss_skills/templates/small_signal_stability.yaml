@@ -1,0 +1,27 @@
+# Small Signal Stability Analysis - 小信号稳定性分析
+# 基于潮流结果构建状态矩阵，识别机电振荡模式
+# 计算特征值、阻尼比、振荡频率、参与因子
+
+skill: small_signal_stability
+
+# 认证配置
+auth:
+  token_file: .cloudpss_token
+
+# 模型配置
+model:
+  rid: model/holdme/IEEE39
+  source: cloud
+
+# 分析参数配置
+analysis:
+  damping_threshold: 0.05        # 弱阻尼阈值(阻尼比)
+  freq_range: [0.1, 2.0]         # 机电振荡频率范围[Hz]
+  base_power: 100.0              # 基准容量[MVA]
+
+# 输出配置
+output:
+  format: json
+  path: ./results/
+  prefix: small_signal
+  generate_report: true
