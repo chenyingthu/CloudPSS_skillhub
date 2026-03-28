@@ -1,0 +1,36 @@
+# VSI弱母线分析配置示例
+
+skill: vsi_weak_bus
+
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/IEEE39
+  source: cloud
+
+vsi_setup:
+  bus_filter:
+    v_min: 0.6        # 母线最小电压筛选(kV)
+    v_max: 300        # 母线最大电压筛选(kV)
+    # name_keywords: ["Bus"]  # 可选：只测试包含关键字的母线
+
+  injection:
+    v_base: 220       # 基准电压(kV)
+    q_base: 100       # 注入无功(MVar)
+    start_time: 8.0   # 开始时间(s)
+    interval: 1.5     # 每个母线测试时长(s)
+    duration: 0.5     # 无功注入持续时间(s)
+
+  simulation:
+    step_time: 0.0001 # 仿真步长(s)
+    freq: 100         # 输出频率(Hz)
+
+analysis:
+  vsi_threshold: 0.01  # 弱母线VSI阈值
+  top_n: 10            # 输出前N个弱母线
+
+output:
+  format: json
+  path: ./results/
+  prefix: vsi_weak_bus
