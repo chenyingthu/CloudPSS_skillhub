@@ -28,6 +28,8 @@ from .config import (
     InteractiveConfigBuilder,
 )
 
+from . import utils
+
 from .cli import main
 
 __all__ = [
@@ -49,6 +51,8 @@ __all__ = [
     "ConfigValidator",
     "ConfigGenerator",
     "InteractiveConfigBuilder",
+    # Utils
+    "utils",
     # CLI
     "main",
 ]

@@ -29,6 +29,7 @@ from . import small_signal_stability
 from . import harmonic_analysis
 from . import contingency_analysis
 from . import power_quality_analysis
+from . import disturbance_severity
 
 # 导出技能类（方便直接导入）
 from .emt_simulation import EmtSimulationSkill
@@ -55,6 +56,7 @@ from .small_signal_stability import SmallSignalStabilitySkill
 from .harmonic_analysis import HarmonicAnalysisSkill
 from .contingency_analysis import ContingencyAnalysisSkill
 from .power_quality_analysis import PowerQualityAnalysisSkill
+from .disturbance_severity import DisturbanceSeveritySkill
 
 __all__ = [
     "EmtSimulationSkill",
@@ -81,4 +83,5 @@ __all__ = [
     "HarmonicAnalysisSkill",
     "ContingencyAnalysisSkill",
     "PowerQualityAnalysisSkill",
+    "DisturbanceSeveritySkill",
 ]

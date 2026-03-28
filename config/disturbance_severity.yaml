@@ -1,0 +1,45 @@
+# 扰动严重度分析配置示例
+# 基于已有的EMT仿真结果进行DV/SI分析
+
+skill: disturbance_severity
+
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/IEEE39
+  source: cloud
+
+# 可选：使用已有的EMT仿真结果
+# 如果不提供，则需要先运行带故障的EMT仿真
+simulation:
+  # emt_result: "job_id_here"  # 已有EMT结果Job ID
+  fault_bus: "Bus_16"  # 故障母线
+  fault_type: three_phase  # 故障类型: three_phase 或 single_phase
+  fault_time: 4.0  # 故障发生时间(s)
+  fault_duration: 0.1  # 故障持续时间(s)
+  simulation_time: 10.0  # 总仿真时间(s)
+  step_time: 0.0001  # 仿真步长(s)
+
+analysis:
+  dv_enabled: true  # 启用DV计算
+  si_enabled: true  # 启用SI计算
+  dudv_enabled: true  # 启用DUDV曲线生成
+  voltage_measure_plot: 0  # 电压量测图索引
+  pre_fault_window: 0.5  # 故障前稳态计算窗口(s)
+
+  # DV判断条件: [[t_start, t_end, v_min_ratio, v_max_ratio], ...]
+  judge_criteria:
+    - [0.1, 3.0, 0.75, 1.25]  # 0.1-3s内，允许电压在0.75-1.25倍稳态电压之间
+    - [3.0, 999.0, 0.95, 1.05]  # 3s后，电压应在0.95-1.05倍稳态电压之间
+
+  # SI计算参数
+  si_interval: 0.11  # 故障清除后开始计算的时间偏移(s)
+  si_window: 3.0  # 积分时间窗长度(s)
+  si_dv1: 0.25  # 第一阶段电压偏差阈值
+  si_dv2: 0.1  # 第二阶段电压偏差阈值
+
+output:
+  format: json
+  path: ./results/
+  prefix: disturbance_severity
