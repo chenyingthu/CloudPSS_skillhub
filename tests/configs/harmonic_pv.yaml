@@ -1,0 +1,33 @@
+# Harmonic Analysis Test for PV Generation
+skill: harmonic_analysis
+
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/pv-gen
+  source: cloud
+
+simulation:
+  duration: 0.5
+  step: 1e-5
+
+analysis:
+  fundamental_freq: 50.0
+  max_harmonic: 50
+  thd_limit: 5.0
+  analysis_window: [0.4, 0.5]
+
+channels:
+  voltage:
+    - "#Bus1:0"
+    - "#PV1:0"
+  current:
+    - "#Inverter1:0"
+
+output:
+  format: json
+  path: ./results/
+  prefix: harmonic_pv
+  generate_report: true
+  export_spectrum: true
