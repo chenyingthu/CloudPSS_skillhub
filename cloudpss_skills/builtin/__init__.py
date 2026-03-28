@@ -27,6 +27,8 @@ from . import short_circuit
 from . import frequency_response
 from . import small_signal_stability
 from . import harmonic_analysis
+from . import contingency_analysis
+from . import power_quality_analysis
 
 # 导出技能类（方便直接导入）
 from .emt_simulation import EmtSimulationSkill
@@ -51,6 +53,8 @@ from .short_circuit import ShortCircuitSkill
 from .frequency_response import FrequencyResponseSkill
 from .small_signal_stability import SmallSignalStabilitySkill
 from .harmonic_analysis import HarmonicAnalysisSkill
+from .contingency_analysis import ContingencyAnalysisSkill
+from .power_quality_analysis import PowerQualityAnalysisSkill
 
 __all__ = [
     "EmtSimulationSkill",
@@ -75,4 +79,6 @@ __all__ = [
     "FrequencyResponseSkill",
     "SmallSignalStabilitySkill",
     "HarmonicAnalysisSkill",
+    "ContingencyAnalysisSkill",
+    "PowerQualityAnalysisSkill",
 ]

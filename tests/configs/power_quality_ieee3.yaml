@@ -1,0 +1,42 @@
+# Power Quality Analysis Test for IEEE3
+skill: power_quality_analysis
+
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/IEEE3
+  source: cloud
+
+simulation:
+  duration: 1.0
+  step: 1e-5
+
+analysis:
+  fundamental_freq: 60.0
+  max_harmonic: 50
+  analysis_window: [0.8, 1.0]
+  indicators:
+    - harmonic
+    - voltage_dip
+    - dc_offset
+  limits:
+    thd: 5.0
+    voltage_dip: 10.0
+    unbalance: 2.0
+    flicker: 1.0
+    dc_offset: 1.0
+
+channels:
+  three_phase: []
+  single_phase:
+    - "#V1:0"
+    - "#V2:0"
+    - "#V3:0"
+
+output:
+  format: json
+  path: ./results/
+  prefix: power_quality_ieee3
+  generate_report: true
+  export_waveform: false

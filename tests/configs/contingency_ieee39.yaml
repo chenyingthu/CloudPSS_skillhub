@@ -1,0 +1,38 @@
+# Contingency Analysis Test for IEEE39
+skill: contingency_analysis
+
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/IEEE39
+  source: cloud
+
+contingency:
+  level: N-1
+  k: 1
+  components: []
+  component_types:
+    - branch
+  max_combinations: 46
+
+analysis:
+  check_voltage: true
+  check_thermal: true
+  check_transient: false
+  voltage_limit:
+    min: 0.95
+    max: 1.05
+  thermal_limit: 1.0
+  severity_threshold: 0.8
+
+ranking:
+  method: severity
+  top_n: 10
+
+output:
+  format: json
+  path: ./results/
+  prefix: contingency_ieee39
+  generate_report: true
+  export_all_cases: true
