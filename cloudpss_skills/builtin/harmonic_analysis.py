@@ -289,6 +289,9 @@ class HarmonicAnalysisSkill(SkillBase):
                 "max_thd_voltage": 0.0,
                 "max_thd_current": 0.0,
                 "thd_violations": 0,
+                "max_ripple_voltage": 0.0,
+                "max_ripple_current": 0.0,
+                "ripple_violations": 0,
             }
         }
 
@@ -325,14 +328,27 @@ class HarmonicAnalysisSkill(SkillBase):
 
                 harmonic_results["voltage"][ch] = harmonic_data
 
-                thd = harmonic_data.get("thd", 0)
-                harmonic_results["summary"]["max_thd_voltage"] = max(
-                    harmonic_results["summary"]["max_thd_voltage"], thd
-                )
-                if thd > thd_limit:
-                    harmonic_results["summary"]["thd_violations"] += 1
-
-                log_func("INFO", f"  {ch}: THD={thd:.2f}%")
+                # 根据信号类型处理指标
+                signal_type = harmonic_data.get("signal_type", "ac")
+                if signal_type == "dc":
+                    # 直流系统：使用纹波系数
+                    ripple = harmonic_data.get("ripple_factor", 0) or 0
+                    harmonic_results["summary"]["max_ripple_voltage"] = max(
+                        harmonic_results["summary"]["max_ripple_voltage"], ripple
+                    )
+                    # 直流系统纹波限值通常<1%
+                    if ripple > 1.0:
+                        harmonic_results["summary"]["ripple_violations"] += 1
+                    log_func("INFO", f"  {ch} [DC]: 纹波={ripple:.4f}%")
+                else:
+                    # 交流系统：使用THD
+                    thd = harmonic_data.get("thd", 0) or 0
+                    harmonic_results["summary"]["max_thd_voltage"] = max(
+                        harmonic_results["summary"]["max_thd_voltage"], thd
+                    )
+                    if thd > thd_limit:
+                        harmonic_results["summary"]["thd_violations"] += 1
+                    log_func("INFO", f"  {ch} [AC]: THD={thd:.2f}%")
 
             except Exception as e:
                 log_func("WARNING", f"通道 {ch} 分析失败: {e}")
@@ -360,14 +376,26 @@ class HarmonicAnalysisSkill(SkillBase):
 
                 harmonic_results["current"][ch] = harmonic_data
 
-                thd = harmonic_data.get("thd", 0)
-                harmonic_results["summary"]["max_thd_current"] = max(
-                    harmonic_results["summary"]["max_thd_current"], thd
-                )
-                if thd > thd_limit:
-                    harmonic_results["summary"]["thd_violations"] += 1
-
-                log_func("INFO", f"  {ch}: THD={thd:.2f}%")
+                # 根据信号类型处理指标
+                signal_type = harmonic_data.get("signal_type", "ac")
+                if signal_type == "dc":
+                    # 直流系统：使用纹波系数
+                    ripple = harmonic_data.get("ripple_factor", 0) or 0
+                    harmonic_results["summary"]["max_ripple_current"] = max(
+                        harmonic_results["summary"]["max_ripple_current"], ripple
+                    )
+                    if ripple > 1.0:
+                        harmonic_results["summary"]["ripple_violations"] += 1
+                    log_func("INFO", f"  {ch} [DC]: 纹波={ripple:.4f}%")
+                else:
+                    # 交流系统：使用THD
+                    thd = harmonic_data.get("thd", 0) or 0
+                    harmonic_results["summary"]["max_thd_current"] = max(
+                        harmonic_results["summary"]["max_thd_current"], thd
+                    )
+                    if thd > thd_limit:
+                        harmonic_results["summary"]["thd_violations"] += 1
+                    log_func("INFO", f"  {ch} [AC]: THD={thd:.2f}%")
 
             except Exception as e:
                 log_func("WARNING", f"通道 {ch} 分析失败: {e}")
@@ -413,8 +441,11 @@ class HarmonicAnalysisSkill(SkillBase):
             h_freq = freqs[h_idx]
             h_amp = amps[h_idx]
 
-            # 谐波含量（相对于基波）
-            h_content = (h_amp / fundamental_amp * 100) if fundamental_amp > 0 else 0
+            # 谐波含量（相对于基波）- 仅在基波明显时计算
+            if fundamental_amp > 1e-9:
+                h_content = (h_amp / fundamental_amp * 100)
+            else:
+                h_content = 0.0
 
             harmonics[h] = {
                 "frequency": round(h_freq, 2),
@@ -422,60 +453,104 @@ class HarmonicAnalysisSkill(SkillBase):
                 "content_percent": round(h_content, 3),
             }
 
-            # 累加谐波功率（用于THD计算）
+            # 累加谐波功率（用于THD/纹波计算）
             harmonic_power += (h_amp / 2) ** 2  # RMS的平方
 
-        # 计算THD
-        if fundamental_amp > 0:
-            fundamental_rms = fundamental_amp / np.sqrt(2)
-            thd = np.sqrt(harmonic_power) / fundamental_rms * 100
-            # 总有效值
-            total_rms = np.sqrt(fundamental_rms ** 2 + harmonic_power)
-        else:
-            fundamental_rms = 0.0
-            thd = 0.0
-            total_rms = np.sqrt(harmonic_power)
+        # 直流分量
+        dc_component = np.mean(y)
+        dc_abs = abs(dc_component)
 
-        return {
+        # 判断是否为直流系统
+        # 条件：直流分量显著 (>0.1V) 且基波极小 (<0.01V)
+        is_dc_system = (dc_abs > 0.1) and (fundamental_amp < 0.01)
+
+        if is_dc_system:
+            # 直流系统：计算纹波系数而非THD
+            fundamental_rms = fundamental_amp / np.sqrt(2) if fundamental_amp > 0 else 0.0
+            ac_rms = np.sqrt(harmonic_power)  # 纹波有效值（所有交流分量）
+
+            # 纹波系数 = V_rms_ac / V_dc * 100%
+            ripple_factor = (ac_rms / dc_abs * 100) if dc_abs > 0 else 0.0
+
+            # THD标记为不适用（直流系统无基波概念）
+            thd = None
+
+            # 总有效值
+            total_rms = np.sqrt(dc_abs ** 2 + ac_rms ** 2)
+        else:
+            # 交流系统：计算THD
+            if fundamental_amp > 0:
+                fundamental_rms = fundamental_amp / np.sqrt(2)
+                thd = np.sqrt(harmonic_power) / fundamental_rms * 100
+                total_rms = np.sqrt(fundamental_rms ** 2 + harmonic_power)
+            else:
+                fundamental_rms = 0.0
+                thd = 0.0
+                total_rms = np.sqrt(harmonic_power)
+
+            ripple_factor = None
+
+        result = {
             "sampling_rate": round(fs, 0),
             "data_points": N,
+            "signal_type": "dc" if is_dc_system else "ac",
             "fundamental": {
                 "frequency": round(fundamental, 2),
                 "amplitude": round(fundamental_amp, 6),
                 "rms": round(fundamental_rms, 6),
             },
             "harmonics": harmonics,
-            "thd": round(thd, 3),
-            "total_rms": round(total_rms, 6),
-            "dc_component": round(np.mean(y), 6),
+            "dc_component": round(dc_component, 6),
         }
+
+        # 根据信号类型添加相应指标
+        if is_dc_system:
+            result["ripple_factor"] = round(ripple_factor, 4) if ripple_factor is not None else None
+            result["thd"] = None  # 直流系统THD不适用
+            result["ac_rms"] = round(ac_rms, 6)
+        else:
+            result["thd"] = round(thd, 3) if thd is not None else None
+            result["ripple_factor"] = None
+
+        result["total_rms"] = round(total_rms, 6)
+
+        return result
 
     def _export_csv(self, harmonic_results: Dict, path: Path,
                    voltage_channels: List, current_channels: List):
         """导出CSV"""
         with open(path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(["channel_type", "channel_name", "fundamental_freq_hz",
-                           "fundamental_rms", "thd_percent", "dc_component"])
+            writer.writerow(["channel_type", "channel_name", "signal_type", "fundamental_freq_hz",
+                           "fundamental_rms", "dc_component", "thd_percent", "ripple_factor_percent",
+                           "total_rms"])
 
             for ch, data in harmonic_results.get("voltage", {}).items():
+                signal_type = data.get("signal_type", "ac")
                 writer.writerow([
                     "voltage",
                     ch,
+                    signal_type,
                     data.get("fundamental", {}).get("frequency", 0),
                     data.get("fundamental", {}).get("rms", 0),
-                    data.get("thd", 0),
                     data.get("dc_component", 0),
+                    data.get("thd", "") if data.get("thd") is not None else "",
+                    data.get("ripple_factor", "") if data.get("ripple_factor") is not None else "",
+                    data.get("total_rms", 0),
                 ])
 
             for ch, data in harmonic_results.get("current", {}).items():
+                signal_type = data.get("signal_type", "ac")
                 writer.writerow([
                     "current",
                     ch,
+                    signal_type,
                     data.get("fundamental", {}).get("frequency", 0),
                     data.get("fundamental", {}).get("rms", 0),
-                    data.get("thd", 0),
                     data.get("dc_component", 0),
+                    data.get("thd", "") if data.get("thd") is not None else "",
+                    data.get("ripple_factor", "") if data.get("ripple_factor") is not None else "",
+                    data.get("total_rms", 0),
                 ])
 
     def _export_spectrum(self, harmonic_results: Dict, path: Path):
@@ -507,13 +582,26 @@ class HarmonicAnalysisSkill(SkillBase):
 
     def _generate_report(self, data: Dict, path: Path):
         """生成Markdown报告"""
+
+        # 分析通道类型（交流/直流）
+        has_ac = False
+        has_dc = False
+        voltage_data = data.get("voltage_analysis", {})
+        current_data = data.get("current_analysis", {})
+
+        for ch_data in list(voltage_data.values()) + list(current_data.values()):
+            signal_type = ch_data.get("signal_type", "ac")
+            if signal_type == "dc":
+                has_dc = True
+            else:
+                has_ac = True
+
         lines = [
             "# 谐波分析报告",
             "",
             f"**模型**: {data['model']}",
             f"**基波频率**: {data['fundamental_freq']} Hz",
             f"**最高谐波次数**: {data['max_harmonic']}",
-            f"**THD限值**: {data['thd_limit']}%",
             f"**分析窗口**: {data['analysis_window'][0]}-{data['analysis_window'][1]}s",
             "",
             "## 概述",
@@ -522,82 +610,199 @@ class HarmonicAnalysisSkill(SkillBase):
 
         summary = data.get("summary", {})
 
-        lines.extend([
-            f"- 最大电压THD: {summary.get('max_thd_voltage', 0):.2f}%",
-            f"- 最大电流THD: {summary.get('max_thd_current', 0):.2f}%",
-            f"- THD超标通道数: {summary.get('thd_violations', 0)}",
-            "",
-        ])
+        # 根据通道类型显示不同指标
+        if has_ac:
+            lines.extend([
+                f"- 最大电压THD: {summary.get('max_thd_voltage', 0):.2f}%",
+                f"- 最大电流THD: {summary.get('max_thd_current', 0):.2f}%",
+                f"- THD限值: {data['thd_limit']}%",
+                "",
+            ])
 
-        if summary.get('thd_violations', 0) > 0:
-            lines.append("⚠️ **存在THD超标通道**")
+        if has_dc:
+            lines.extend([
+                f"- 最大电压纹波系数: {summary.get('max_ripple_voltage', 0):.4f}%",
+                f"- 最大电流纹波系数: {summary.get('max_ripple_current', 0):.4f}%",
+                "",
+            ])
+
+        if summary.get('thd_violations', 0) > 0 or summary.get('ripple_violations', 0) > 0:
+            lines.append("⚠️ **存在超标通道**")
         else:
-            lines.append("✅ **所有通道THD满足要求**")
+            lines.append("✅ **所有通道满足要求**")
 
+        # 电压分析
         lines.extend([
             "",
-            "## 电压谐波分析",
+            "## 电压分析",
             "",
-            "| 通道 | 基波有效值 | THD(%) | 3次 | 5次 | 7次 | 状态 |",
-            "|------|------------|--------|-----|-----|-----|------|",
         ])
 
-        voltage_data = data.get("voltage_analysis", {})
-        for ch, ch_data in voltage_data.items():
-            fundamental_rms = ch_data.get("fundamental", {}).get("rms", 0)
-            thd = ch_data.get("thd", 0)
-            harmonics = ch_data.get("harmonics", {})
+        if voltage_data:
+            # 检查是否有直流通道
+            has_dc_voltage = any(
+                ch_data.get("signal_type") == "dc"
+                for ch_data in voltage_data.values()
+            )
 
-            h3 = harmonics.get(3, {}).get("content_percent", 0)
-            h5 = harmonics.get(5, {}).get("content_percent", 0)
-            h7 = harmonics.get(7, {}).get("content_percent", 0)
+            if has_dc_voltage:
+                # 直流电压通道显示
+                lines.extend([
+                    "### 直流电压通道",
+                    "",
+                    "| 通道 | 直流电压(V) | 纹波系数(%) | 2次谐波 | 3次谐波 | 总有效值 | 状态 |",
+                    "|------|-------------|-------------|---------|---------|----------|------|",
+                ])
 
-            status = "✅" if thd < data['thd_limit'] else "⚠️"
+                for ch, ch_data in voltage_data.items():
+                    if ch_data.get("signal_type") == "dc":
+                        dc_val = ch_data.get("dc_component", 0)
+                        ripple = ch_data.get("ripple_factor", 0) or 0
+                        harmonics = ch_data.get("harmonics", {})
+                        h2 = harmonics.get(2, {}).get("amplitude", 0)
+                        h3 = harmonics.get(3, {}).get("amplitude", 0)
+                        total_rms = ch_data.get("total_rms", 0)
 
-            lines.append(f"| {ch} | {fundamental_rms:.4f} | {thd:.3f} | "
-                        f"{h3:.3f} | {h5:.3f} | {h7:.3f} | {status} |")
+                        # 直流系统纹波限值通常<1%
+                        status = "✅" if ripple < 1.0 else "⚠️"
 
+                        lines.append(f"| {ch} | {dc_val:.4f} | {ripple:.4f} | "
+                                    f"{h2:.6f} | {h3:.6f} | {total_rms:.6f} | {status} |")
+
+            # 交流电压通道显示
+            ac_voltage = {k: v for k, v in voltage_data.items() if v.get("signal_type") != "dc"}
+            if ac_voltage:
+                lines.extend([
+                    "",
+                    "### 交流电压通道",
+                    "",
+                    "| 通道 | 基波有效值 | THD(%) | 3次 | 5次 | 7次 | 状态 |",
+                    "|------|------------|--------|-----|-----|-----|------|",
+                ])
+
+                for ch, ch_data in ac_voltage.items():
+                    fundamental_rms = ch_data.get("fundamental", {}).get("rms", 0)
+                    thd = ch_data.get("thd", 0) or 0
+                    harmonics = ch_data.get("harmonics", {})
+
+                    h3 = harmonics.get(3, {}).get("content_percent", 0)
+                    h5 = harmonics.get(5, {}).get("content_percent", 0)
+                    h7 = harmonics.get(7, {}).get("content_percent", 0)
+
+                    status = "✅" if thd < data['thd_limit'] else "⚠️"
+
+                    lines.append(f"| {ch} | {fundamental_rms:.4f} | {thd:.3f} | "
+                                f"{h3:.3f} | {h5:.3f} | {h7:.3f} | {status} |")
+
+        # 电流分析
         lines.extend([
             "",
-            "## 电流谐波分析",
+            "## 电流分析",
             "",
-            "| 通道 | 基波有效值 | THD(%) | 3次 | 5次 | 7次 | 状态 |",
-            "|------|------------|--------|-----|-----|-----|------|",
         ])
 
-        current_data = data.get("current_analysis", {})
-        for ch, ch_data in current_data.items():
-            fundamental_rms = ch_data.get("fundamental", {}).get("rms", 0)
-            thd = ch_data.get("thd", 0)
-            harmonics = ch_data.get("harmonics", {})
+        if current_data:
+            # 检查是否有直流通道
+            has_dc_current = any(
+                ch_data.get("signal_type") == "dc"
+                for ch_data in current_data.values()
+            )
 
-            h3 = harmonics.get(3, {}).get("content_percent", 0)
-            h5 = harmonics.get(5, {}).get("content_percent", 0)
-            h7 = harmonics.get(7, {}).get("content_percent", 0)
+            if has_dc_current:
+                # 直流电流通道显示
+                lines.extend([
+                    "### 直流电流通道",
+                    "",
+                    "| 通道 | 直流电流(A) | 纹波系数(%) | 2次谐波 | 3次谐波 | 总有效值 | 状态 |",
+                    "|------|-------------|-------------|---------|---------|----------|------|",
+                ])
 
-            status = "✅" if thd < data['thd_limit'] else "⚠️"
+                for ch, ch_data in current_data.items():
+                    if ch_data.get("signal_type") == "dc":
+                        dc_val = ch_data.get("dc_component", 0)
+                        ripple = ch_data.get("ripple_factor", 0) or 0
+                        harmonics = ch_data.get("harmonics", {})
+                        h2 = harmonics.get(2, {}).get("amplitude", 0)
+                        h3 = harmonics.get(3, {}).get("amplitude", 0)
+                        total_rms = ch_data.get("total_rms", 0)
 
-            lines.append(f"| {ch} | {fundamental_rms:.4f} | {thd:.3f} | "
-                        f"{h3:.3f} | {h5:.3f} | {h7:.3f} | {status} |")
+                        status = "✅" if ripple < 1.0 else "⚠️"
 
+                        lines.append(f"| {ch} | {dc_val:.4f} | {ripple:.4f} | "
+                                    f"{h2:.6f} | {h3:.6f} | {total_rms:.6f} | {status} |")
+
+            # 交流电流通道显示
+            ac_current = {k: v for k, v in current_data.items() if v.get("signal_type") != "dc"}
+            if ac_current:
+                lines.extend([
+                    "",
+                    "### 交流电流通道",
+                    "",
+                    "| 通道 | 基波有效值 | THD(%) | 3次 | 5次 | 7次 | 状态 |",
+                    "|------|------------|--------|-----|-----|-----|------|",
+                ])
+
+                for ch, ch_data in ac_current.items():
+                    fundamental_rms = ch_data.get("fundamental", {}).get("rms", 0)
+                    thd = ch_data.get("thd", 0) or 0
+                    harmonics = ch_data.get("harmonics", {})
+
+                    h3 = harmonics.get(3, {}).get("content_percent", 0)
+                    h5 = harmonics.get(5, {}).get("content_percent", 0)
+                    h7 = harmonics.get(7, {}).get("content_percent", 0)
+
+                    status = "✅" if thd < data['thd_limit'] else "⚠️"
+
+                    lines.append(f"| {ch} | {fundamental_rms:.4f} | {thd:.3f} | "
+                                f"{h3:.3f} | {h5:.3f} | {h7:.3f} | {status} |")
+
+        # 指标说明
         lines.extend([
             "",
             "## 指标说明",
             "",
-            "- **THD**: 总谐波畸变率，各次谐波有效值与基波有效值之比",
-            "- **3次/5次/7次**: 对应谐波含量百分比",
-            "- IEEE 519标准**: 电压THD一般要求<5%",
+        ])
+
+        if has_ac:
+            lines.extend([
+                "### 交流系统指标",
+                "",
+                "- **THD**: 总谐波畸变率，各次谐波有效值与基波有效值之比",
+                "- **3次/5次/7次**: 对应谐波含量百分比（相对于基波）",
+                "- **IEEE 519标准**: 电压THD一般要求<5%",
+                "",
+            ])
+
+        if has_dc:
+            lines.extend([
+                "### 直流系统指标",
+                "",
+                "- **纹波系数(Ripple Factor)**: 交流纹波有效值与直流分量之比",
+                "  - 公式: RF = V<sub>rms(ac)</sub> / V<sub>dc</sub> × 100%",
+                "  - 典型要求: <1%（高品质直流电源）",
+                "- **直流系统THD**: 不适用（无基波概念）",
+                "- **2次谐波**: DC/AC变换器开关纹波的主要分量",
+                "",
+            ])
+
+        # 建议
+        lines.extend([
             "",
             "## 建议",
             "",
         ])
 
         if summary.get('thd_violations', 0) > 0:
-            lines.append("⚠️ THD超标，建议:")
+            lines.append("⚠️ 交流通道THD超标，建议:")
             lines.append("- 检查非线性负荷")
-            lines.append("- 考虑配置滤波器")
+            lines.append("- 考虑配置有源电力滤波器(APF)")
             lines.append("- 评估谐波抑制措施")
+        elif summary.get('ripple_violations', 0) > 0:
+            lines.append("⚠️ 直流通道纹波超标，建议:")
+            lines.append("- 增大DC-Link电容")
+            lines.append("- 优化变换器控制策略")
+            lines.append("- 增加LC滤波器")
         else:
-            lines.append("✅ 谐波水平满足要求，无需额外措施。")
+            lines.append("✅ 所有通道指标满足要求，无需额外措施。")
 
         path.write_text("\n".join(lines), encoding="utf-8")
