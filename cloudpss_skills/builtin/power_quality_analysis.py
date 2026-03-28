@@ -239,6 +239,28 @@ class PowerQualityAnalysisSkill(SkillBase):
             # 电能质量分析
             log("INFO", "电能质量分析...")
 
+            # 自动检测通道
+            if not three_phase and not single_phase:
+                log("WARNING", "未指定通道，将自动检测...")
+                three_phase = self._detect_three_phase_channels(result)
+                if three_phase:
+                    log("INFO", f"检测到 {len(three_phase)} 个三相通道组")
+                    for tp in three_phase:
+                        log("INFO", f"  - {tp['name']}: {tp['a']}, {tp['b']}, {tp['c']}")
+                else:
+                    log("WARNING", "未检测到三相通道组")
+
+                # 同时检测单相通道
+                single_phase = self._detect_single_phase_channels(result)
+                if single_phase:
+                    log("INFO", f"检测到 {len(single_phase)} 个单相通道")
+                    for ch in single_phase[:5]:  # 最多显示5个
+                        log("INFO", f"  - {ch}")
+                    if len(single_phase) > 5:
+                        log("INFO", f"  ... ({len(single_phase)-5} more)")
+                else:
+                    log("WARNING", "未检测到单相通道")
+
             pq_results = {
                 "harmonic": {},
                 "voltage_dip": {},
@@ -351,18 +373,85 @@ class PowerQualityAnalysisSkill(SkillBase):
                 error=str(e),
             )
 
-    def _detect_three_phase_channels(self, model) -> List[Dict]:
+    def _detect_three_phase_channels(self, result) -> List[Dict]:
         """自动检测三相通道组"""
         three_phase_groups = []
 
-        # 尝试从模型拓扑检测三相组
-        # 简化版本：查找命名模式匹配的通道
-        common_patterns = [
-            ("Bus", ["BusA", "BusB", "BusC"]),
-            ("Gen", ["GenA", "GenB", "GenC"]),
-        ]
+        try:
+            plots = list(result.getPlots())
+            for i, plot in enumerate(plots):
+                title = plot.get('data', {}).get('title', '').lower()
+                channels = result.getPlotChannelNames(i)
+
+                # 检测策略1: 查找电压相关的plot且通道数>=3
+                if any(keyword in title for keyword in ['电压', 'voltage', 'v']):
+                    if len(channels) >= 3:
+                        three_phase_groups.append({
+                            "name": plot.get('data', {}).get('title', f'三相组{i}'),
+                            "plot_index": i,
+                            "a": channels[0],
+                            "b": channels[1],
+                            "c": channels[2],
+                        })
+                    elif len(channels) == 1:
+                        # 单通道电压（如直流电压）作为单相分析
+                        pass
+
+                # 检测策略2: 查找电流相关的三相plot
+                elif any(keyword in title for keyword in ['电流', 'current', 'i']):
+                    if len(channels) >= 3:
+                        three_phase_groups.append({
+                            "name": plot.get('data', {}).get('title', f'三相电流组{i}'),
+                            "plot_index": i,
+                            "a": channels[0],
+                            "b": channels[1],
+                            "c": channels[2],
+                        })
+
+        except Exception as e:
+            logger.warning(f"检测三相通道失败: {e}")
 
         return three_phase_groups
+
+    def _detect_single_phase_channels(self, result) -> List[str]:
+        """自动检测单相通道（用于谐波、直流偏置分析）"""
+        single_channels = []
+
+        try:
+            plots = list(result.getPlots())
+            for i, plot in enumerate(plots):
+                title = plot.get('data', {}).get('title', '').lower()
+                channels = result.getPlotChannelNames(i)
+
+                # 优先检测电压、电流、功率相关的单通道
+                priority_keywords = ['电压', 'voltage', '电流', 'current', '功率', 'power']
+                if any(kw in title for kw in priority_keywords):
+                    for ch in channels:
+                        # 避免重复添加
+                        if ch not in single_channels:
+                            single_channels.append(ch)
+
+        except Exception as e:
+            logger.warning(f"检测单相通道失败: {e}")
+
+        return single_channels
+
+    def _find_plot_index_for_channel(self, result, channel: str) -> int:
+        """查找包含指定通道的plot索引"""
+        try:
+            plots = list(result.getPlots())
+            for i, _ in enumerate(plots):
+                channels = result.getPlotChannelNames(i)
+                if channel in channels:
+                    return i
+        except Exception:
+            pass
+        return 0  # 默认返回0
+
+    def _get_channel_data(self, result, channel: str):
+        """获取通道数据，自动查找正确的plot"""
+        plot_idx = self._find_plot_index_for_channel(result, channel)
+        return result.getPlotChannelData(plot_idx, channel)
 
     def _analyze_harmonics(self, result, channel: str, analysis_window: List,
                           fundamental: float, max_harmonic: int) -> Dict:
@@ -371,7 +460,7 @@ class PowerQualityAnalysisSkill(SkillBase):
         if not plots:
             return {"error": "无波形数据"}
 
-        data = result.getPlotChannelData(0, channel)
+        data = self._get_channel_data(result, channel)
         if not data or not data.get('y'):
             return {"error": "通道无数据"}
 
@@ -444,9 +533,9 @@ class PowerQualityAnalysisSkill(SkillBase):
                           analysis_window: List) -> Dict:
         """分析三相不平衡度"""
         try:
-            data_a = result.getPlotChannelData(0, ch_a)
-            data_b = result.getPlotChannelData(0, ch_b)
-            data_c = result.getPlotChannelData(0, ch_c)
+            data_a = self._get_channel_data(result, ch_a)
+            data_b = self._get_channel_data(result, ch_b)
+            data_c = self._get_channel_data(result, ch_c)
 
             if not all([data_a, data_b, data_c]):
                 return {"error": "三相数据不完整"}
@@ -490,7 +579,7 @@ class PowerQualityAnalysisSkill(SkillBase):
     def _analyze_voltage_dip(self, result, channel: str, analysis_window: List) -> Dict:
         """分析电压暂降"""
         try:
-            data = result.getPlotChannelData(0, channel)
+            data = self._get_channel_data(result, channel)
             if not data or not data.get('y'):
                 return {"error": "通道无数据"}
 
@@ -563,7 +652,7 @@ class PowerQualityAnalysisSkill(SkillBase):
     def _analyze_dc_offset(self, result, channel: str, analysis_window: List) -> Dict:
         """分析直流偏置"""
         try:
-            data = result.getPlotChannelData(0, channel)
+            data = self._get_channel_data(result, channel)
             if not data or not data.get('y'):
                 return {"error": "通道无数据"}
 

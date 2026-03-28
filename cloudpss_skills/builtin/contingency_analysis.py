@@ -181,10 +181,12 @@ class ContingencyAnalysisSkill(SkillBase):
             log("INFO", "认证成功")
 
             model_config = config["model"]
-            if model_config.get("source") == "local":
-                base_model = Model.load(model_config["rid"])
+            model_rid = model_config["rid"]
+            model_source = model_config.get("source", "cloud")
+            if model_source == "local":
+                base_model = Model.load(model_rid)
             else:
-                base_model = Model.fetch(model_config["rid"])
+                base_model = Model.fetch(model_rid)
             log("INFO", f"模型: {base_model.name}")
 
             # 获取配置参数
@@ -223,8 +225,12 @@ class ContingencyAnalysisSkill(SkillBase):
                 time.sleep(1)
 
             base_result = base_job.result
-            base_buses = base_result.getBuses()
-            base_branches = base_result.getBranches()
+            base_buses_raw = base_result.getBuses()
+            base_branches_raw = base_result.getBranches()
+
+            # Parse table format
+            base_buses = self._parse_table(base_buses_raw)
+            base_branches = self._parse_table(base_branches_raw)
 
             log("INFO", f"基态: {len(base_buses)} 节点, {len(base_branches)} 支路")
 
@@ -251,7 +257,7 @@ class ContingencyAnalysisSkill(SkillBase):
                     log("INFO", f"[{i}/{len(contingencies)}] {contingency['name']}")
 
                     result = self._evaluate_contingency(
-                        base_model, contingency,
+                        model_rid, model_source, contingency,
                         voltage_limit, thermal_limit,
                         base_buses, base_branches,
                         log
@@ -456,12 +462,11 @@ class ContingencyAnalysisSkill(SkillBase):
         # 默认为其他类型
         return "other"
 
-    def _evaluate_contingency(self, base_model, contingency: Dict,
+    def _evaluate_contingency(self, model_rid: str, model_source: str, contingency: Dict,
                               voltage_limit: Dict, thermal_limit: float,
                               base_buses: List, base_branches: List,
                               log_func) -> Dict:
         """评估单个故障场景"""
-        from copy import deepcopy
         from cloudpss import Model
 
         result = {
@@ -471,14 +476,26 @@ class ContingencyAnalysisSkill(SkillBase):
             "violations": [],
         }
 
-        # 创建模型副本并移除故障元件
-        working_model = Model(deepcopy(base_model.toJSON()))
+        # 重新加载原始模型（每次重新加载以确保干净状态）
+        if model_source == "local":
+            working_model = Model.load(model_rid)
+        else:
+            working_model = Model.fetch(model_rid)
 
         for comp_key in contingency["components"]:
             try:
-                working_model.removeComponent(comp_key)
+                # Remove leading '/' if present (fetchTopology adds it, but removeComponent doesn't need it)
+                clean_key = comp_key.lstrip('/')
+                working_model.removeComponent(clean_key)
             except Exception as e:
                 log_func("WARNING", f"无法移除元件 {comp_key}: {e}")
+
+        # DEBUG: Check component count
+        try:
+            all_comps = working_model.getAllComponents()
+            log_func("INFO", f"Model has {len(all_comps)} components after removal")
+        except Exception as e:
+            log_func("WARNING", f"Could not get component count: {e}")
 
         # 运行潮流计算
         job = working_model.runPowerFlow()
@@ -506,34 +523,51 @@ class ContingencyAnalysisSkill(SkillBase):
 
         # 获取结果
         pf_result = job.result
-        buses = pf_result.getBuses()
-        branches = pf_result.getBranches()
+        buses_raw = pf_result.getBuses()
+        branches_raw = pf_result.getBranches()
+
+        # Parse table format
+        buses = self._parse_table(buses_raw)
+        branches = self._parse_table(branches_raw)
 
         # 电压检查
         voltage_violations = []
         min_voltage = float('inf')
         max_voltage = float('-inf')
 
+        # Find voltage column name (handles HTML encoding)
+        voltage_col = None
+        if buses and len(buses) > 0:
+            for key in buses[0].keys():
+                if 'm' in key.lower() and 'pu' in key.lower():
+                    voltage_col = key
+                    break
+
         for bus in buses:
-            v = abs(bus.get("V", 1.0))
+            # Get voltage magnitude from Vm / pu column (handles HTML encoding)
+            if voltage_col:
+                v = abs(bus.get(voltage_col, 1.0))
+            else:
+                v = 1.0
+            bus_name = bus.get("Bus", bus.get("name", "Unknown"))
             min_voltage = min(min_voltage, v)
             max_voltage = max(max_voltage, v)
 
             if v < voltage_limit["min"]:
                 voltage_violations.append({
-                    "bus": bus.get("name", "Unknown"),
+                    "bus": bus_name,
                     "voltage": round(v, 4),
                     "limit": f"<{voltage_limit['min']}",
                 })
             elif v > voltage_limit["max"]:
                 voltage_violations.append({
-                    "bus": bus.get("name", "Unknown"),
+                    "bus": bus_name,
                     "voltage": round(v, 4),
                     "limit": f">{voltage_limit['max']}",
                 })
 
-        result["min_voltage"] = round(min_voltage, 4)
-        result["max_voltage"] = round(max_voltage, 4)
+        result["min_voltage"] = round(min_voltage, 4) if min_voltage != float('inf') else 1.0
+        result["max_voltage"] = round(max_voltage, 4) if max_voltage != float('-inf') else 1.0
 
         if voltage_violations:
             result["status"] = "VIOLATION"
@@ -545,13 +579,36 @@ class ContingencyAnalysisSkill(SkillBase):
         thermal_violations = []
         max_loading = 0.0
 
+        # Find power column names (handles HTML encoding)
+        p_col = None
+        q_col = None
+        rate_a_col = None
+        if branches and len(branches) > 0:
+            for key in branches[0].keys():
+                if 'p' in key.lower() and 'mw' in key.lower():
+                    p_col = key
+                if 'q' in key.lower() and 'mvar' in key.lower():
+                    q_col = key
+                if 'rate' in key.lower() or 'rating' in key.lower():
+                    rate_a_col = key
+
         for branch in branches:
+            # Get loading - either from loading column or calculate from P/Q
             loading = branch.get("loading", 0.0)
+            if loading == 0.0 and p_col and q_col:
+                # Calculate from P and Q
+                p = branch.get(p_col, 0.0)
+                q = branch.get(q_col, 0.0)
+                s = (p**2 + q**2)**0.5
+                # Assume 100 MVA base if no rating available
+                base_mva = 100.0
+                loading = s / base_mva if base_mva > 0 else 0.0
+            branch_name = branch.get("Branch", branch.get("name", "Unknown"))
             max_loading = max(max_loading, loading)
 
             if loading > thermal_limit:
                 thermal_violations.append({
-                    "branch": branch.get("name", "Unknown"),
+                    "branch": branch_name,
                     "loading": round(loading * 100, 2),
                     "limit": f"{thermal_limit * 100}%",
                 })
@@ -565,6 +622,42 @@ class ContingencyAnalysisSkill(SkillBase):
             ])
 
         return result
+
+    def _parse_table(self, table_data: List[Dict]) -> List[Dict]:
+        """Parse CloudPSS table format to list of dicts
+
+        CloudPSS returns table format:
+        [{'type': 'table', 'data': {'columns': [
+            {'name': 'Bus', 'data': ['Bus1', 'Bus2', ...]},
+            {'name': 'Vm / pu', 'data': [1.027, 0.987, ...]},
+            {'name': 'Va / deg', 'data': [...]}
+        ]}}]
+
+        Returns:
+            List of dicts with column names as keys
+        """
+        if not table_data or len(table_data) == 0:
+            return []
+
+        table = table_data[0]
+        if table.get('type') != 'table':
+            # Already in expected format (list of dicts)
+            return table_data
+
+        columns = table['data']['columns']
+        if not columns:
+            return []
+
+        # Convert column-oriented data to row-oriented dicts
+        num_rows = len(columns[0]['data']) if columns else 0
+        rows = []
+        for i in range(num_rows):
+            row = {}
+            for col in columns:
+                row[col['name']] = col['data'][i]
+            rows.append(row)
+
+        return rows
 
     def _calculate_severity(self, result: Dict, voltage_limit: Dict, thermal_limit: float) -> float:
         """计算故障严重度 (0-1)"""
@@ -708,8 +801,10 @@ class ContingencyAnalysisSkill(SkillBase):
             lines.append("2. **电压支撑**: 在电压薄弱节点配置无功补偿装置")
             lines.append("3. **负载均衡**: 优化运行方式，避免线路过载")
             lines.append("4. **保护配合**: 校核继电保护定值，确保故障快速隔离")
-        else:
+        elif summary.get('pass_rate', 0) == 100.0:
             lines.append("✅ **当前系统满足N-1安全准则，无需额外措施**")
+        else:
+            lines.append("🚨 **系统N-1安全裕度不足，需加强网架结构**")
 
         lines.extend([
             "",
