@@ -31,6 +31,7 @@ from . import contingency_analysis
 from . import power_quality_analysis
 from . import disturbance_severity
 from . import vsi_weak_bus
+from . import reactive_compensation_design
 
 # 导出技能类（方便直接导入）
 from .emt_simulation import EmtSimulationSkill
@@ -59,6 +60,7 @@ from .contingency_analysis import ContingencyAnalysisSkill
 from .power_quality_analysis import PowerQualityAnalysisSkill
 from .disturbance_severity import DisturbanceSeveritySkill
 from .vsi_weak_bus import VSIWeakBusSkill
+from .reactive_compensation_design import ReactiveCompensationDesignSkill
 
 __all__ = [
     "EmtSimulationSkill",
@@ -87,4 +89,5 @@ __all__ = [
     "PowerQualityAnalysisSkill",
     "DisturbanceSeveritySkill",
     "VSIWeakBusSkill",
+    "ReactiveCompensationDesignSkill",
 ]

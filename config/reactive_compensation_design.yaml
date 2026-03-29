@@ -1,0 +1,56 @@
+# 无功补偿设计配置示例
+# 基于VSI弱母线分析结果自动设计调相机补偿方案
+
+skill: reactive_compensation_design
+
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/IEEE39
+  source: cloud
+
+# VSI结果输入（二选一）
+vsi_input:
+  # 方式1: 从VSI结果文件读取
+  vsi_result_file: ./results/vsi_weak_bus_result.json
+  vsi_threshold: 0.01      # 弱母线VSI阈值
+  max_buses: 5             # 最大补偿母线数
+
+  # 方式2: 直接指定母线列表
+  # target_buses:
+  #   - "Bus_16"
+  #   - "Bus_15"
+  #   - "Bus_26"
+
+# 补偿设备配置
+compensation:
+  device_type: sync_compensator  # 设备类型: 同步调相机
+  initial_capacity: 100          # 初始容量(MVar)
+  max_capacity: 800              # 最大容量(MVar)
+  min_capacity: 10               # 最小容量(MVar)
+  avr_k: 30                      # AVR增益
+  avr_ka: 14.2                   # AVR放大倍数
+
+# 仿真配置
+simulation:
+  fault_bus: "Bus_16"            # 故障母线
+  fault_type: three_phase        # 故障类型
+  fault_time: 4.0                # 故障时间(s)
+  fault_duration: 0.1            # 故障持续时间(s)
+  simulation_time: 10.0          # 仿真时间(s)
+  step_time: 0.0001              # 仿真步长(s)
+
+# 迭代优化配置
+iteration:
+  max_iterations: 20             # 最大迭代次数
+  convergence_threshold: 0.5     # 收敛阈值(MVar)
+  speed_ratio: 0.2               # 迭代加速比
+  dv_judge_criteria:             # DV判断条件
+    - [0.1, 3.0, 0.75, 1.25]
+    - [3.0, 999.0, 0.95, 1.05]
+
+output:
+  format: json
+  path: ./results/
+  prefix: reactive_compensation
