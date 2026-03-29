@@ -44,7 +44,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
 
     @property
     def description(self) -> str:
-        return "无功补偿设计 - 基于VSI结果自动设计调相机补偿方案，迭代优化容量"
+        return "无功补偿设计 - 基于VSI结果自动设计补偿方案，支持调相机/SVG/SVC，迭代优化容量"
 
     @property
     def config_schema(self) -> Dict[str, Any]:
@@ -80,12 +80,14 @@ class ReactiveCompensationDesignSkill(SkillBase):
                     "type": "object",
                     "description": "补偿设备配置",
                     "properties": {
-                        "device_type": {"type": "string", "enum": ["sync_compensator"], "default": "sync_compensator", "description": "补偿设备类型"},
+                        "device_type": {"type": "string", "enum": ["sync_compensator", "svg", "svc"], "default": "sync_compensator", "description": "补偿设备类型: sync_compensator-同步调相机, svg-静止无功发生器, svc-静止无功补偿器"},
                         "initial_capacity": {"type": "number", "default": 100, "description": "初始容量(MVar)"},
                         "max_capacity": {"type": "number", "default": 800, "description": "最大容量(MVar)"},
                         "min_capacity": {"type": "number", "default": 10, "description": "最小容量(MVar)"},
-                        "avr_k": {"type": "number", "default": 30, "description": "AVR增益"},
-                        "avr_ka": {"type": "number", "default": 14.2, "description": "AVR放大倍数"}
+                        "avr_k": {"type": "number", "default": 30, "description": "AVR增益(仅调相机)"},
+                        "avr_ka": {"type": "number", "default": 14.2, "description": "AVR放大倍数(仅调相机)"},
+                        "response_time": {"type": "number", "default": 0.02, "description": "响应时间(s)(SVG/SVC)"},
+                        "control_mode": {"type": "string", "enum": ["voltage_control", "reactive_power_control"], "default": "voltage_control", "description": "控制模式(SVG/SVC)"}
                     }
                 },
                 "simulation": {
@@ -172,31 +174,79 @@ class ReactiveCompensationDesignSkill(SkillBase):
             logger.info(f"补偿目标母线: {[b['label'] for b in target_buses]}")
             logs.append(LogEntry(level="INFO", message=f"补偿目标母线: {len(target_buses)}个"))
 
-            # 3. 批量添加调相机
+            # 3. 根据设备类型添加补偿设备
             comp_config = config.get("compensation", {})
-            sync_ids, tran_ids = self._add_sync_compensators(
-                model,
-                target_buses,
-                initial_capacity=comp_config.get("initial_capacity", 100),
-                avr_k=comp_config.get("avr_k", 30),
-                avr_ka=comp_config.get("avr_ka", 14.2)
-            )
+            device_type = comp_config.get("device_type", "sync_compensator")
 
-            logger.info(f"添加了 {len(sync_ids)} 个调相机")
-            logs.append(LogEntry(level="INFO", message=f"添加了 {len(sync_ids)} 个调相机"))
+            if device_type == "sync_compensator":
+                # 同步调相机
+                sync_ids, tran_ids = self._add_sync_compensators(
+                    model,
+                    target_buses,
+                    initial_capacity=comp_config.get("initial_capacity", 100),
+                    avr_k=comp_config.get("avr_k", 30),
+                    avr_ka=comp_config.get("avr_ka", 14.2)
+                )
+                logger.info(f"添加了 {len(sync_ids)} 个调相机")
+                logs.append(LogEntry(level="INFO", message=f"添加了 {len(sync_ids)} 个调相机"))
 
-            # 4. 迭代优化
-            iteration_config = config.get("iteration", {})
-            iteration_result = self._iterative_optimize(
-                model,
-                target_buses,
-                sync_ids,
-                tran_ids,
-                config,
-                max_iterations=iteration_config.get("max_iterations", 20),
-                convergence_threshold=iteration_config.get("convergence_threshold", 0.5),
-                speed_ratio=iteration_config.get("speed_ratio", 0.2)
-            )
+                # 迭代优化
+                iteration_config = config.get("iteration", {})
+                iteration_result = self._iterative_optimize(
+                    model,
+                    target_buses,
+                    sync_ids,
+                    tran_ids,
+                    config,
+                    max_iterations=iteration_config.get("max_iterations", 20),
+                    convergence_threshold=iteration_config.get("convergence_threshold", 0.5),
+                    speed_ratio=iteration_config.get("speed_ratio", 0.2)
+                )
+
+            elif device_type == "svg":
+                # SVG静止无功发生器
+                svg_ids = self._add_svg_devices(
+                    model,
+                    target_buses,
+                    initial_capacity=comp_config.get("initial_capacity", 100),
+                    response_time=comp_config.get("response_time", 0.02),
+                    control_mode=comp_config.get("control_mode", "voltage_control")
+                )
+                logger.info(f"添加了 {len(svg_ids)} 个SVG")
+                logs.append(LogEntry(level="INFO", message=f"添加了 {len(svg_ids)} 个SVG"))
+
+                # SVG不需要迭代优化，直接使用初始容量
+                iteration_result = {
+                    "capacities": [comp_config.get("initial_capacity", 100)] * len(target_buses),
+                    "iterations": 0,
+                    "converged": True,
+                    "iteration_history": [],
+                    "dv_results": []
+                }
+
+            elif device_type == "svc":
+                # SVC静止无功补偿器
+                svc_ids = self._add_svc_devices(
+                    model,
+                    target_buses,
+                    initial_capacity=comp_config.get("initial_capacity", 100),
+                    response_time=comp_config.get("response_time", 0.05),
+                    control_mode=comp_config.get("control_mode", "voltage_control")
+                )
+                logger.info(f"添加了 {len(svc_ids)} 个SVC")
+                logs.append(LogEntry(level="INFO", message=f"添加了 {len(svc_ids)} 个SVC"))
+
+                # SVC不需要迭代优化，直接使用初始容量
+                iteration_result = {
+                    "capacities": [comp_config.get("initial_capacity", 100)] * len(target_buses),
+                    "iterations": 0,
+                    "converged": True,
+                    "iteration_history": [],
+                    "dv_results": []
+                }
+
+            else:
+                raise ValueError(f"不支持的设备类型: {device_type}")
 
             logger.info(f"迭代优化完成 - 迭代次数: {iteration_result['iterations']}")
             logs.append(LogEntry(level="INFO", message=f"迭代优化完成，共{iteration_result['iterations']}次迭代"))
@@ -453,6 +503,136 @@ class ReactiveCompensationDesignSkill(SkillBase):
                 continue
 
         return sync_ids, tran_ids
+
+    def _add_svg_devices(
+        self,
+        model: Model,
+        target_buses: List[Dict],
+        initial_capacity: float = 100,
+        response_time: float = 0.02,
+        control_mode: str = "voltage_control"
+    ) -> List[str]:
+        """批量添加SVG（静止无功发生器）设备
+
+        SVG特点：
+        - 响应速度快（毫秒级）
+        - 连续可调
+        - 不产生谐波
+        - 适用于快速电压调节
+        """
+        svg_ids = []
+        canvas_id = "canvas_Reactive_Comp"
+
+        # 创建画布
+        try:
+            model.createCanvas(canvas_id, "无功补偿设计")
+        except:
+            logger.warning(f"画布 {canvas_id} 可能已存在")
+
+        for i, bus in enumerate(target_buses):
+            bus_key = bus["key"]
+            bus_voltage = bus["voltage"]
+
+            try:
+                # 添加SVG设备
+                svg_id = f"SVG_{i}"
+                svg_name = f"SVG_{bus['label']}"
+
+                # SVG设备参数
+                svg_args = {
+                    "Name": svg_name,
+                    "Sn": str(initial_capacity),  # 额定容量(MVA)
+                    "Vn": str(bus_voltage),        # 额定电压(kV)
+                    "fn": "50",                     # 额定频率(Hz)
+                    "Tresponse": str(response_time),  # 响应时间(s)
+                    "Vref": "1.0",                  # 电压参考值(pu)
+                    "Qmin": str(-initial_capacity), # 最小无功输出
+                    "Qmax": str(initial_capacity),  # 最大无功输出
+                    "mode": "1" if control_mode == "voltage_control" else "0"  # 1-电压控制, 0-无功控制
+                }
+
+                svg_pins = {"0": bus_key}
+
+                key, _ = model.addComponent(
+                    definition="model/CloudPSS/SVG",
+                    key=svg_id,
+                    args=svg_args,
+                    pins=svg_pins
+                )
+                svg_ids.append(key)
+
+                logger.info(f"已添加SVG {svg_name} 到母线 {bus['label']}，容量: {initial_capacity} MVar")
+
+            except Exception as e:
+                logger.warning(f"为母线 {bus['label']} 添加SVG失败: {e}")
+                continue
+
+        return svg_ids
+
+    def _add_svc_devices(
+        self,
+        model: Model,
+        target_buses: List[Dict],
+        initial_capacity: float = 100,
+        response_time: float = 0.05,
+        control_mode: str = "voltage_control"
+    ) -> List[str]:
+        """批量添加SVC（静止无功补偿器）设备
+
+        SVC特点：
+        - 响应速度较快（几十毫秒）
+        - 由TCR（晶闸管控制电抗器）和FC（固定电容器）组成
+        - 成本相对较低
+        - 适用于中大容量补偿
+        """
+        svc_ids = []
+        canvas_id = "canvas_Reactive_Comp"
+
+        # 创建画布
+        try:
+            model.createCanvas(canvas_id, "无功补偿设计")
+        except:
+            logger.warning(f"画布 {canvas_id} 可能已存在")
+
+        for i, bus in enumerate(target_buses):
+            bus_key = bus["key"]
+            bus_voltage = bus["voltage"]
+
+            try:
+                # 添加SVC设备
+                svc_id = f"SVC_{i}"
+                svc_name = f"SVC_{bus['label']}"
+
+                # SVC设备参数
+                svc_args = {
+                    "Name": svc_name,
+                    "Qmax": str(initial_capacity),     # 最大感性无功(MVar)
+                    "Qmin": str(-initial_capacity),    # 最大容性无功(MVar)
+                    "Vn": str(bus_voltage),             # 额定电压(kV)
+                    "fn": "50",                          # 额定频率(Hz)
+                    "Tresponse": str(response_time),    # 响应时间(s)
+                    "Vref": "1.0",                       # 电压参考值(pu)
+                    "slope": "0.05",                     # 斜率(pu)
+                    "mode": "1" if control_mode == "voltage_control" else "0"
+                }
+
+                svc_pins = {"0": bus_key}
+
+                key, _ = model.addComponent(
+                    definition="model/CloudPSS/SVC",
+                    key=svc_id,
+                    args=svc_args,
+                    pins=svc_pins
+                )
+                svc_ids.append(key)
+
+                logger.info(f"已添加SVC {svc_name} 到母线 {bus['label']}，容量: {initial_capacity} MVar")
+
+            except Exception as e:
+                logger.warning(f"为母线 {bus['label']} 添加SVC失败: {e}")
+                continue
+
+        return svc_ids
 
     def _iterative_optimize(
         self,

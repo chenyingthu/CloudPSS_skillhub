@@ -1,0 +1,38 @@
+# 无功补偿设计 - SVC配置示例
+
+skill: reactive_compensation_design
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/IEEE39
+  source: cloud
+
+vsi_input:
+  vsi_result_file: ./results/vsi_weak_bus_result.json
+  vsi_threshold: 0.01
+  max_buses: 5
+
+# SVC静止无功补偿器配置
+compensation:
+  device_type: svc                    # sync_compensator, svg, svc
+  initial_capacity: 100               # 初始容量(MVar)
+  max_capacity: 800
+  min_capacity: 10
+  response_time: 0.05                 # 响应时间(s)，SVC为几十毫秒
+  control_mode: voltage_control       # voltage_control 或 reactive_power_control
+
+simulation:
+  fault_bus: Bus_16
+  fault_type: three_phase
+  fault_time: 4.0
+
+iteration:
+  max_iterations: 0                   # SVC不需要迭代，设为0
+  convergence_threshold: 0.5
+  speed_ratio: 0.2
+
+output:
+  format: json
+  path: ./results/
+  prefix: svc_compensation
