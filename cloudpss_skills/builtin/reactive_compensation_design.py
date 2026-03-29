@@ -707,10 +707,10 @@ class ReactiveCompensationDesignSkill(SkillBase):
                 cap_pins = {"0": bus_key}
 
                 key, _ = model.addComponent(
-                    definition="model/CloudPSS/_newCapacitor",
-                    key=cap_id,
-                    args=cap_args,
-                    pins=cap_pins
+                    "model/CloudPSS/_newCapacitor",
+                    cap_id,
+                    cap_args,
+                    cap_pins
                 )
                 cap_ids.append(key)
 
