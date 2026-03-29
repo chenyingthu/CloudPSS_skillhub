@@ -1,0 +1,36 @@
+skill: dudv_curve
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/IEEE39
+  source: cloud
+
+# 要分析的母线列表
+buses:
+  - "Bus_16"
+  - "Bus_15"
+  - "Bus_26"
+
+# 仿真配置
+simulation:
+  end_time: 15.0
+  step_time: 0.0001
+  fault_bus: "Bus_16"
+  fault_type: three_phase
+  fault_time: 4.0
+  fault_duration: 0.1
+
+# DUDV扫描配置
+dudv:
+  voltage_range: [0.8, 1.2]    # 电压扫描范围 [vmin, vmax] (pu)
+  num_points: 20               # 扫描点数
+  injection_duration: 2.0      # 每次无功注入持续时间
+
+# 输出配置
+output:
+  format: png                  # png, pdf, svg
+  path: ./results/
+  prefix: dudv_curve
+  show_grid: true
+  show_legend: true
