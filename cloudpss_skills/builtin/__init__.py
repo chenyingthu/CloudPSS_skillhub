@@ -32,6 +32,8 @@ from . import power_quality_analysis
 from . import disturbance_severity
 from . import vsi_weak_bus
 from . import reactive_compensation_design
+from . import batch_task_manager
+from . import dudv_curve
 
 # 导出技能类（方便直接导入）
 from .emt_simulation import EmtSimulationSkill
@@ -61,6 +63,8 @@ from .power_quality_analysis import PowerQualityAnalysisSkill
 from .disturbance_severity import DisturbanceSeveritySkill
 from .vsi_weak_bus import VSIWeakBusSkill
 from .reactive_compensation_design import ReactiveCompensationDesignSkill
+from .batch_task_manager import BatchTaskManagerSkill
+from .dudv_curve import DUDVCurveSkill
 
 __all__ = [
     "EmtSimulationSkill",
@@ -90,4 +94,6 @@ __all__ = [
     "DisturbanceSeveritySkill",
     "VSIWeakBusSkill",
     "ReactiveCompensationDesignSkill",
+    "BatchTaskManagerSkill",
+    "DUDVCurveSkill",
 ]
