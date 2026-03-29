@@ -1,6 +1,73 @@
-# CloudPSS 技能系统
+# CloudPSS 技能系统文档
 
-配置驱动的电力系统仿真工具。无需编程，只需编辑YAML配置文件即可运行仿真。
+配置驱动的电力系统仿真工具包，包含30个专业仿真技能。
+
+## 技能文档索引
+
+### 仿真执行类
+
+| 技能 | 描述 | 文档 |
+|------|------|------|
+| `power_flow` | 牛顿-拉夫逊潮流计算 | [查看文档](power_flow.md) |
+| `emt_simulation` | EMT暂态仿真 | [查看文档](emt_simulation.md) |
+| `emt_fault_study` | EMT故障研究 | [查看文档](emt_fault_study.md) |
+| `short_circuit` | 短路电流计算 | [查看文档](short_circuit.md) |
+
+### N-1安全分析类
+
+| 技能 | 描述 | 文档 |
+|------|------|------|
+| `n1_security` | N-1安全校核 | [查看文档](n1_security.md) |
+| `emt_n1_screening` | EMT N-1安全筛查 | [查看文档](emt_n1_screening.md) |
+| `contingency_analysis` | 预想事故分析 | [查看文档](contingency_analysis.md) |
+| `maintenance_security` | 检修方式安全校核 | [查看文档](maintenance_security.md) |
+
+### 批量与扫描类
+
+| 技能 | 描述 | 文档 |
+|------|------|------|
+| `batch_powerflow` | 批量潮流计算 | [查看文档](batch_powerflow.md) |
+| `param_scan` | 参数扫描分析 | [查看文档](param_scan.md) |
+| `fault_clearing_scan` | 故障清除时间扫描 | [查看文档](fault_clearing_scan.md) |
+| `fault_severity_scan` | 故障严重度扫描 | [查看文档](fault_severity_scan.md) |
+| `ieee3_prep` | IEEE3模型准备 | [查看文档](ieee3_prep.md) |
+| `batch_task_manager` | 批处理任务管理 | [查看文档](batch_task_manager.md) |
+
+### 稳定性分析类
+
+| 技能 | 描述 | 文档 |
+|------|------|------|
+| `voltage_stability` | 电压稳定分析 | [查看文档](voltage_stability.md) |
+| `transient_stability` | 暂态稳定分析 | [查看文档](transient_stability.md) |
+| `small_signal_stability` | 小信号稳定分析 | [查看文档](small_signal_stability.md) |
+| `frequency_response` | 频率响应分析 | [查看文档](frequency_response.md) |
+| `vsi_weak_bus` | VSI弱母线分析 | [查看文档](vsi_weak_bus.md) |
+| `dudv_curve` | DUDV曲线生成 | [查看文档](dudv_curve.md) |
+
+### 结果处理类
+
+| 技能 | 描述 | 文档 |
+|------|------|------|
+| `result_compare` | 结果对比分析 | [查看文档](result_compare.md) |
+| `visualize` | 结果可视化 | [查看文档](visualize.md) |
+| `waveform_export` | 波形数据导出 | [查看文档](waveform_export.md) |
+| `hdf5_export` | HDF5数据导出 | [查看文档](hdf5_export.md) |
+| `disturbance_severity` | 扰动严重度分析 | [查看文档](disturbance_severity.md) |
+
+### 电能质量类
+
+| 技能 | 描述 | 文档 |
+|------|------|------|
+| `harmonic_analysis` | 谐波分析 | [查看文档](harmonic_analysis.md) |
+| `power_quality_analysis` | 电能质量分析 | [查看文档](power_quality_analysis.md) |
+| `reactive_compensation_design` | 无功补偿设计 | [查看文档](reactive_compensation_design.md) |
+
+### 模型与拓扑类
+
+| 技能 | 描述 | 文档 |
+|------|------|------|
+| `topology_check` | 拓扑检查 | [查看文档](topology_check.md) |
+| `parameter_sensitivity` | 参数灵敏度分析 | [查看文档](parameter_sensitivity.md) |
 
 ## 快速开始
 
@@ -10,15 +77,13 @@
 # 确保已安装CloudPSS SDK
 pip install cloudpss
 
-# 克隆本仓库
-git clone https://github.com/cloudpss/skills.git
-cd skills
+# 从源码安装
+pip install -e .
 ```
 
 ### 2. 配置Token
 
 ```bash
-# 将CloudPSS API Token写入文件
 echo "your_token_here" > .cloudpss_token
 ```
 
@@ -28,152 +93,82 @@ echo "your_token_here" > .cloudpss_token
 python -m cloudpss_skills list
 ```
 
-### 4. 初始化配置
+### 4. 初始化并运行
 
 ```bash
-# 创建EMT仿真配置
-python -m cloudpss_skills init emt_simulation --output my_sim.yaml
+# 创建配置
+python -m cloudpss_skills init power_flow --output pf.yaml
+
+# 编辑配置后运行
+python -m cloudpss_skills run --config pf.yaml
 ```
 
-### 5. 运行技能
+## 技能设计文档
 
-```bash
-python -m cloudpss_skills run --config my_sim.yaml
-```
+- [用户手册](user_manual.md) - 完整的用户操作指南
+- [配置参考](config_reference.md) - 配置参数详细说明
 
-## 核心概念
+## 典型工作流
 
-### 什么是技能？
-
-技能是预置的、可复用的仿真脚本：
-
-- **emt_simulation** - 运行EMT暂态仿真
-- **power_flow** - 运行潮流计算
-- **ieee3_prep** - 准备IEEE3模型
-- **waveform_export** - 导出波形数据
-- **n1_security** - N-1安全校核
-- **param_scan** - 参数扫描
-- **result_compare** - 结果对比
-- **visualize** - 可视化
-- **topology_check** - 拓扑检查
-- **batch_powerflow** - 批量潮流计算
-
-### 配置驱动
-
-所有参数都在YAML配置中：
-
-```yaml
-skill: emt_simulation
-
-model:
-  rid: model/holdme/IEEE3
-
-output:
-  format: csv
-  path: ./results/
-```
-
-## 命令参考
-
-| 命令 | 说明 |
-|-----|------|
-| `list` | 列出可用技能 |
-| `describe <skill>` | 查看技能详情 |
-| `init <skill>` | 创建配置模板 |
-| `run --config <file>` | 运行技能 |
-| `validate --config <file>` | 验证配置 |
-| `batch --config-dir <dir>` | 批量运行 |
-
-## 配置示例
-
-### EMT仿真
-
-```yaml
-skill: emt_simulation
-
-auth:
-  token_file: .cloudpss_token
-
-model:
-  rid: model/holdme/IEEE3
-
-simulation:
-  duration: 10.0
-  timeout: 300
-
-output:
-  format: csv
-  path: ./results/
-  channels: ["Bus1_Va", "Bus1_Vb"]
-```
-
-### 潮流计算
-
-```yaml
-skill: power_flow
-
-auth:
-  token_file: .cloudpss_token
-
-model:
-  rid: model/holdme/IEEE39
-
-output:
-  format: json
-  path: ./results/
-```
-
-## 目录结构
+### 工作流1: 电压稳定分析与补偿设计
 
 ```
-.
-├── skills/              # 技能系统
-│   ├── core/           # 核心模块
-│   ├── builtin/        # 内置技能
-│   └── templates/      # 配置模板
-├── tests/              # 测试套件
-├── configs/            # 用户配置
-│   └── templates/      # 配置模板
-└── docs/               # 文档
-    └── design/         # 设计文档
+vsi_weak_bus → reactive_compensation_design → disturbance_severity
 ```
 
-## 特点
+### 工作流2: N-1安全校核
 
-- **零编程** - 只需编辑YAML配置
-- **预置技能** - 常用功能开箱即用
-- **一键执行** - 简化操作，隐藏技术细节
-- **确定性** - 相同配置产生相同结果
-- **可累积** - 技能库不断丰富
-
-## 开发
-
-### 创建自定义技能
-
-```python
-from skills.core import SkillBase, register
-
-@register
-class MySkill(SkillBase):
-    @property
-    def name(self):
-        return "my_skill"
-
-    @property
-    def description(self):
-        return "我的自定义技能"
-
-    def run(self, config):
-        # 实现逻辑
-        return SkillResult(...)
 ```
+n1_security → contingency_analysis → result_compare
+```
+
+### 工作流3: 故障分析
+
+```
+ieee3_prep → emt_fault_study → disturbance_severity → visualize
+```
+
+### 工作流4: 批量仿真
+
+```
+batch_task_manager → hdf5_export → result_compare
+```
+
+## Agent使用指南
+
+每个技能文档包含:
+
+1. **概述** - 技能功能和适用场景
+2. **设计原理** - 算法和工作流程
+3. **快速开始** - CLI和Python API示例
+4. **配置Schema** - 完整的配置参数说明
+5. **Agent使用指南** - 程序化调用方式
+6. **输出结果** - 结果数据结构
+7. **与其他技能的关联** - 技能组合建议
+
+## 文档规范
+
+所有技能文档遵循统一结构:
+
+```markdown
+# 技能名称
+
+## 概述
+## 功能特性
+## 设计原理
+## 快速开始
+## 配置Schema
+## Agent使用指南
+## 输出结果
+## 与其他技能的关联
+## 性能特点
+## 常见问题
+## 版本信息
+```
+
+这样设计确保**人**可以通过示例快速上手，**Agent**可以通过Schema理解接口契约。
 
 ## 更多信息
 
-- [架构设计](docs/design/skill_system_architecture.md)
-- [用户手册](docs/skills/user_manual.md)
-- [配置参考](docs/skills/config_reference.md)
-
-## 许可证
-
-MIT License
+- [项目总结](../../PROJECT_SUMMARY.md) - 完整项目成果
+- [开发日志](../development/vsi_development_summary.md) - 开发过程记录
