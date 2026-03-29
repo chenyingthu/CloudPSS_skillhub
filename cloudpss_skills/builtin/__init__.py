@@ -36,6 +36,7 @@ from . import batch_task_manager
 from . import dudv_curve
 from . import hdf5_export
 from . import compare_visualization
+from . import comtrade_export
 
 # 导出技能类（方便直接导入）
 from .emt_simulation import EmtSimulationSkill
@@ -69,6 +70,7 @@ from .batch_task_manager import BatchTaskManagerSkill
 from .dudv_curve import DUDVCurveSkill
 from .hdf5_export import HDF5ExportSkill
 from .compare_visualization import CompareVisualizationSkill
+from .comtrade_export import ComtradeExportSkill
 
 __all__ = [
     "EmtSimulationSkill",
@@ -102,4 +104,5 @@ __all__ = [
     "DUDVCurveSkill",
     "HDF5ExportSkill",
     "CompareVisualizationSkill",
+    "ComtradeExportSkill",
 ]
