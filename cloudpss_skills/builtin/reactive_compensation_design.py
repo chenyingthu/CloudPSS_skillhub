@@ -80,7 +80,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
                     "type": "object",
                     "description": "补偿设备配置",
                     "properties": {
-                        "device_type": {"type": "string", "enum": ["sync_compensator", "svg", "svc"], "default": "sync_compensator", "description": "补偿设备类型: sync_compensator-同步调相机, svg-静止无功发生器, svc-静止无功补偿器"},
+                        "device_type": {"type": "string", "enum": ["sync_compensator", "svg", "svc", "capacitor"], "default": "sync_compensator", "description": "补偿设备类型: sync_compensator-同步调相机, svg-静止无功发生器, svc-静止无功补偿器, capacitor-电容器组"},
                         "initial_capacity": {"type": "number", "default": 100, "description": "初始容量(MVar)"},
                         "max_capacity": {"type": "number", "default": 800, "description": "最大容量(MVar)"},
                         "min_capacity": {"type": "number", "default": 10, "description": "最小容量(MVar)"},
@@ -237,6 +237,28 @@ class ReactiveCompensationDesignSkill(SkillBase):
                 logs.append(LogEntry(level="INFO", message=f"添加了 {len(svc_ids)} 个SVC"))
 
                 # SVC不需要迭代优化，直接使用初始容量
+                iteration_result = {
+                    "capacities": [comp_config.get("initial_capacity", 100)] * len(target_buses),
+                    "iterations": 0,
+                    "converged": True,
+                    "iteration_history": [],
+                    "dv_results": []
+                }
+
+            elif device_type == "capacitor":
+                # 电容器组
+                cap_config = config.get("capacitor_config", {})
+                num_steps = cap_config.get("num_steps", 5)
+                cap_ids = self._add_capacitor_banks(
+                    model,
+                    target_buses,
+                    initial_capacity=comp_config.get("initial_capacity", 100),
+                    num_steps=num_steps
+                )
+                logger.info(f"添加了 {len(cap_ids)} 个电容器组")
+                logs.append(LogEntry(level="INFO", message=f"添加了 {len(cap_ids)} 个电容器组"))
+
+                # 电容器组不需要迭代优化，直接使用初始容量
                 iteration_result = {
                     "capacities": [comp_config.get("initial_capacity", 100)] * len(target_buses),
                     "iterations": 0,
@@ -633,6 +655,73 @@ class ReactiveCompensationDesignSkill(SkillBase):
                 continue
 
         return svc_ids
+
+    def _add_capacitor_banks(
+        self,
+        model: Model,
+        target_buses: List[Dict],
+        initial_capacity: float = 100,
+        num_steps: int = 5
+    ) -> List[str]:
+        """批量添加电容器组
+
+        电容器组特点：
+        - 成本最低
+        - 只能提供容性无功（单向）
+        - 分级投切（阶梯调节）
+        - 适用于功率因数校正和轻载补偿
+        - 无谐波问题（纯电容）
+        """
+        cap_ids = []
+        canvas_id = "canvas_Reactive_Comp"
+
+        # 创建画布
+        try:
+            model.createCanvas(canvas_id, "无功补偿设计")
+        except:
+            logger.warning(f"画布 {canvas_id} 可能已存在")
+
+        for i, bus in enumerate(target_buses):
+            bus_key = bus["key"]
+            bus_voltage = bus["voltage"]
+
+            try:
+                # 添加电容器组
+                cap_id = f"Capacitor_{i}"
+                cap_name = f"CapBank_{bus['label']}"
+
+                # 电容器组参数
+                # 每个电容器的容量
+                step_capacity = initial_capacity / num_steps
+
+                cap_args = {
+                    "Name": cap_name,
+                    "Qn": str(initial_capacity),      # 总额定容量(MVar)
+                    "Vn": str(bus_voltage),            # 额定电压(kV)
+                    "fn": "50",                        # 额定频率(Hz)
+                    "steps": str(num_steps),           # 投切级数
+                    "Qstep": str(step_capacity),       # 每级容量(MVar)
+                    "enabled": "1"                     # 初始状态：投入
+                }
+
+                cap_pins = {"0": bus_key}
+
+                key, _ = model.addComponent(
+                    definition="model/CloudPSS/_newCapacitor",
+                    key=cap_id,
+                    args=cap_args,
+                    pins=cap_pins
+                )
+                cap_ids.append(key)
+
+                logger.info(f"已添加电容器组 {cap_name} 到母线 {bus['label']}，"
+                           f"总容量: {initial_capacity} MVar，级数: {num_steps}")
+
+            except Exception as e:
+                logger.warning(f"为母线 {bus['label']} 添加电容器组失败: {e}")
+                continue
+
+        return cap_ids
 
     def _iterative_optimize(
         self,

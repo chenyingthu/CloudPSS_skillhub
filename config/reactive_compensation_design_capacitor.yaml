@@ -1,0 +1,45 @@
+# 无功补偿设计 - 电容器组配置示例
+
+skill: reactive_compensation_design
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/IEEE39
+  source: cloud
+
+vsi_input:
+  vsi_result_file: ./results/vsi_weak_bus_result.json
+  vsi_threshold: 0.01
+  max_buses: 5
+
+# 电容器组配置
+compensation:
+  device_type: capacitor              # sync_compensator, svg, svc, capacitor
+  initial_capacity: 100               # 总额定容量 (MVar)
+  max_capacity: 800
+  min_capacity: 10
+
+# 电容器组专用配置
+capacitor_config:
+  num_steps: 5                        # 投切级数（分级数量）
+  # 每级容量 = initial_capacity / num_steps
+  # 例如：100 MVar / 5 = 20 MVar/级
+
+simulation:
+  fault_bus: Bus_16
+  fault_type: three_phase
+  fault_time: 4.0
+  fault_duration: 0.1
+  simulation_time: 10.0
+  step_time: 0.0001
+
+iteration:
+  max_iterations: 0                   # 电容器组不需要迭代，设为 0
+  convergence_threshold: 0.5
+  speed_ratio: 0.2
+
+output:
+  format: json
+  path: ./results/
+  prefix: capacitor_compensation
