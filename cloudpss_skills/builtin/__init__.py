@@ -35,6 +35,7 @@ from . import reactive_compensation_design
 from . import batch_task_manager
 from . import dudv_curve
 from . import hdf5_export
+from . import compare_visualization
 
 # 导出技能类（方便直接导入）
 from .emt_simulation import EmtSimulationSkill
@@ -67,6 +68,7 @@ from .reactive_compensation_design import ReactiveCompensationDesignSkill
 from .batch_task_manager import BatchTaskManagerSkill
 from .dudv_curve import DUDVCurveSkill
 from .hdf5_export import HDF5ExportSkill
+from .compare_visualization import CompareVisualizationSkill
 
 __all__ = [
     "EmtSimulationSkill",
@@ -99,4 +101,5 @@ __all__ = [
     "BatchTaskManagerSkill",
     "DUDVCurveSkill",
     "HDF5ExportSkill",
+    "CompareVisualizationSkill",
 ]
