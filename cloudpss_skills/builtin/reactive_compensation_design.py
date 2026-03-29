@@ -44,7 +44,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
 
     @property
     def description(self) -> str:
-        return "无功补偿设计 - 基于VSI结果自动设计补偿方案，支持调相机/SVG/SVC，迭代优化容量"
+        return "无功补偿设计 - 基于VSI结果自动设计补偿方案，支持调相机/SVG/SVC/电容器组，迭代优化容量"
 
     @property
     def config_schema(self) -> Dict[str, Any]:
