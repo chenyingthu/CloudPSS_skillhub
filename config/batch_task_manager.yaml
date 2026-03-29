@@ -1,0 +1,41 @@
+skill: batch_task_manager
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/IEEE39
+  source: cloud
+
+# 任务列表
+tasks:
+  - name: "PF_Base"
+    type: "power_flow"
+    config: {}
+    max_retries: 2
+  - name: "EMT_Fault_Bus16"
+    type: "emt"
+    config:
+      end_time: 10.0
+      step_time: 0.0001
+    max_retries: 1
+  - name: "EMT_Fault_Bus15"
+    type: "emt"
+    config:
+      end_time: 10.0
+      step_time: 0.0001
+    max_retries: 1
+
+# 执行配置
+execution:
+  mode: parallel          # parallel 或 sequential
+  max_concurrent: 3       # 最大并发数（仅parallel模式）
+  polling_interval: 2.0   # 轮询间隔（秒）
+  timeout: 600.0          # 单任务超时（秒）
+  enable_retry: true      # 启用失败重试
+
+# 输出配置
+output:
+  format: json
+  path: ./results/
+  prefix: batch_tasks
+  save_partial: true      # 保存部分结果
