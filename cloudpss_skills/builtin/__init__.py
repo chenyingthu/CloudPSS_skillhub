@@ -34,6 +34,7 @@ from . import vsi_weak_bus
 from . import reactive_compensation_design
 from . import batch_task_manager
 from . import dudv_curve
+from . import hdf5_export
 
 # 导出技能类（方便直接导入）
 from .emt_simulation import EmtSimulationSkill
@@ -65,6 +66,7 @@ from .vsi_weak_bus import VSIWeakBusSkill
 from .reactive_compensation_design import ReactiveCompensationDesignSkill
 from .batch_task_manager import BatchTaskManagerSkill
 from .dudv_curve import DUDVCurveSkill
+from .hdf5_export import HDF5ExportSkill
 
 __all__ = [
     "EmtSimulationSkill",
@@ -96,4 +98,5 @@ __all__ = [
     "ReactiveCompensationDesignSkill",
     "BatchTaskManagerSkill",
     "DUDVCurveSkill",
+    "HDF5ExportSkill",
 ]

@@ -1,0 +1,29 @@
+skill: hdf5_export
+
+# 数据源配置
+source:
+  type: file                      # emt_result, powerflow_result, vsi_result, disturbance_result, file
+  file_path: ./results/result.json  # file类型时指定
+
+# 输出配置
+output:
+  path: ./results/
+  filename: simulation_result.h5   # 可选，默认自动生成
+  compression: gzip               # gzip, lzf, none
+  compression_level: 4            # 1-9，仅gzip有效
+
+# 元数据配置
+metadata:
+  title: "IEEE39系统仿真结果"
+  description: "N-1故障后电压恢复特性分析"
+  tags: ["EMT", "IEEE39", "N-1", "voltage_stability"]
+  custom_attrs:
+    project: "CloudPSS_Study"
+    engineer: "user"
+
+# 导出选项
+options:
+  include_waveforms: true         # 包含波形数据
+  include_metrics: true           # 包含指标数据
+  include_metadata: true          # 包含元数据
+  chunk_size: 1000                # 数据块大小
