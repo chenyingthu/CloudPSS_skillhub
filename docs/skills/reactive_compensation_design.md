@@ -5,7 +5,7 @@
 ## 功能特性
 
 - **VSI结果读取**: 自动识别需要补偿的弱母线
-- **多种补偿设备**: 支持调相机、SVG、SVC
+- **多种补偿设备**: 支持调相机、SVG、SVC、电容器组
 - **故障场景仿真**: 配置N-1故障验证补偿效果
 - **迭代容量优化**: 基于DV电压裕度自动调整容量（仅调相机）
 - **完整方案输出**: 补偿容量、迭代历史、收敛状态
@@ -17,6 +17,7 @@
 | **同步调相机** | 较慢（秒级） | 大容量、提供惯性支持、需AVR | 大容量补偿、系统稳定性要求高 |
 | **SVG** | 快（毫秒级） | 响应极快、连续可调、无谐波 | 快速电压调节、精密控制 |
 | **SVC** | 较快（几十毫秒） | 成本较低、技术成熟 | 中大容量补偿、经济型方案 |
+| **电容器组** | 慢（分级投切） | 成本最低、阶梯调节、纯电容 | 功率因数校正、轻载补偿 |
 
 ## 快速开始
 
@@ -231,7 +232,7 @@ if DV_up < 0 (电压上限违规):
 | `vsi_input.vsi_threshold` | float | 0.01 | 弱母线VSI阈值 |
 | `vsi_input.max_buses` | int | 5 | 最大补偿母线数 |
 | `vsi_input.target_buses` | list | - | 直接指定补偿母线 |
-| `compensation.device_type` | enum | sync_compensator | 设备类型: sync_compensator/svg/svc |
+| `compensation.device_type` | enum | sync_compensator | 设备类型: sync_compensator/svg/svc/capacitor |
 | `compensation.initial_capacity` | float | 100 | 初始容量(MVar) |
 | `compensation.max_capacity` | float | 800 | 最大容量(MVar) |
 | `compensation.min_capacity` | float | 10 | 最小容量(MVar) |
@@ -312,6 +313,26 @@ if DV_up < 0 (电压上限违规):
 }
 ```
 
+### 电容器组 (Capacitor Bank)
+
+```python
+{
+    "Qn": "100",        # 总额定容量 (MVar)
+    "Vn": "230",        # 额定电压 (kV)
+    "fn": "50",         # 额定频率 (Hz)
+    "steps": "5",       # 投切级数
+    "Qstep": "20",      # 每级容量 (MVar) = Qn/steps
+    "enabled": "1"      # 初始状态：1-投入，0-退出
+}
+```
+
+电容器组特点:
+- **成本最低**: 单位容量投资最小
+- **分级投切**: 阶梯式调节，非连续
+- **单向补偿**: 只能提供容性无功
+- **无谐波**: 纯电容元件，不产生谐波
+- **适用场景**: 功率因数校正、轻载电压支撑
+
 ## 与已有技能的关联
 
 ```
@@ -333,6 +354,7 @@ emt_simulation / disturbance_severity
 | 需要大容量补偿(>200MVar) | 同步调相机 | 大容量、提供惯性支持 |
 | 需要快速电压调节 | SVG | 毫秒级响应、连续可调 |
 | 成本敏感、中大容量 | SVC | 成本较低、技术成熟 |
+| 成本敏感、小容量补偿 | 电容器组 | 成本最低、简单可靠 |
 | 系统稳定性要求高 | 同步调相机 | 提供惯性支撑、短路容量 |
 
 ### 2. 设备特点对比
@@ -357,6 +379,14 @@ emt_simulation / disturbance_severity
 - ✅ 技术成熟可靠
 - ❌ 产生谐波需滤波
 - ❌ 容量分级调节
+
+**电容器组**
+- ✅ 成本最低
+- ✅ 纯电容无谐波
+- ✅ 结构简单、维护方便
+- ❌ 分级投切（非连续调节）
+- ❌ 只能提供容性无功（单向）
+- ❌ 响应慢（秒级）
 
 ### 3. 先运行VSI分析
 
