@@ -168,46 +168,22 @@ class TestAutoLoopBreakerGraphAlgorithm:
 class TestAutoLoopBreakerIntegration:
     """集成测试 - 需要CloudPSS API访问"""
 
-    @pytest.fixture
-    def token(self):
-        """获取测试token"""
-        token_file = Path(".cloudpss_token")
-        if token_file.exists():
-            return token_file.read_text().strip()
-        return None
-
     def test_skill_loads_correctly(self):
         """测试技能正确加载"""
         skill = get_skill("auto_loop_breaker")
         assert skill is not None
-        print(f"\n技能名称: {skill.name}")
-        print(f"技能描述: {skill.description}")
+        assert skill.name == "auto_loop_breaker"
+        assert "解环" in skill.description or "loop" in skill.description.lower()
 
-    @pytest.mark.skipif(
-        not Path(".cloudpss_token").exists(),
-        reason="需要CloudPSS token"
-    )
-    def test_model_fetch_and_topology(self, token):
-        """测试模型获取和拓扑分析（如果有token）"""
-        from cloudpss import Model, setToken
+    def test_model_fetch_and_topology(self, live_auth, integration_model):
+        """测试模型获取和拓扑分析（使用conftest fixtures）"""
+        model = integration_model
+        assert model is not None
+        assert model.name is not None
 
-        if not token:
-            pytest.skip("无可用token")
-
-        setToken(token)
-
-        try:
-            model = Model.fetch("model/holdme/IEEE39")
-            assert model is not None
-            print(f"\n模型名称: {model.name}")
-            print(f"模型RID: {model.rid}")
-
-            # 获取拓扑（简化测试）
-            # 实际拓扑获取需要在run方法中完成
-            print("模型获取成功")
-
-        except Exception as e:
-            pytest.skip(f"无法获取模型: {e}")
+        # 获取母线元件（用于后续拓扑分析）
+        buses = model.getComponentsByRid("model/CloudPSS/_newBus_3p")
+        assert len(buses) > 0, "模型应该包含母线"
 
 
 if __name__ == "__main__":
