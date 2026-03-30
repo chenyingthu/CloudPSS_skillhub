@@ -52,7 +52,7 @@ cloudpss_skills/
 │   ├── config.py        # Configuration loading and validation
 │   ├── registry.py      # Skill registration and discovery
 │   └── cli.py           # Command-line interface
-└── builtin/             # Built-in skills (10 validated)
+└── builtin/             # Built-in skills (34 total)
     ├── power_flow.py    # Power flow calculation
     ├── emt_simulation.py # EMT transient simulation
     ├── n1_security.py   # N-1 security screening
