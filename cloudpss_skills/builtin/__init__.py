@@ -39,6 +39,9 @@ from . import compare_visualization
 from . import comtrade_export
 from . import auto_channel_setup
 from . import auto_loop_breaker
+from . import config_batch_runner
+from . import model_parameter_extractor
+from . import orthogonal_sensitivity
 
 # 导出技能类（方便直接导入）
 from .emt_simulation import EmtSimulationSkill
@@ -75,6 +78,9 @@ from .compare_visualization import CompareVisualizationSkill
 from .comtrade_export import ComtradeExportSkill
 from .auto_channel_setup import AutoChannelSetupSkill
 from .auto_loop_breaker import AutoLoopBreakerSkill
+from .config_batch_runner import ConfigBatchRunnerSkill
+from .model_parameter_extractor import ModelParameterExtractorSkill
+from .orthogonal_sensitivity import OrthogonalSensitivitySkill
 
 __all__ = [
     "EmtSimulationSkill",
@@ -111,4 +117,7 @@ __all__ = [
     "ComtradeExportSkill",
     "AutoChannelSetupSkill",
     "AutoLoopBreakerSkill",
+    "ConfigBatchRunnerSkill",
+    "ModelParameterExtractorSkill",
+    "OrthogonalSensitivitySkill",
 ]

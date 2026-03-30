@@ -1,6 +1,6 @@
 # CloudPSS 技能系统文档
 
-配置驱动的电力系统仿真工具包，包含34个专业仿真技能。
+配置驱动的电力系统仿真工具包，包含37个专业仿真技能。
 
 ## 技能文档索引
 
@@ -32,6 +32,7 @@
 | `fault_severity_scan` | 故障严重度扫描 | [查看文档](fault_severity_scan.md) |
 | `ieee3_prep` | IEEE3模型准备 | [查看文档](ieee3_prep.md) |
 | `batch_task_manager` | 批处理任务管理 | [查看文档](batch_task_manager.md) |
+| `config_batch_runner` | 多配置批量运行 | [查看文档](config_batch_runner.md) |
 
 ### 稳定性分析类
 
@@ -43,6 +44,7 @@
 | `frequency_response` | 频率响应分析 | [查看文档](frequency_response.md) |
 | `vsi_weak_bus` | VSI弱母线分析 | [查看文档](vsi_weak_bus.md) |
 | `dudv_curve` | DUDV曲线生成 | [查看文档](dudv_curve.md) |
+| `orthogonal_sensitivity` | 正交敏感性分析 | [查看文档](orthogonal_sensitivity.md) |
 
 ### 结果处理类
 
@@ -72,6 +74,7 @@
 | `parameter_sensitivity` | 参数灵敏度分析 | [查看文档](parameter_sensitivity.md) |
 | `auto_channel_setup` | 自动量测配置 | [查看文档](auto_channel_setup.md) |
 | `auto_loop_breaker` | 自动解环 | [查看文档](auto_loop_breaker.md) |
+| `model_parameter_extractor` | 模型参数提取 | [查看文档](model_parameter_extractor.md) |
 
 ## 快速开始
 
