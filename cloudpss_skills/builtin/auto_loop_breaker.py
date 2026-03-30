@@ -194,13 +194,21 @@ class AutoLoopBreakerSkill(SkillBase):
 
             # 4. 构建拓扑图
             log("INFO", "分析模型拓扑...")
-            topo_graph, topo_pin_dict, comp_list = self._build_topology_graph(model)
-            log("INFO", f"  -> 发现 {len(topo_graph.nodes)} 个信号节点，{len(topo_graph.edges)} 条连接")
+            try:
+                topo_graph, topo_pin_dict, comp_list = self._build_topology_graph(model)
+                log("INFO", f"  -> 发现 {len(topo_graph.nodes)} 个信号节点，{len(topo_graph.edges)} 条连接")
+            except Exception as e:
+                log("ERROR", f"拓扑分析失败: {e}")
+                raise
 
             # 5. 检测环路
             log("INFO", "检测控制环路...")
-            import networkx as nx
-            has_loops = not nx.is_directed_acyclic_graph(topo_graph)
+            try:
+                import networkx as nx
+                has_loops = not nx.is_directed_acyclic_graph(topo_graph)
+            except Exception as e:
+                log("ERROR", f"环路检测失败: {e}")
+                raise
 
             if not has_loops:
                 log("INFO", "✓ 模型中未发现控制环路")
@@ -224,8 +232,12 @@ class AutoLoopBreakerSkill(SkillBase):
             log("INFO", "  -> 发现控制环路，开始计算解环方案...")
 
             # 6. 计算反馈顶点集
-            fvs_nodes = self._compute_fvs(topo_graph, max_iter, strategy, random_seed)
-            log("INFO", f"  -> 需要打破 {len(fvs_nodes)} 个环路节点")
+            try:
+                fvs_nodes = self._compute_fvs(topo_graph, max_iter, strategy, random_seed)
+                log("INFO", f"  -> 需要打破 {len(fvs_nodes)} 个环路节点")
+            except Exception as e:
+                log("ERROR", f"FVS计算失败: {e}")
+                raise
 
             if dry_run:
                 log("INFO", "【试运行模式】解环方案预览:")
@@ -236,38 +248,51 @@ class AutoLoopBreakerSkill(SkillBase):
             # 7. 执行解环
             if not dry_run:
                 log("INFO", "执行解环操作...")
-                broken_loops = self._break_loops(
-                    model, fvs_nodes, topo_pin_dict, comp_list,
-                    init_value, name_prefix
-                )
-                log("INFO", f"  -> 成功插入 {len(broken_loops)} 个解环点")
+                try:
+                    broken_loops = self._break_loops(
+                        model, fvs_nodes, topo_pin_dict, comp_list,
+                        init_value, name_prefix
+                    )
+                    log("INFO", f"  -> 成功插入 {len(broken_loops)} 个解环点")
+                except Exception as e:
+                    log("ERROR", f"解环操作失败: {e}")
+                    raise
 
             # 8. 保存模型（如果需要）
             if save_model and not dry_run:
                 log("INFO", "保存修改后的模型...")
-                new_name = model.name + new_name_suffix
-                # 提取模型key
-                match = re.match(r'.*?/.*?/(.*)', model.rid)
-                if match:
-                    new_key = match.group(1) + new_name_suffix
-                    model.save(new_key)
-                    log("INFO", f"  -> 模型已保存: {new_key}")
-                else:
-                    log("WARN", "  -> 无法解析模型key，跳过保存")
+                try:
+                    new_name = model.name + new_name_suffix
+                    # 提取模型key
+                    match = re.match(r'.*?/.*?/(.*)', model.rid)
+                    if match:
+                        new_key = match.group(1) + new_name_suffix
+                        model.save(new_key)
+                        log("INFO", f"  -> 模型已保存: {new_key}")
+                    else:
+                        log("WARN", "  -> 无法解析模型key，跳过保存")
+                except Exception as e:
+                    log("ERROR", f"保存模型失败: {e}")
+                    raise
 
             # 9. 生成报告
             log("INFO", "生成解环报告...")
-            report = self._generate_report(fvs_nodes, topo_pin_dict, broken_loops, dry_run)
-            report_path = Path("./results/auto_loop_breaker_report.json")
-            report_path.parent.mkdir(parents=True, exist_ok=True)
-            report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False))
+            try:
+                report = self._generate_report(fvs_nodes, topo_pin_dict, broken_loops, dry_run)
+                report_path = Path("./results/auto_loop_breaker_report.json")
+                report_path.parent.mkdir(parents=True, exist_ok=True)
+                report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False))
 
-            artifacts.append(Artifact(
-                type="json",
-                path=str(report_path),
-                size=report_path.stat().st_size,
-                description="解环分析报告"
-            ))
+                artifacts.append(Artifact(
+                    type="json",
+                    path=str(report_path),
+                    size=report_path.stat().st_size,
+                    description="解环分析报告"
+                ))
+            except Exception as e:
+                log("ERROR", f"生成报告失败: {e}")
+                # 报告生成失败不中断整体流程
+                pass
 
             log("INFO", f"解环完成！共打破 {len(fvs_nodes)} 个环路")
 
@@ -310,109 +335,119 @@ class AutoLoopBreakerSkill(SkillBase):
         """构建模型拓扑图"""
         import networkx as nx
 
-        # 获取模型拓扑
-        revision = model.revision
-        topo = model.fetchTopology(implementType="emtp", maximumDepth=0).toJSON()
+        try:
+            # 获取模型拓扑
+            revision = model.revision
+            topo = model.fetchTopology(implementType="emtp", maximumDepth=0).toJSON()
+        except Exception as e:
+            logger.error(f"获取模型拓扑失败: {e}")
+            raise RuntimeError(f"无法获取模型拓扑: {e}") from e
 
-        # 获取元件定义信息
-        dict_pin = {}
-        for comp_key, comp in model.getAllComponents().items():
-            if 'diagram-component' not in getattr(comp, 'shape', ''):
-                continue
-            if comp.definition in dict_pin:
-                continue
-            # 获取元件定义
-            try:
-                defn = model.__class__.fetch(comp.definition)
-                r = defn.revision
-                dict_pin[comp.definition] = {r.pins[k]['key']: r.pins[k] for k in range(len(r.pins))}
-            except:
-                continue
-
-        # 构建图
-        g = nx.DiGraph()
-        topo_pin_dict = {}
-        comp_list = {}
-
-        for comp_key, comp_data in topo.get('components', {}).items():
-            innodes = []
-            outnodes = []
-            definition = comp_data.get('definition', '')
-
-            # 跳过特定元件
-            if definition in [
-                self.COMPONENT_RIDS["electrical_label"],
-                self.COMPONENT_RIDS["channel"],
-                self.COMPONENT_RIDS["bus_connector"],
-            ]:
-                continue
-
-            pins = comp_data.get('pins', {})
-
-            # 处理ChannelDeMerge
-            if definition == self.COMPONENT_RIDS["channel_demerge"]:
-                for pin_name, pin_id in pins.items():
-                    if not pin_id:
-                        continue
-                    pin_id_int = int(pin_id)
-                    if pin_id_int not in topo_pin_dict:
-                        topo_pin_dict[pin_id_int] = []
-                    topo_pin_dict[pin_id_int].append([comp_key, pin_name, 0])
-                    if pin_name == 'InName':
-                        innodes.append(pin_id_int)
-                    else:
-                        outnodes.append(pin_id_int)
-
-            # 处理ChannelMerge
-            elif definition == self.COMPONENT_RIDS["channel_merge"]:
-                for pin_name, pin_id in pins.items():
-                    if not pin_id:
-                        continue
-                    pin_id_int = int(pin_id)
-                    if pin_id_int not in topo_pin_dict:
-                        topo_pin_dict[pin_id_int] = []
-                    topo_pin_dict[pin_id_int].append([comp_key, pin_name, 0])
-                    if pin_name == 'OutName':
-                        outnodes.append(pin_id_int)
-                    else:
-                        innodes.append(pin_id_int)
-
-            # 处理其他元件
-            else:
-                if definition not in dict_pin:
+        try:
+            # 获取元件定义信息
+            dict_pin = {}
+            for comp_key, comp in model.getAllComponents().items():
+                if 'diagram-component' not in getattr(comp, 'shape', ''):
                     continue
-                for pin_name, pin_id in pins.items():
-                    if not pin_id:
+                if comp.definition in dict_pin:
+                    continue
+                # 获取元件定义
+                try:
+                    defn = model.__class__.fetch(comp.definition)
+                    r = defn.revision
+                    dict_pin[comp.definition] = {r.pins[k]['key']: r.pins[k] for k in range(len(r.pins))}
+                except Exception as e:
+                    logger.debug(f"获取元件定义失败 {comp.definition}: {e}")
+                    continue
+
+            # 构建图
+            g = nx.DiGraph()
+            topo_pin_dict = {}
+            comp_list = {}
+
+            for comp_key, comp_data in topo.get('components', {}).items():
+                innodes = []
+                outnodes = []
+                definition = comp_data.get('definition', '')
+
+                # 跳过特定元件
+                if definition in [
+                    self.COMPONENT_RIDS["electrical_label"],
+                    self.COMPONENT_RIDS["channel"],
+                    self.COMPONENT_RIDS["bus_connector"],
+                ]:
+                    continue
+
+                pins = comp_data.get('pins', {})
+
+                # 处理ChannelDeMerge
+                if definition == self.COMPONENT_RIDS["channel_demerge"]:
+                    for pin_name, pin_id in pins.items():
+                        if not pin_id:
+                            continue
+                        pin_id_int = int(pin_id)
+                        if pin_id_int not in topo_pin_dict:
+                            topo_pin_dict[pin_id_int] = []
+                        topo_pin_dict[pin_id_int].append([comp_key, pin_name, 0])
+                        if pin_name == 'InName':
+                            innodes.append(pin_id_int)
+                        else:
+                            outnodes.append(pin_id_int)
+
+                # 处理ChannelMerge
+                elif definition == self.COMPONENT_RIDS["channel_merge"]:
+                    for pin_name, pin_id in pins.items():
+                        if not pin_id:
+                            continue
+                        pin_id_int = int(pin_id)
+                        if pin_id_int not in topo_pin_dict:
+                            topo_pin_dict[pin_id_int] = []
+                        topo_pin_dict[pin_id_int].append([comp_key, pin_name, 0])
+                        if pin_name == 'OutName':
+                            outnodes.append(pin_id_int)
+                        else:
+                            innodes.append(pin_id_int)
+
+                # 处理其他元件
+                else:
+                    if definition not in dict_pin:
                         continue
-                    pin_info = dict_pin[definition].get(pin_name, {})
-                    if pin_info.get('connection') == 'electrical':
-                        continue
-                    pin_id_int = int(pin_id)
-                    if pin_id_int not in topo_pin_dict:
-                        topo_pin_dict[pin_id_int] = []
-                    topo_pin_dict[pin_id_int].append([comp_key, pin_name, 0])
-                    if pin_info.get('connection') == 'input':
-                        innodes.append(pin_id_int)
-                    elif pin_info.get('connection') == 'output':
-                        outnodes.append(pin_id_int)
+                    for pin_name, pin_id in pins.items():
+                        if not pin_id:
+                            continue
+                        pin_info = dict_pin[definition].get(pin_name, {})
+                        if pin_info.get('connection') == 'electrical':
+                            continue
+                        pin_id_int = int(pin_id)
+                        if pin_id_int not in topo_pin_dict:
+                            topo_pin_dict[pin_id_int] = []
+                        topo_pin_dict[pin_id_int].append([comp_key, pin_name, 0])
+                        if pin_info.get('connection') == 'input':
+                            innodes.append(pin_id_int)
+                        elif pin_info.get('connection') == 'output':
+                            outnodes.append(pin_id_int)
 
-            innodes = list(set(innodes))
-            outnodes = list(set(outnodes))
-            if comp_key not in comp_list:
-                comp_list[comp_key] = {'in': innodes, 'out': outnodes}
+                innodes = list(set(innodes))
+                outnodes = list(set(outnodes))
+                if comp_key not in comp_list:
+                    comp_list[comp_key] = {'in': innodes, 'out': outnodes}
 
-        # 添加节点和边
-        nodelist = list(topo_pin_dict.keys())
-        g.add_nodes_from(nodelist)
+            # 添加节点和边
+            nodelist = list(topo_pin_dict.keys())
+            g.add_nodes_from(nodelist)
 
-        edgelist = []
-        for comp_key, comp_info in comp_list.items():
-            for ink in comp_info['in']:
-                for outk in comp_info['out']:
-                    edgelist.append((ink, outk))
-        g.add_edges_from(edgelist)
+            edgelist = []
+            for comp_key, comp_info in comp_list.items():
+                for ink in comp_info['in']:
+                    for outk in comp_info['out']:
+                        edgelist.append((ink, outk))
+            g.add_edges_from(edgelist)
 
-        return g, topo_pin_dict, comp_list
+            return g, topo_pin_dict, comp_list
+
+        except Exception as e:
+            logger.error(f"构建拓扑图失败: {e}")
+            raise RuntimeError(f"构建模型拓扑图失败: {e}") from e
 
     def _compute_fvs(self, g: Any, max_iter: int, strategy: str, random_seed: Optional[int]) -> List[int]:
         """计算反馈顶点集"""
@@ -482,6 +517,7 @@ class AutoLoopBreakerSkill(SkillBase):
         for node in fvs_nodes:
             node_info = topo_pin_dict.get(node, [])
             if not node_info:
+                logger.warning(f"节点 {node} 无拓扑信息，跳过")
                 continue
 
             comp_key = node_info[0][0]
@@ -489,61 +525,70 @@ class AutoLoopBreakerSkill(SkillBase):
 
             try:
                 comp = model.getComponentByKey(comp_key)
-            except:
+            except Exception as e:
+                logger.warning(f"获取元件 {comp_key} 失败: {e}")
                 continue
 
             # 确定解环点类型
-            if (comp.definition == self.COMPONENT_RIDS["channel_demerge"] and pin_name == 'InName'):
-                dim = comp.args.get('InDimX', '1')
-                loop_node = model.addComponent(
-                    self.COMPONENT_RIDS["loop_node_multi"],
-                    '多维解环点',
-                    {'Name': f"{name_prefix}_{count}", 'Init': init_value, 'dim': str(dim)},
-                    {'0': ''},
-                    comp.canvas,
-                    comp.position
-                )
-                target_port = 'Input'
-            elif (comp.definition == self.COMPONENT_RIDS["channel_merge"] and pin_name == 'OutName'):
-                dim = comp.args.get('OutDimX', '1')
-                loop_node = model.addComponent(
-                    self.COMPONENT_RIDS["loop_node_multi"],
-                    '多维解环点',
-                    {'Name': f"{name_prefix}_{count}", 'Init': init_value, 'dim': str(dim)},
-                    {'0': ''},
-                    comp.canvas,
-                    comp.position
-                )
-                target_port = 'Input'
-            else:
-                loop_node = model.addComponent(
-                    self.COMPONENT_RIDS["loop_node"],
-                    '解环点',
-                    {'Name': f"{name_prefix}_{count}", 'Init': init_value},
-                    {'0': ''},
-                    comp.canvas,
-                    comp.position
-                )
-                target_port = '0'
+            try:
+                if (comp.definition == self.COMPONENT_RIDS["channel_demerge"] and pin_name == 'InName'):
+                    dim = comp.args.get('InDimX', '1')
+                    loop_node = model.addComponent(
+                        self.COMPONENT_RIDS["loop_node_multi"],
+                        '多维解环点',
+                        {'Name': f"{name_prefix}_{count}", 'Init': init_value, 'dim': str(dim)},
+                        {'0': ''},
+                        comp.canvas,
+                        comp.position
+                    )
+                    target_port = 'Input'
+                elif (comp.definition == self.COMPONENT_RIDS["channel_merge"] and pin_name == 'OutName'):
+                    dim = comp.args.get('OutDimX', '1')
+                    loop_node = model.addComponent(
+                        self.COMPONENT_RIDS["loop_node_multi"],
+                        '多维解环点',
+                        {'Name': f"{name_prefix}_{count}", 'Init': init_value, 'dim': str(dim)},
+                        {'0': ''},
+                        comp.canvas,
+                        comp.position
+                    )
+                    target_port = 'Input'
+                else:
+                    loop_node = model.addComponent(
+                        self.COMPONENT_RIDS["loop_node"],
+                        '解环点',
+                        {'Name': f"{name_prefix}_{count}", 'Init': init_value},
+                        {'0': ''},
+                        comp.canvas,
+                        comp.position
+                    )
+                    target_port = '0'
+            except Exception as e:
+                logger.warning(f"创建解环点失败 ({comp_key}.{pin_name}): {e}")
+                continue
 
             # 创建连接
-            edge = Component({
-                'attrs': {
-                    'root': {
-                        'style': {
-                            '--stroke': 'var(--edge-electrical-stroke,var(--edge-stroke))',
-                            '--stroke-width': 'calc(2*var(--rpx,1))'
+            try:
+                edge = Component({
+                    'attrs': {
+                        'root': {
+                            'style': {
+                                '--stroke': 'var(--edge-electrical-stroke,var(--edge-stroke))',
+                                '--stroke-width': 'calc(2*var(--rpx,1))'
+                            }
                         }
-                    }
-                },
-                'canvas': comp.canvas,
-                'id': edge_id + str(count),
-                'shape': 'diagram-edge',
-                'source': {'cell': comp.id, 'port': pin_name},
-                'target': {'cell': loop_node.id, 'port': target_port}
-            })
+                    },
+                    'canvas': comp.canvas,
+                    'id': edge_id + str(count),
+                    'shape': 'diagram-edge',
+                    'source': {'cell': comp.id, 'port': pin_name},
+                    'target': {'cell': loop_node.id, 'port': target_port}
+                })
 
-            model.revision.implements.diagram.cells[edge_id + str(count)] = edge
+                model.revision.implements.diagram.cells[edge_id + str(count)] = edge
+            except Exception as e:
+                logger.warning(f"创建连接失败 ({comp_key}.{pin_name}): {e}")
+                continue
 
             broken_loops.append({
                 'component': comp_key,

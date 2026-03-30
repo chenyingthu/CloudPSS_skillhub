@@ -240,32 +240,47 @@ class AutoChannelSetupSkill(SkillBase):
             # 4. 添加电压量测
             voltage_config = measurements.get("voltage", {})
             if voltage_config.get("enabled", True):
-                log("INFO", "配置电压量测...")
-                channels = self._add_voltage_measurements(
-                    model, voltage_config, dry_run
-                )
-                added_channels.extend(channels)
-                log("INFO", f"  -> 添加 {len(channels)} 个电压量测通道")
+                try:
+                    log("INFO", "配置电压量测...")
+                    channels = self._add_voltage_measurements(
+                        model, voltage_config, dry_run
+                    )
+                    added_channels.extend(channels)
+                    log("INFO", f"  -> 添加 {len(channels)} 个电压量测通道")
+                except Exception as e:
+                    log("ERROR", f"配置电压量测失败: {e}")
+                    if not dry_run:
+                        raise
 
             # 5. 添加电流量测
             current_config = measurements.get("current", {})
             if current_config.get("enabled", False):
-                log("INFO", "配置电流量测...")
-                channels = self._add_current_measurements(
-                    model, current_config, dry_run
-                )
-                added_channels.extend(channels)
-                log("INFO", f"  -> 添加 {len(channels)} 个电流量测通道")
+                try:
+                    log("INFO", "配置电流量测...")
+                    channels = self._add_current_measurements(
+                        model, current_config, dry_run
+                    )
+                    added_channels.extend(channels)
+                    log("INFO", f"  -> 添加 {len(channels)} 个电流量测通道")
+                except Exception as e:
+                    log("ERROR", f"配置电流量测失败: {e}")
+                    if not dry_run:
+                        raise
 
             # 6. 添加功率量测
             power_config = measurements.get("power", {})
             if power_config.get("enabled", False):
-                log("INFO", "配置功率量测...")
-                channels = self._add_power_measurements(
-                    model, power_config, dry_run
-                )
-                added_channels.extend(channels)
-                log("INFO", f"  -> 添加 {len(channels)} 个功率量测通道")
+                try:
+                    log("INFO", "配置功率量测...")
+                    channels = self._add_power_measurements(
+                        model, power_config, dry_run
+                    )
+                    added_channels.extend(channels)
+                    log("INFO", f"  -> 添加 {len(channels)} 个功率量测通道")
+                except Exception as e:
+                    log("ERROR", f"配置功率量测失败: {e}")
+                    if not dry_run:
+                        raise
 
             # 7. 添加频率量测
             freq_config = measurements.get("frequency", {})
