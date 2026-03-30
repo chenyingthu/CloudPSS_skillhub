@@ -1,6 +1,6 @@
 # CloudPSS 技能系统文档
 
-配置驱动的电力系统仿真工具包，包含30个专业仿真技能。
+配置驱动的电力系统仿真工具包，包含34个专业仿真技能。
 
 ## 技能文档索引
 
@@ -52,6 +52,8 @@
 | `visualize` | 结果可视化 | [查看文档](visualize.md) |
 | `waveform_export` | 波形数据导出 | [查看文档](waveform_export.md) |
 | `hdf5_export` | HDF5数据导出 | [查看文档](hdf5_export.md) |
+| `comtrade_export` | COMTRADE标准格式导出 | [查看文档](comtrade_export.md) |
+| `compare_visualization` | 结果对比可视化 | [查看文档](compare_visualization.md) |
 | `disturbance_severity` | 扰动严重度分析 | [查看文档](disturbance_severity.md) |
 
 ### 电能质量类
@@ -68,6 +70,8 @@
 |------|------|------|
 | `topology_check` | 拓扑检查 | [查看文档](topology_check.md) |
 | `parameter_sensitivity` | 参数灵敏度分析 | [查看文档](parameter_sensitivity.md) |
+| `auto_channel_setup` | 自动量测配置 | [查看文档](auto_channel_setup.md) |
+| `auto_loop_breaker` | 自动解环 | [查看文档](auto_loop_breaker.md) |
 
 ## 快速开始
 
