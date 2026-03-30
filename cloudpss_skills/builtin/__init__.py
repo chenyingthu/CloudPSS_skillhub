@@ -38,6 +38,7 @@ from . import hdf5_export
 from . import compare_visualization
 from . import comtrade_export
 from . import auto_channel_setup
+from . import auto_loop_breaker
 
 # 导出技能类（方便直接导入）
 from .emt_simulation import EmtSimulationSkill
@@ -73,6 +74,7 @@ from .hdf5_export import HDF5ExportSkill
 from .compare_visualization import CompareVisualizationSkill
 from .comtrade_export import ComtradeExportSkill
 from .auto_channel_setup import AutoChannelSetupSkill
+from .auto_loop_breaker import AutoLoopBreakerSkill
 
 __all__ = [
     "EmtSimulationSkill",
@@ -108,4 +110,5 @@ __all__ = [
     "CompareVisualizationSkill",
     "ComtradeExportSkill",
     "AutoChannelSetupSkill",
+    "AutoLoopBreakerSkill",
 ]
