@@ -1,0 +1,32 @@
+# 智能报告生成器配置
+
+skill: report_generator
+
+report:
+  title: "电力系统综合分析报告"
+
+  # 要整合的技能结果
+  skills:
+    - power_flow
+    - n1_security
+    - transient_stability
+
+  # 或者直接提供技能结果
+  # skill_results:
+  #   power_flow:
+  #     status: success
+  #     data: {...}
+
+  # 报告模板
+  template:
+    type: comprehensive  # comprehensive|summary|custom
+    sections:
+      - executive_summary
+      - system_overview
+      - analysis_results
+      - conclusions
+
+output:
+  format: markdown  # docx|pdf|markdown|html
+  path: ./reports/
+  filename: analysis_report.md

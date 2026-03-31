@@ -1,0 +1,60 @@
+# 保护整定与配合分析配置
+# 适用算例: model/holdme/substation_110 (110kV变电站一、二次系统)
+
+skill: protection_coordination
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/substation_110
+  config_index: 0  # 使用第1个参数方案
+  job_index: 0     # 使用第1个计算方案
+
+analysis:
+  # 距离保护分析
+  distance_protection:
+    enabled: true
+    check_zones: [1, 2, 3]  # 校验Zone1/2/3
+
+  # 过流保护分析
+  overcurrent_protection:
+    enabled: true
+    check_coordination: true  # 校验配合关系
+    time_margin: 0.3          # 时间裕度要求(s)
+
+  # 差动保护分析
+  differential_protection:
+    enabled: true
+
+  # 零序保护分析
+  zero_sequence_protection:
+    enabled: true
+
+  # 重合闸分析
+  reclosing:
+    enabled: true
+
+  # 故障场景分析
+  fault_scenarios:
+    # 场景1: 110kV线路三相短路
+    - type: three_phase
+      location: 110kV_L1
+      fault_resistance: 0.0
+      duration: 0.1
+
+    # 场景2: 10kV出线单相接地
+    - type: single_ground
+      location: 10kV_L1
+      fault_resistance: 10.0
+      duration: 0.15
+
+    # 场景3: 母线故障
+    - type: three_phase
+      location: 110kV_Bus
+      fault_resistance: 0.0
+      duration: 0.1
+
+output:
+  format: json
+  save_path: ./results/protection_coordination/
+  generate_tcc_curves: true  # 生成时间-电流配合曲线
