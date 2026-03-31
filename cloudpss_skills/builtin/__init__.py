@@ -42,6 +42,9 @@ from . import auto_loop_breaker
 from . import config_batch_runner
 from . import model_parameter_extractor
 from . import orthogonal_sensitivity
+from . import protection_coordination
+from . import loss_analysis
+from . import report_generator
 
 # 导出技能类（方便直接导入）
 from .emt_simulation import EmtSimulationSkill
@@ -81,6 +84,9 @@ from .auto_loop_breaker import AutoLoopBreakerSkill
 from .config_batch_runner import ConfigBatchRunnerSkill
 from .model_parameter_extractor import ModelParameterExtractorSkill
 from .orthogonal_sensitivity import OrthogonalSensitivitySkill
+from .protection_coordination import ProtectionCoordinationSkill
+from .loss_analysis import LossAnalysisSkill
+from .report_generator import ReportGeneratorSkill
 
 __all__ = [
     "EmtSimulationSkill",
@@ -120,4 +126,7 @@ __all__ = [
     "ConfigBatchRunnerSkill",
     "ModelParameterExtractorSkill",
     "OrthogonalSensitivitySkill",
+    "ProtectionCoordinationSkill",
+    "LossAnalysisSkill",
+    "ReportGeneratorSkill",
 ]

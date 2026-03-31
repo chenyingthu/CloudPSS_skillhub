@@ -1,0 +1,25 @@
+# 网损分析与优化配置
+# 适用算例: model/holdme/IEEE39
+
+skill: loss_analysis
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/IEEE39
+  config_index: 0
+
+analysis:
+  loss_calculation:
+    enabled: true
+    components: [lines, transformers]
+
+  loss_sensitivity:
+    enabled: true
+
+  loss_optimization:
+    enabled: true
+    method: reactive_power_optimization
+
+output:
+  format: json
