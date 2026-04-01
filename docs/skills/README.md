@@ -1,8 +1,16 @@
 # CloudPSS 技能系统文档
 
-配置驱动的电力系统仿真工具包，包含37个专业仿真技能。
+配置驱动的电力系统仿真工具包，包含40个专业仿真技能。
 
 ## 技能文档索引
+
+### 模型管理类（新增）
+
+| 技能 | 描述 | 文档 |
+|------|------|------|
+| `component_catalog` | 组件目录发现 | [查看文档](component_catalog.md) |
+| `model_builder` | 模型构建器 | [查看文档](model_builder.md) |
+| `model_validator` | 模型验证器 | [查看文档](model_validator.md) |
 
 ### 仿真执行类
 
@@ -117,25 +125,42 @@ python -m cloudpss_skills run --config pf.yaml
 
 ## 典型工作流
 
-### 工作流1: 电压稳定分析与补偿设计
+### 工作流1: 模型创建与验证（新增）
+
+```
+component_catalog → model_builder → model_validator
+```
+
+**用途**: 发现组件 → 创建测试算例 → 验证模型有效性
+
+**实际成果**: 已使用此工作流成功创建并验证 **12个测试算例**：
+- 光伏模型 3个 (50/100/150MW)
+- 风电模型 3个 (DFIG/WGSource)
+- 保护模型 3个 (差动/过流/零序)
+- 线路模型 2个 (150/200km)
+- 母线模型 1个
+
+**验证结果**: 12/12 通过 (100%)
+
+### 工作流2: 电压稳定分析与补偿设计
 
 ```
 vsi_weak_bus → reactive_compensation_design → disturbance_severity
 ```
 
-### 工作流2: N-1安全校核
+### 工作流3: N-1安全校核
 
 ```
 n1_security → contingency_analysis → result_compare
 ```
 
-### 工作流3: 故障分析
+### 工作流4: 故障分析
 
 ```
 ieee3_prep → emt_fault_study → disturbance_severity → visualize
 ```
 
-### 工作流4: 批量仿真
+### 工作流5: 批量仿真
 
 ```
 batch_task_manager → hdf5_export → result_compare
