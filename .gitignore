@@ -47,6 +47,11 @@ token
 # Results
 results/
 *.log
+test_results/
+validation_results/
+validation_results.json
+test_models_*.json
+dual_model_tests/
 
 # OS
 .DS_Store
