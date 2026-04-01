@@ -45,6 +45,9 @@ from . import orthogonal_sensitivity
 from . import protection_coordination
 from . import loss_analysis
 from . import report_generator
+from . import model_builder
+from . import component_catalog
+from . import model_validator
 
 # 导出技能类（方便直接导入）
 from .emt_simulation import EmtSimulationSkill
@@ -87,6 +90,9 @@ from .orthogonal_sensitivity import OrthogonalSensitivitySkill
 from .protection_coordination import ProtectionCoordinationSkill
 from .loss_analysis import LossAnalysisSkill
 from .report_generator import ReportGeneratorSkill
+from .model_builder import ModelBuilderSkill
+from .component_catalog import ComponentCatalogSkill
+from .model_validator import ModelValidatorSkill
 
 __all__ = [
     "EmtSimulationSkill",
@@ -129,4 +135,7 @@ __all__ = [
     "ProtectionCoordinationSkill",
     "LossAnalysisSkill",
     "ReportGeneratorSkill",
+    "ModelBuilderSkill",
+    "ComponentCatalogSkill",
+    "ModelValidatorSkill",
 ]

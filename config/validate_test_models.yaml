@@ -1,0 +1,42 @@
+# 模型验证配置示例
+# 验证 model_builder 创建的测试算例
+
+skill: model_validator
+
+auth:
+  token_file: .cloudpss_token
+
+# 要验证的模型列表
+models:
+  # 新能源模型验证
+  - rid: model/holdme/test_IEEE39_with_PV_50MW
+    base_rid: model/holdme/IEEE39
+    name: "IEEE39+50MW光伏"
+
+  - rid: model/holdme/test_IEEE39_with_Wind_50MW
+    base_rid: model/holdme/IEEE39
+    name: "IEEE39+50MW风电"
+
+  # 保护模型验证
+  - rid: model/holdme/test_IEEE39_with_DifferentialProtection
+    base_rid: model/holdme/IEEE39
+    name: "IEEE39+差动保护"
+
+  # 线路修改模型验证
+  - rid: model/holdme/test_IEEE39_Line_Length_150
+    base_rid: model/holdme/IEEE39
+    name: "IEEE39+150km线路"
+
+# 验证配置
+validation:
+  phases:
+    - topology      # 拓扑验证
+    - powerflow     # 潮流验证
+    - parameter     # 参数对比验证
+  timeout: 300
+  powerflow_tolerance: 1e-6
+
+# 输出配置
+output:
+  format: console
+  path: ./validation_report.json

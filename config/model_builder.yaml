@@ -1,0 +1,61 @@
+# 模型构建器配置示例
+
+skill: model_builder
+
+base_model:
+  rid: model/holdme/IEEE39
+  config_index: 0
+
+# 修改操作列表
+modifications:
+  # 示例1: 修改线路参数 (使用实际的IEEE39组件标签)
+  - action: modify_component
+    selector:
+      label: "TLine_3p-17"  # IEEE39线路标签格式: TLine_3p-XX
+    parameters:
+      线路长度: 150
+      单位长度电阻: 0.02
+
+  # 示例2: 修改另一条线路
+  - action: modify_component
+    selector:
+      label: "TLine_3p-18"
+    parameters:
+      线路长度: 200
+
+  # 示例3: 添加新组件 (母线)
+  - action: add_component
+    component_type: model/CloudPSS/_newBus_3p
+    label: "BUS_NEW_1"
+    parameters:
+      额定电压: 110
+      电压初始值: 1.0
+    position:
+      x: 400
+      y: 300
+
+  # 示例4: 添加光伏逆变器
+  - action: add_component
+    component_type: model/CloudPSS/PV_Inverter
+    label: "PV_Bus10"
+    parameters:
+      额定容量: 100
+      有功功率参考值: 0.8
+    position:
+      x: 450
+      y: 350
+
+  # 示例5: 删除组件 - 使用key选择器更可靠
+  - action: remove_component
+    selector:
+      key: "canvas_0_10"  # 组件key
+
+# 输出配置
+output:
+  save: true
+  branch: feature/model_modification
+  name: "IEEE39_Modified"
+  description: "IEEE39系统修改版"
+  tags:
+    - test
+    - modified

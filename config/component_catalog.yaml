@@ -1,0 +1,40 @@
+# 组件目录技能配置示例
+
+skill: component_catalog
+
+auth:
+  token_file: .cloudpss_token
+
+# 过滤器配置
+filters:
+  # 按标签过滤（可选）
+  tags:
+    - project-category:component
+
+  # 按名称正则表达式过滤（可选）
+  # name_pattern: ".*PV.*"  # 只显示名称包含 PV 的组件
+
+  # 按所有者过滤（可选，* 表示所有）
+  owner: "*"
+
+# 选项配置
+options:
+  # 每页获取数量
+  page_size: 1000
+
+  # 最大返回结果数（可选，默认不限制）
+  # max_results: 100
+
+  # 是否获取详细信息
+  include_details: true
+
+# 输出配置
+output:
+  # 输出格式: json, csv, console
+  format: console
+
+  # 输出文件路径（format为json/csv时需要）
+  # path: ./components.json
+
+  # 按标签分组输出
+  group_by_tag: false
