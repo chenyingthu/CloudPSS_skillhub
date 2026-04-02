@@ -37,9 +37,9 @@ class TestModelBuilderUnit:
 
     def test_default_component_types(self, skill):
         """测试默认组件类型列表"""
-        assert len(skill.DEFAULT_COMPONENT_TYPES) == 9
+        assert len(skill.DEFAULT_COMPONENT_TYPES) == 13
         assert "model/CloudPSS/_newBus_3p" in skill.DEFAULT_COMPONENT_TYPES
-        assert "model/CloudPSS/PV_Inverter" in skill.DEFAULT_COMPONENT_TYPES
+        assert "model/CloudPSS/PVStation" in skill.DEFAULT_COMPONENT_TYPES
         assert "model/CloudPSS/DistanceRelay" in skill.DEFAULT_COMPONENT_TYPES
         print("✅ 默认组件类型列表正确")
 
