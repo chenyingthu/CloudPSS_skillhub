@@ -287,16 +287,86 @@ class ModelValidatorSkill(SkillBase):
             result["details"]["bus_count"] = len(buses)
             logger.info(f"  母线数量: {len(buses)}")
 
-            # 检查发电机数量
-            generators = [c for c in components.values()
-                          if any(x in getattr(c, "definition", "").lower()
-                                 for x in ["gen", "source", "pv", "wind"])]
+            # 检查发电机/电源元件
+            generator_types = ["gen", "source", "pv", "wind", "wgsource"]
+            generators = []
+            for comp_id, comp in components.items():
+                defn = getattr(comp, "definition", "").lower()
+                if any(x in defn for x in generator_types):
+                    generators.append((comp_id, comp))
+
             result["details"]["generator_count"] = len(generators)
             logger.info(f"  电源数量: {len(generators)}")
 
-            # 检查悬空引脚
+            # ========== 关键修复：电源元件引脚验证 ==========
+            disconnected_generators = []
+
+            # 获取所有母线名称用于验证连接
+            bus_names = set()
+            for comp_id, comp in components.items():
+                if "bus" in getattr(comp, "definition", "").lower():
+                    bus_names.add(comp_id)
+                    bus_name = getattr(comp, "name", None)
+                    if bus_name:
+                        bus_names.add(bus_name)
+
+            for comp_id, comp in generators:
+                defn = getattr(comp, "definition", "").lower()
+                pins = getattr(comp, "pins", {})
+
+                # 修复1: 检查电源元件必须有引脚
+                if not pins or not isinstance(pins, dict):
+                    # 只检查关键电源（风机、光伏等），忽略控制元件
+                    if any(x in defn for x in ["wgsource", "pv", "wind"]):
+                        disconnected_generators.append({
+                            "id": comp_id,
+                            "name": getattr(comp, "name", comp_id),
+                            "type": getattr(comp, "definition", "unknown"),
+                            "reason": "无引脚（电源元件必须至少有一个引脚连接到母线）"
+                        })
+                    continue
+
+                # 修复2: 检查关键电源元件（风机、光伏）的引脚连接
+                # SyncGeneratorRouter 可能有内部连接机制，不强制检查
+                if any(x in defn for x in ["wgsource", "pv", "wind"]):
+                    has_power_pin = False
+                    for pin_name, pin_value in pins.items():
+                        if pin_value and pin_value != "" and not pin_value.startswith("@"):
+                            # 检查是否连接到母线
+                            if pin_value in bus_names:
+                                has_power_pin = True
+                                break
+
+                    if not has_power_pin:
+                        # 检查是否有任何非空引脚（可能使用内部连接）
+                        any_connected = any(
+                            v and v != "" and not v.startswith("@")
+                            for v in pins.values()
+                        )
+                        if not any_connected:
+                            disconnected_generators.append({
+                                "id": comp_id,
+                                "name": getattr(comp, "name", comp_id),
+                                "type": getattr(comp, "definition", "unknown"),
+                                "reason": f"引脚未连接到母线（pins={pins}）"
+                            })
+
+            if disconnected_generators:
+                result["passed"] = False
+                for dg in disconnected_generators:
+                    result["errors"].append(
+                        f"电源元件 '{dg['name']}' ({dg['type']}) {dg['reason']}"
+                    )
+                result["details"]["disconnected_generators"] = disconnected_generators
+                logger.error(f"  ❌ {len(disconnected_generators)} 个电源元件未正确连接")
+
+            # 检查其他悬空引脚（非电源类）
             dangling = []
             for comp_id, comp in components.items():
+                # 跳过已检查的电源元件
+                if any(dg["id"] == comp_id for dg in disconnected_generators):
+                    continue
+
                 pins = getattr(comp, "pins", {})
                 if isinstance(pins, dict):
                     unconnected = [p for p, v in pins.items()
@@ -326,7 +396,10 @@ class ModelValidatorSkill(SkillBase):
                 result["warnings"].append(f"发现 {len(incomplete)} 个元件参数不完整")
                 logger.warning(f"  ⚠️ 参数不完整: {len(incomplete)} 个")
 
-            logger.info("  ✅ 拓扑验证通过")
+            if result["passed"]:
+                logger.info("  ✅ 拓扑验证通过")
+            else:
+                logger.error("  ❌ 拓扑验证失败")
 
         except Exception as e:
             result["passed"] = False

@@ -150,6 +150,14 @@ class ModelBuilderSkill(SkillBase):
                                 "x": {"type": "number"},
                                 "y": {"type": "number"}
                             }
+                        },
+                        "pin_connection": {
+                            "type": "object",
+                            "description": "引脚连接配置",
+                            "properties": {
+                                "target_bus": {"type": "string", "description": "目标母线名称或ID"},
+                                "pin_name": {"type": "string", "default": "0", "description": "引脚名称"}
+                            }
                         }
                     }
                 }
@@ -313,6 +321,7 @@ class ModelBuilderSkill(SkillBase):
         label = config["label"]
         params = config.get("parameters", {})
         position = config.get("position", {})
+        pin_connection = config.get("pin_connection", {})  # 新增：引脚连接配置
 
         logger.debug(f"添加组件: {label} ({comp_type})")
 
@@ -334,6 +343,15 @@ class ModelBuilderSkill(SkillBase):
                 "y": position.get("y", 0)
             }
 
+        # 处理引脚连接
+        pins = {}
+        if pin_connection:
+            target_bus = pin_connection.get("target_bus")
+            pin_name = pin_connection.get("pin_name", "0")
+            if target_bus:
+                pins[pin_name] = target_bus
+                logger.info(f"  配置引脚 {pin_name} -> 母线 {target_bus}")
+
         # 调用 SDK 添加组件
         try:
             # 使用 model.addComponent 方法
@@ -341,12 +359,15 @@ class ModelBuilderSkill(SkillBase):
                 definition=comp_type,
                 label=label,
                 args=params,
-                pins={}  # 暂不处理引脚连接
+                pins=pins  # 现在支持引脚连接
             )
             self.modifications_applied.append(f"add:{label}")
+            if pins:
+                self.modifications_applied.append(f"connect:{label}->{target_bus}")
         except Exception as e:
             logger.warning(f"SDK添加组件失败，尝试备用方法: {e}")
             # 备用：直接修改模型内部结构
+            component_def["data"]["pins"] = pins
             self._add_component_direct(component_def)
 
     def _add_component_direct(self, component_def: Dict):

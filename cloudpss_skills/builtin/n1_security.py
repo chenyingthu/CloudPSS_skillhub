@@ -150,6 +150,8 @@ class N1SecuritySkill(SkillBase):
                 "model/CloudPSS/3pline",
                 "model/CloudPSS/transformer",
                 "model/CloudPSS/3ptransformer",
+                "model/CloudPSS/TransmissionLine",  # IEEE39实际使用的类型
+                "model/CloudPSS/_newTransformer_3p2w",  # IEEE39实际使用的变压器类型
             ]
 
             branches = []
