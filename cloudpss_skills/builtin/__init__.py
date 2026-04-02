@@ -48,6 +48,9 @@ from . import report_generator
 from . import model_builder
 from . import component_catalog
 from . import model_validator
+from . import renewable_integration
+from . import transient_stability_margin
+from . import n2_security
 
 # 导出技能类（方便直接导入）
 from .emt_simulation import EmtSimulationSkill
@@ -93,6 +96,9 @@ from .report_generator import ReportGeneratorSkill
 from .model_builder import ModelBuilderSkill
 from .component_catalog import ComponentCatalogSkill
 from .model_validator import ModelValidatorSkill
+from .renewable_integration import RenewableIntegrationSkill
+from .transient_stability_margin import TransientStabilityMarginSkill
+from .n2_security import N2SecuritySkill
 
 __all__ = [
     "EmtSimulationSkill",
@@ -138,4 +144,7 @@ __all__ = [
     "ModelBuilderSkill",
     "ComponentCatalogSkill",
     "ModelValidatorSkill",
+    "RenewableIntegrationSkill",
+    "TransientStabilityMarginSkill",
+    "N2SecuritySkill",
 ]
