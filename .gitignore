@@ -56,3 +56,6 @@ dual_model_tests/
 # OS
 .DS_Store
 Thumbs.db
+
+# Test reports
+test_*_report.json
