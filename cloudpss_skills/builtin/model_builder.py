@@ -17,6 +17,7 @@ from copy import deepcopy
 import itertools
 
 from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult
+from cloudpss_skills.metadata.integration import get_metadata_integration
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +201,8 @@ class ModelBuilderSkill(SkillBase):
         self.base_model_rid = None
         self.modifications_applied = []
         self._original_modifications = []
+        self._metadata_integration = get_metadata_integration()
+        self._metadata_integration.initialize()
 
     def validate(self, config: Dict) -> ValidationResult:
         """验证配置"""
@@ -316,14 +319,58 @@ class ModelBuilderSkill(SkillBase):
             raise ValueError(f"未知的action: {action}")
 
     def _add_component(self, config: Dict):
-        """添加组件"""
+        """添加组件（集成元数据验证和自动补全）"""
         comp_type = config["component_type"]
         label = config["label"]
         params = config.get("parameters", {})
         position = config.get("position", {})
-        pin_connection = config.get("pin_connection", {})  # 新增：引脚连接配置
+        pin_connection = config.get("pin_connection", {})
 
         logger.debug(f"添加组件: {label} ({comp_type})")
+
+        # ========== 元数据集成：参数自动补全 ==========
+        completed_params = self._metadata_integration.auto_complete_parameters(comp_type, params)
+        if completed_params != params:
+            added_keys = set(completed_params.keys()) - set(params.keys())
+            if added_keys:
+                logger.info(f"  自动补全参数: {', '.join(added_keys)}")
+            params = completed_params
+
+        # ========== 元数据集成：参数验证 ==========
+        validation = self._metadata_integration.validate_parameters(comp_type, params)
+        if not validation.valid:
+            error_msg = f"组件 {label} 参数验证失败: {'; '.join(validation.errors)}"
+            logger.error(f"  ❌ {error_msg}")
+            raise ValueError(error_msg)
+
+        # 检查必需参数
+        required = self._metadata_integration.get_required_parameters(comp_type)
+        missing_required = [p for p in required if p not in params or params[p] is None]
+        if missing_required:
+            error_msg = f"组件 {label} 缺少必需参数: {', '.join(missing_required)}"
+            logger.error(f"  ❌ {error_msg}")
+            raise ValueError(error_msg)
+
+        # ========== 元数据集成：引脚验证 ==========
+        pin_requirements = self._metadata_integration.get_pin_requirements(comp_type)
+        if pin_requirements:
+            logger.debug(f"  引脚要求: {pin_requirements['total_pins']} 个引脚, "
+                        f"{len(pin_requirements['required_pins'])} 个必需")
+
+            # 验证引脚连接
+            pins = {}
+            if pin_connection:
+                target_bus = pin_connection.get("target_bus")
+                pin_name = pin_connection.get("pin_name", "0")
+                if target_bus:
+                    pins[pin_name] = target_bus
+
+            pin_validation = self._metadata_integration.validate_pin_connection(comp_type, pins)
+            if not pin_validation.valid:
+                error_msg = f"组件 {label} 引脚连接验证失败: {'; '.join(pin_validation.errors)}"
+                logger.error(f"  ❌ {error_msg}")
+                # 引脚连接失败不阻止，只警告（因为可能有内部连接机制）
+                logger.warning(f"  ⚠️ {error_msg}")
 
         # 构建组件定义
         component_def = {
@@ -354,19 +401,22 @@ class ModelBuilderSkill(SkillBase):
 
         # 调用 SDK 添加组件
         try:
-            # 使用 model.addComponent 方法
             self.model.addComponent(
                 definition=comp_type,
                 label=label,
                 args=params,
-                pins=pins  # 现在支持引脚连接
+                pins=pins
             )
             self.modifications_applied.append(f"add:{label}")
             if pins:
                 self.modifications_applied.append(f"connect:{label}->{target_bus}")
+
+            # 记录元数据使用情况
+            summary = self._metadata_integration.get_component_summary(comp_type)
+            logger.debug(f"  元数据: {summary}")
+
         except Exception as e:
             logger.warning(f"SDK添加组件失败，尝试备用方法: {e}")
-            # 备用：直接修改模型内部结构
             component_def["data"]["pins"] = pins
             self._add_component_direct(component_def)
 

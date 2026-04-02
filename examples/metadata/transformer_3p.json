@@ -1,0 +1,146 @@
+{
+  "component_id": "model/CloudPSS/_newTransformer_3p",
+  "name": "三相变压器",
+  "description": "双绕组三相变压器模型，支持Y/Y、Y/Δ、Δ/Y、Δ/Δ多种接线方式，适用于潮流计算和电磁暂态仿真",
+  "version": "1.0.0",
+  "category": "transformer",
+  "source": {
+    "documentation_url": "https://kb.cloudpss.net/documents/software/emtlab/component-library/",
+    "version": "2024.12"
+  },
+  "parameters": {
+    "groups": [
+      {
+        "group_id": "basic",
+        "name": "基础参数",
+        "description": "变压器基本额定参数",
+        "parameters": [
+          {
+            "key": "Snom",
+            "display_name": "额定容量",
+            "type": "real",
+            "unit": "MVA",
+            "description": "变压器额定视在功率",
+            "required": true,
+            "default": 100.0
+          },
+          {
+            "key": "V1nom",
+            "display_name": "高压侧额定电压",
+            "type": "real",
+            "unit": "kV",
+            "description": "高压侧额定线电压",
+            "required": true,
+            "default": 220.0
+          },
+          {
+            "key": "V2nom",
+            "display_name": "低压侧额定电压",
+            "type": "real",
+            "unit": "kV",
+            "description": "低压侧额定线电压",
+            "required": true,
+            "default": 10.5
+          },
+          {
+            "key": "Fnom",
+            "display_name": "额定频率",
+            "type": "real",
+            "unit": "Hz",
+            "description": "系统额定频率",
+            "required": false,
+            "default": 50.0
+          }
+        ]
+      },
+      {
+        "group_id": "impedance",
+        "name": "阻抗参数",
+        "description": "变压器阻抗参数",
+        "parameters": [
+          {
+            "key": "uk",
+            "display_name": "短路电压百分比",
+            "type": "real",
+            "unit": "%",
+            "description": "短路电压百分比",
+            "required": true,
+            "default": 10.0,
+            "constraints": {"min": 0.1, "max": 50.0}
+          },
+          {
+            "key": "Pcu",
+            "display_name": "短路损耗",
+            "type": "real",
+            "unit": "kW",
+            "description": "额定负载下的铜损",
+            "required": false,
+            "default": 500.0
+          },
+          {
+            "key": "Pfe",
+            "display_name": "空载损耗",
+            "type": "real",
+            "unit": "kW",
+            "description": "铁芯损耗",
+            "required": false,
+            "default": 50.0
+          }
+        ]
+      },
+      {
+        "group_id": "winding",
+        "name": "绕组连接",
+        "description": "变压器绕组连接方式",
+        "parameters": [
+          {
+            "key": "Winding1",
+            "display_name": "高压侧接线",
+            "type": "choice",
+            "description": "高压侧绕组接线方式",
+            "required": false,
+            "default": "Y",
+            "choices": ["Y", "Yn", "D"]
+          },
+          {
+            "key": "Winding2",
+            "display_name": "低压侧接线",
+            "type": "choice",
+            "description": "低压侧绕组接线方式",
+            "required": false,
+            "default": "Yn",
+            "choices": ["Y", "Yn", "D"]
+          }
+        ]
+      }
+    ]
+  },
+  "pins": {
+    "electrical": [
+      {
+        "key": "1",
+        "name": "高压侧",
+        "type": "electrical",
+        "dimension": "3×1",
+        "description": "变压器高压侧三相端口",
+        "required": true
+      },
+      {
+        "key": "2",
+        "name": "低压侧",
+        "type": "electrical",
+        "dimension": "3×1",
+        "description": "变压器低压侧三相端口",
+        "required": true
+      }
+    ]
+  },
+  "validation_rules": {
+    "require_both_sides": true
+  },
+  "simulation_support": {
+    "powerflow": true,
+    "emt": true,
+    "phasor": true
+  }
+}

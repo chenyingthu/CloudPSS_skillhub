@@ -18,6 +18,7 @@ from enum import Enum
 
 from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult, LogEntry, Artifact
 from cloudpss_skills.core.auth_utils import setup_auth, DEFAULT_TIMEOUT, DEFAULT_POWERFLOW_TOLERANCE
+from cloudpss_skills.metadata.integration import get_metadata_integration
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +129,8 @@ class ModelValidatorSkill(SkillBase):
     def __init__(self):
         super().__init__()
         self.reports = []
+        self._metadata_integration = get_metadata_integration()
+        self._metadata_integration.initialize()
 
     def validate(self, config: Dict) -> ValidationResult:
         """验证配置"""
@@ -395,6 +398,52 @@ class ModelValidatorSkill(SkillBase):
             if incomplete:
                 result["warnings"].append(f"发现 {len(incomplete)} 个元件参数不完整")
                 logger.warning(f"  ⚠️ 参数不完整: {len(incomplete)} 个")
+
+            # ========== 元数据集成：基于元数据的参数验证 ==========
+            logger.info("  执行元数据参数验证...")
+            metadata_issues = []
+            for comp_id, comp in components.items():
+                comp_type = getattr(comp, "definition", "")
+                comp_label = getattr(comp, "label", comp_id)
+                args = getattr(comp, "args", {})
+
+                if not comp_type:
+                    continue
+
+                # 使用元数据验证参数
+                validation = self._metadata_integration.validate_parameters(comp_type, args)
+                if not validation.valid:
+                    metadata_issues.append({
+                        "id": comp_id,
+                        "label": comp_label,
+                        "type": comp_type,
+                        "errors": validation.errors
+                    })
+                    for error in validation.errors:
+                        logger.error(f"  ❌ {comp_label}: {error}")
+
+                # 检查必需参数
+                required = self._metadata_integration.get_required_parameters(comp_type)
+                if required:
+                    missing = [p for p in required if p not in args or args[p] is None]
+                    if missing:
+                        metadata_issues.append({
+                            "id": comp_id,
+                            "label": comp_label,
+                            "type": comp_type,
+                            "errors": [f"缺少必需参数: {', '.join(missing)}"]
+                        })
+                        logger.error(f"  ❌ {comp_label}: 缺少必需参数 {missing}")
+
+            if metadata_issues:
+                result["passed"] = False
+                for issue in metadata_issues:
+                    for error in issue["errors"]:
+                        result["errors"].append(
+                            f"元件 '{issue['label']}' ({issue['type']}): {error}"
+                        )
+                result["details"]["metadata_issues"] = metadata_issues
+                logger.error(f"  ❌ {len(metadata_issues)} 个元件元数据验证失败")
 
             if result["passed"]:
                 logger.info("  ✅ 拓扑验证通过")

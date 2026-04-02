@@ -1,0 +1,55 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-04-02",
+  "components": [
+    {
+      "id": "model/CloudPSS/_newBus_3p",
+      "name": "三相母线",
+      "category": "bus",
+      "version": "1.0.0",
+      "file": "metadata/bus_3p.json"
+    },
+    {
+      "id": "model/CloudPSS/_newGenerator",
+      "name": "同步发电机",
+      "category": "generator",
+      "version": "1.0.0",
+      "file": "metadata/generator.json"
+    },
+    {
+      "id": "model/CloudPSS/_newLoad_3p",
+      "name": "三相负荷",
+      "category": "load",
+      "version": "1.0.0",
+      "file": "metadata/load_3p.json"
+    },
+    {
+      "id": "model/CloudPSS/PVStation",
+      "name": "光伏电站模型",
+      "category": "renewable",
+      "version": "1.0.0",
+      "file": "metadata/pv_station.json"
+    },
+    {
+      "id": "model/CloudPSS/_newTransformer_3p",
+      "name": "三相变压器",
+      "category": "transformer",
+      "version": "1.0.0",
+      "file": "metadata/transformer_3p.json"
+    },
+    {
+      "id": "model/CloudPSS/TransmissionLine",
+      "name": "三相交流传输线",
+      "category": "transmission",
+      "version": "1.0.0",
+      "file": "metadata/transmission_line.json"
+    },
+    {
+      "id": "model/CloudPSS/WGSource",
+      "name": "风场等值模型I：PMSG网侧变流器模型",
+      "category": "renewable",
+      "version": "1.0.0",
+      "file": "metadata/wgsource.json"
+    }
+  ]
+}

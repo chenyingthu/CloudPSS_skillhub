@@ -1,0 +1,253 @@
+name: Metadata System CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'cloudpss_skills/metadata/**'
+      - 'tests/**/metadata/**'
+      - 'examples/metadata/**'
+      - '.github/workflows/metadata-tests.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'cloudpss_skills/metadata/**'
+      - 'tests/**/metadata/**'
+      - 'examples/metadata/**'
+
+jobs:
+  # Job 1: 单元测试
+  unit-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov
+        pip install -e ".[dev]"
+
+    - name: Run unit tests
+      run: |
+        python -m pytest tests/unit/metadata/ -v --cov=cloudpss_skills.metadata --cov-report=xml --cov-report=term
+
+    - name: Upload coverage report
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./coverage.xml
+        flags: unittests
+        name: metadata-unit-tests-py${{ matrix.python-version }}
+        fail_ci_if_error: false
+
+  # Job 2: 集成测试
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov
+        pip install -e ".[dev]"
+
+    - name: Run integration tests
+      run: |
+        python -m pytest tests/integration/metadata/ -v --run-integration
+
+  # Job 3: 元数据验证
+  metadata-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e "."
+
+    - name: Validate metadata files
+      run: |
+        echo "Validating metadata files..."
+        python -m cloudpss_skills.metadata.cli validate examples/metadata/_index.json
+        for file in examples/metadata/*.json; do
+          echo "Validating $file..."
+          python -m cloudpss_skills.metadata.cli validate "$file" || exit 1
+        done
+
+    - name: Check metadata completeness
+      run: |
+        echo "Checking metadata completeness..."
+        python -c "
+        import json
+        from pathlib import Path
+
+        metadata_dir = Path('examples/metadata')
+        index_file = metadata_dir / '_index.json'
+
+        with open(index_file, 'r') as f:
+            index = json.load(f)
+
+        indexed_files = {comp['file'].split('/')[-1] for comp in index['components']}
+        actual_files = {f.name for f in metadata_dir.glob('*.json') if f.name != '_index.json'}
+
+        if indexed_files != actual_files:
+            print('ERROR: Metadata index is inconsistent!')
+            print(f'In index but missing: {indexed_files - actual_files}')
+            print(f'Present but not indexed: {actual_files - indexed_files}')
+            exit(1)
+
+        print(f'Success: All {len(actual_files)} metadata files are indexed.')
+        "
+
+  # Job 4: 文档生成
+  generate-docs:
+    runs-on: ubuntu-latest
+    needs: [unit-tests, metadata-validation]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e "."
+
+    - name: Generate component documentation
+      run: |
+        python -c "
+        import json
+        from pathlib import Path
+        from cloudpss_skills.metadata.integration import get_metadata_integration
+
+        mi = get_metadata_integration()
+        mi.initialize('examples/metadata')
+
+        docs = []
+        for comp_id in mi.list_available_components():
+            summary = mi.get_component_summary(comp_id)
+            docs.append(summary)
+
+        output = Path('docs/component_summary.md')
+        output.parent.mkdir(exist_ok=True)
+        with open(output, 'w') as f:
+            f.write('# Component Metadata Summary\\n\\n')
+            f.write('Generated automatically from metadata files.\\n\\n')
+            for doc in docs:
+                f.write('```\\n')
+                f.write(doc)
+                f.write('\\n```\\n\\n---\\n\\n')
+
+        print(f'Documentation generated: {output}')
+        print(f'Total components: {len(docs)}')
+        "
+
+    - name: Upload documentation artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: component-documentation
+        path: docs/component_summary.md
+
+  # Job 5: 性能测试
+  performance-tests:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest
+        pip install -e "."
+
+    - name: Run performance benchmarks
+      run: |
+        python -c "
+        import time
+        from cloudpss_skills.metadata.integration import get_metadata_integration
+
+        # Test 1: Load time
+        start = time.time()
+        mi = get_metadata_integration()
+        mi.initialize('examples/metadata')
+        load_time = time.time() - start
+        print(f'Metadata load time: {load_time:.3f}s')
+
+        # Test 2: Query time
+        comp_id = 'model/CloudPSS/WGSource'
+        times = []
+        for _ in range(100):
+            start = time.time()
+            mi.get_component_metadata(comp_id)
+            times.append(time.time() - start)
+
+        avg_time = sum(times) / len(times) * 1000
+        print(f'Average query time: {avg_time:.3f}ms')
+
+        # Performance assertions
+        assert load_time < 1.0, f'Load time too slow: {load_time:.3f}s'
+        assert avg_time < 10, f'Query time too slow: {avg_time:.3f}ms'
+
+        print('Performance tests passed!')
+        "
+
+  # Job 6: 发布元数据（可选）
+  release-metadata:
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, metadata-validation, performance-tests]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Package metadata
+      run: |
+        mkdir -p dist
+        tar -czf dist/metadata-v1.0.0.tar.gz -C examples metadata/
+        echo "Metadata packaged: dist/metadata-v1.0.0.tar.gz"
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: metadata-package
+        path: dist/metadata-v1.0.0.tar.gz

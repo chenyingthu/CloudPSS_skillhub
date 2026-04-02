@@ -10,6 +10,7 @@
 - [建模与改模工作流指南](./guides/model-building-workflow.md) - 面向模板选取、工作分支创建和元件修改的操作路线
 - [潮流研究工作流指南](./guides/powerflow-study-workflow.md) - 面向模型校核、潮流试算和结果回写的操作路线
 - [EMT 研究工作流指南](./guides/emt-study-workflow.md) - 面向 EMT 仿真、波形提取和结果排错的操作路线
+- [元件元数据系统](./metadata/README.md) - 组件参数自动补全、验证和引脚检查框架
 - [EMT 主线验收清单](./guides/emt-mainline-acceptance-checklist.md) - 将当前 EMT 主线压缩为固定模型、固定故障链、固定监测链和证据等级的可复核 checklist
 - [EMT 母线电压量测链指南](./guides/emt-voltage-meter-chain-guide.md) - 面向 `_newBus_3p` 母线脚本化新增电压表、输出通道和 `diagram-edge` 的受限配方
 - [主线研究场景矩阵](./guides/mainline-study-scenarios.md) - 以工程研究问题组织当前主线案例，而不是只按 API 枚举

@@ -1,0 +1,93 @@
+{
+  "component_id": "model/CloudPSS/_newBus_3p",
+  "name": "三相母线",
+  "description": "三相交流母线，作为电网节点连接各类元件，支持潮流计算和电磁暂态仿真",
+  "version": "1.0.0",
+  "category": "bus",
+  "source": {
+    "documentation_url": "https://kb.cloudpss.net/documents/software/emtlab/component-library/",
+    "version": "2024.12"
+  },
+  "parameters": {
+    "groups": [
+      {
+        "group_id": "basic",
+        "name": "基础参数",
+        "description": "母线基本电气参数",
+        "parameters": [
+          {
+            "key": "Vnom",
+            "display_name": "额定电压",
+            "type": "real",
+            "unit": "kV",
+            "description": "母线额定电压（线电压有效值）",
+            "required": true,
+            "default": 110.0
+          },
+          {
+            "key": "Fnom",
+            "display_name": "额定频率",
+            "type": "real",
+            "unit": "Hz",
+            "description": "系统额定频率",
+            "required": false,
+            "default": 50.0
+          }
+        ]
+      },
+      {
+        "group_id": "powerflow",
+        "name": "潮流计算参数",
+        "description": "潮流计算相关参数",
+        "parameters": [
+          {
+            "key": "Vm0",
+            "display_name": "初始电压幅值",
+            "type": "real",
+            "unit": "pu",
+            "description": "潮流计算初始电压幅值（标幺值）",
+            "required": false,
+            "default": 1.0,
+            "constraints": {"min": 0.8, "max": 1.2}
+          },
+          {
+            "key": "Va0",
+            "display_name": "初始电压相角",
+            "type": "real",
+            "unit": "deg",
+            "description": "潮流计算初始电压相角",
+            "required": false,
+            "default": 0.0
+          },
+          {
+            "key": "BusType",
+            "display_name": "母线类型",
+            "type": "choice",
+            "description": "潮流计算母线类型",
+            "required": false,
+            "default": "PQ",
+            "choices": ["PQ", "PV", "Slack"]
+          }
+        ]
+      }
+    ]
+  },
+  "pins": {
+    "electrical": [
+      {
+        "key": "0",
+        "name": "母线连接",
+        "type": "electrical",
+        "dimension": "3×1",
+        "description": "母线三相连接端口",
+        "required": false
+      }
+    ]
+  },
+  "validation_rules": {},
+  "simulation_support": {
+    "powerflow": true,
+    "emt": true,
+    "phasor": true
+  }
+}
