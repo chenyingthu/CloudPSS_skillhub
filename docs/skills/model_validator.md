@@ -9,6 +9,7 @@
 - ✅ **分阶段验证**: 拓扑 → 潮流 → 暂态 → 参数对比
 - ✅ **批量验证**: 一次验证多个模型
 - ✅ **详细报告**: 每个阶段的通过/失败状态和详细信息
+- ✅ **新能源硬门槛**: 会直接拦截“元件存在但未接入母线”或“潮流里没有真实注入”的坏案例
 - ✅ **常量配置**: 使用可配置的验证阈值（超时、电压范围等）
 
 ## 验证流程
@@ -20,8 +21,8 @@
       │                  │                  │                  │
       ▼                  ▼                  ▼                  ▼
   孤岛检测          收敛性检查        EMT拓扑就绪       与基模对比
-  悬空引脚          电压范围          仿真可行性        元件数量
-  参数完整性        支路潮流          输出通道          修改正确性
+  新能源接线        结果表完整性      仿真可行性        元件数量
+  关键参数齐全      真实出力校验      输出通道          修改正确性
 ```
 
 ## 配置说明
@@ -33,7 +34,7 @@ auth:
   token_file: .cloudpss_token
 
 models:
-  - rid: model/holdme/test_IEEE39_with_PV_50MW
+  - rid: model/holdme/test_ieee39_pv
     base_rid: model/holdme/IEEE39
     name: "IEEE39+50MW光伏"
 
@@ -65,22 +66,21 @@ output:
 **检查项目:**
 - 元件总数统计
 - 母线数量统计
-- 电源数量统计
-- 悬空引脚检测
-- 参数完整性检查
+- 新能源元件数量统计
+- 新能源元件是否接到有效母线信号
+- 新能源关键参数是否齐全
 
 **通过标准:**
 - 能成功获取模型拓扑
-- 无严重连通性问题
+- 新能源元件没有悬空或错误母线连接
+- 新能源关键参数满足最小运行要求
 
 **示例输出:**
 ```
 [阶段1] 拓扑验证...
   元件总数: 511
   母线数量: 39
-  电源数量: 14
-  ⚠️ 悬空引脚: 187 个
-  ⚠️ 参数不完整: 193 个
+  新能源元件数量: 1
   ✅ 拓扑验证通过
 ```
 
@@ -90,19 +90,22 @@ output:
 
 **检查项目:**
 - 潮流计算收敛性
+- 母线/支路结果表是否非空
 - 电压范围（默认 0.5~1.5 pu）
-- 支路潮流计算
+- 新能源接入点是否在潮流结果中出现真实出力
 
 **通过标准:**
 - 潮流计算成功收敛
+- 结果表不为空
 - 所有母线电压在合理范围内
+- 对新能源模型，接入点必须在潮流结果中体现出非零有功出力
 
 **示例输出:**
 ```
 [阶段2] 潮流验证...
   提交潮流计算任务...
-  电压范围: 0.9823 ~ 1.0435 pu
-  支路数量: 46
+  电压范围: 0.9089 ~ 1.0630 pu
+  新能源出力检查: 1 个接入点
   ✅ 潮流验证通过
 ```
 
@@ -158,7 +161,7 @@ output:
 skill: model_validator
 
 models:
-  - rid: model/holdme/test_IEEE39_with_PV_50MW
+  - rid: model/holdme/test_ieee39_pv
     base_rid: model/holdme/IEEE39
     name: "光伏模型验证"
 
@@ -226,11 +229,9 @@ output:
 ================================================================================
 
 模型: 光伏50MW
-RID: model/holdme/test_IEEE39_with_PV_50MW
+RID: model/holdme/test_ieee39_pv
 结果: ✅ 通过
   ✅ topology
-      警告: 发现 187 个元件有悬空引脚
-      警告: 发现 193 个元件参数不完整
   ✅ powerflow
   ✅ parameter
 
@@ -244,7 +245,7 @@ RID: model/holdme/test_IEEE39_with_PV_50MW
 ```json
 [
   {
-    "model_rid": "model/holdme/test_IEEE39_with_PV_50MW",
+    "model_rid": "model/holdme/test_ieee39_pv",
     "model_name": "光伏50MW",
     "overall_passed": true,
     "phases": {
@@ -254,7 +255,7 @@ RID: model/holdme/test_IEEE39_with_PV_50MW
         "details": {
           "total_components": 511,
           "bus_count": 39,
-          "generator_count": 14
+          "renewable_count": 1
         }
       },
       "powerflow": {
@@ -262,8 +263,8 @@ RID: model/holdme/test_IEEE39_with_PV_50MW
         "passed": true,
         "details": {
           "converged": true,
-          "voltage_min": 0.9823,
-          "voltage_max": 1.0435,
+          "voltage_min": 0.9525,
+          "voltage_max": 1.03,
           "branch_count": 46
         }
       },
@@ -278,7 +279,7 @@ RID: model/holdme/test_IEEE39_with_PV_50MW
       }
     },
     "issues": [],
-    "warnings": ["发现 187 个元件有悬空引脚", "发现 193 个元件参数不完整"]
+    "warnings": []
   }
 ]
 ```
@@ -336,7 +337,7 @@ class ValidationReport:
 ## 注意事项
 
 1. **验证时间**: 每个模型的完整验证可能需要几分钟（取决于仿真计算时间）
-2. **警告处理**: 悬空引脚和参数不完整警告通常来自原始模型，不影响使用
+2. **硬门槛优先**: 对新能源模型，错误母线连接、缺关键参数、潮流结果无真实注入都会直接判定失败
 3. **基模对比**: `parameter` 阶段需要 `base_rid` 才能进行对比
 4. **EMT验证**: EMT仿真较耗时，如不需要可跳过该阶段
 
