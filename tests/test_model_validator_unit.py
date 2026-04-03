@@ -44,16 +44,43 @@ class FakeJob:
         return self._status
 
 
+class FakeEMTResult:
+    def __init__(self, plots=None, names=None, traces=None):
+        self._plots = plots or []
+        self._names = names or {}
+        self._traces = traces or {}
+
+    def getPlots(self):
+        return self._plots
+
+    def getPlotChannelNames(self, index):
+        return self._names.get(index, [])
+
+    def getPlotChannelData(self, index, channel_name):
+        return self._traces.get((index, channel_name))
+
+
 class FakeModel:
-    def __init__(self, components, buses, branches):
+    def __init__(self, components, buses, branches, emt_result=None):
         self._components = components
         self._job = FakeJob(buses, branches)
+        self._emt_job = FakeJob([], [], status=1)
+        self._emt_job.result = emt_result or FakeEMTResult()
+        self._emt_topology = SimpleNamespace(components=components)
 
     def getAllComponents(self):
         return self._components
 
     def runPowerFlow(self):
         return self._job
+
+    def fetchTopology(self, implementType=None):
+        if implementType == "emtp":
+            return self._emt_topology
+        raise ValueError("unsupported implementType")
+
+    def runEMT(self, **kwargs):
+        return self._emt_job
 
 
 def renewable_component(definition, *, label, pins, args=None):
@@ -157,3 +184,105 @@ class TestModelValidatorUnit:
 
         assert result["passed"] is False
         assert any("不是有效母线信号" in error for error in result["errors"])
+
+    def test_emt_fails_when_no_plots_are_returned(self, skill):
+        model = FakeModel(
+            components={"canvas_0_45": bus_component(label="Bus10", signal="bus10")},
+            buses=[],
+            branches=[],
+            emt_result=FakeEMTResult(plots=[]),
+        )
+
+        with patch("cloudpss.Model.fetch", return_value=model):
+            result = skill._validate_emt("model/test", duration=0.1)
+
+        assert result["passed"] is False
+        assert any("缺少 plot 输出" in error for error in result["errors"])
+
+    def test_emt_fails_when_traces_are_empty(self, skill):
+        emt_result = FakeEMTResult(
+            plots=[{"key": "plot-0"}],
+            names={0: ["vac:0"]},
+            traces={(0, "vac:0"): {"x": [0.0], "y": [0.0]}},
+        )
+        model = FakeModel(
+            components={"canvas_0_45": bus_component(label="Bus10", signal="bus10")},
+            buses=[],
+            branches=[],
+            emt_result=emt_result,
+        )
+
+        with patch("cloudpss.Model.fetch", return_value=model):
+            result = skill._validate_emt("model/test", duration=0.1)
+
+        assert result["passed"] is False
+        assert any("缺少非空有效波形" in error for error in result["errors"])
+
+    def test_emt_passes_when_valid_trace_exists(self, skill):
+        emt_result = FakeEMTResult(
+            plots=[{"key": "plot-0"}],
+            names={0: ["vac:0"]},
+            traces={(0, "vac:0"): {"x": [0.0, 0.01, 0.02], "y": [0.98, 1.01, 0.99]}},
+        )
+        model = FakeModel(
+            components={"canvas_0_45": bus_component(label="Bus10", signal="bus10")},
+            buses=[],
+            branches=[],
+            emt_result=emt_result,
+        )
+
+        with patch("cloudpss.Model.fetch", return_value=model):
+            result = skill._validate_emt("model/test", duration=0.1)
+
+        assert result["passed"] is True
+        assert result["details"]["sample_trace"]["channel_name"] == "vac:0"
+
+    def test_validation_is_sequential_and_skips_after_topology_failure(self, skill):
+        with patch.object(
+            skill,
+            "_validate_topology",
+            return_value={"phase": "topology", "passed": False, "errors": ["bad topo"], "warnings": []},
+        ) as topology_mock, patch.object(
+            skill,
+            "_validate_powerflow",
+        ) as powerflow_mock, patch.object(
+            skill,
+            "_validate_emt",
+        ) as emt_mock:
+            report = skill._validate_single_model(
+                {"rid": "model/test", "name": "test"},
+                ["topology", "powerflow", "emt"],
+                {},
+            )
+
+        assert topology_mock.called
+        powerflow_mock.assert_not_called()
+        emt_mock.assert_not_called()
+        assert report.phases["powerflow"]["skipped"] is True
+        assert report.phases["emt"]["skipped"] is True
+        assert report.overall_passed is False
+
+    def test_validation_skips_emt_after_powerflow_failure(self, skill):
+        with patch.object(
+            skill,
+            "_validate_topology",
+            return_value={"phase": "topology", "passed": True, "errors": [], "warnings": []},
+        ) as topology_mock, patch.object(
+            skill,
+            "_validate_powerflow",
+            return_value={"phase": "powerflow", "passed": False, "errors": ["bad pf"], "warnings": []},
+        ) as powerflow_mock, patch.object(
+            skill,
+            "_validate_emt",
+        ) as emt_mock:
+            report = skill._validate_single_model(
+                {"rid": "model/test", "name": "test"},
+                ["topology", "powerflow", "emt"],
+                {},
+            )
+
+        assert topology_mock.called
+        assert powerflow_mock.called
+        emt_mock.assert_not_called()
+        assert report.phases["emt"]["skipped"] is True
+        assert report.overall_passed is False

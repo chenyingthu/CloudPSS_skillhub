@@ -263,27 +263,47 @@ class ModelValidatorSkill(SkillBase):
 
         report = ValidationReport(model_rid=rid, model_name=name)
 
-        # 阶段1: 拓扑验证
-        if "topology" in phases:
-            report.phases["topology"] = self._validate_topology(model_info)
+        validation_order = ["topology", "powerflow", "emt", "parameter"]
+        requested_phases = [phase for phase in validation_order if phase in phases]
+        previous_failed = None
 
-        # 阶段2: 潮流验证
-        if "powerflow" in phases:
-            report.phases["powerflow"] = self._validate_powerflow(
-                model_info,
-                validation_config.get("powerflow_tolerance", DEFAULT_POWERFLOW_TOLERANCE),
-                validation_config.get("timeout", DEFAULT_TIMEOUT),
-            )
+        for phase in requested_phases:
+            if previous_failed is not None:
+                report.phases[phase] = self._skipped_phase_result(
+                    phase,
+                    f"跳过 {phase}：前序阶段 {previous_failed} 未通过"
+                )
+                continue
 
-        # 阶段3: 暂态验证
-        if "emt" in phases:
-            report.phases["emt"] = self._validate_emt(
-                rid, validation_config.get("emt_duration", 1.0)
-            )
+            if phase == "topology":
+                phase_result = self._validate_topology(model_info)
+            elif phase == "powerflow":
+                phase_result = self._validate_powerflow(
+                    model_info,
+                    validation_config.get("powerflow_tolerance", DEFAULT_POWERFLOW_TOLERANCE),
+                    validation_config.get("timeout", DEFAULT_TIMEOUT),
+                )
+            elif phase == "emt":
+                phase_result = self._validate_emt(
+                    rid, validation_config.get("emt_duration", 1.0)
+                )
+            elif phase == "parameter":
+                if not base_rid:
+                    phase_result = self._skipped_phase_result(
+                        phase,
+                        "跳过 parameter：未提供 base_rid"
+                    )
+                else:
+                    phase_result = self._validate_parameters(rid, base_rid)
+            else:
+                phase_result = self._skipped_phase_result(
+                    phase,
+                    f"跳过未知阶段 {phase}"
+                )
 
-        # 阶段4: 参数对比验证
-        if "parameter" in phases and base_rid:
-            report.phases["parameter"] = self._validate_parameters(rid, base_rid)
+            report.phases[phase] = phase_result
+            if phase_result.get("passed") is False and not phase_result.get("skipped", False):
+                previous_failed = phase
 
         # 汇总结果
         report.issues = []
@@ -302,6 +322,18 @@ class ModelValidatorSkill(SkillBase):
             logger.info(f"警告: {len(report.warnings)} 个")
 
         return report
+
+    @staticmethod
+    def _skipped_phase_result(phase: str, reason: str) -> Dict:
+        """构造序贯验证中的跳过阶段结果。"""
+        return {
+            "phase": phase,
+            "passed": False,
+            "skipped": True,
+            "errors": [],
+            "warnings": [reason],
+            "details": {"reason": reason},
+        }
 
     @staticmethod
     def _component_name(comp_id: str, comp: Any) -> str:
@@ -692,9 +724,9 @@ class ModelValidatorSkill(SkillBase):
                 logger.error(f"  ❌ EMT拓扑检查失败: {e}")
                 return result
 
-            # 提交EMT仿真（极短时长验证可行性）
-            logger.info(f"  提交EMT仿真（{duration}s）...")
-            job = model.runEMT(simuTime=duration)
+            # 当前 SDK 的 runEMT 不稳定接受 simuTime 透传，这里先使用模型现有 EMT 配置做 smoke gate。
+            logger.info(f"  提交EMT仿真（使用模型既有配置，目标 smoke 时长 {duration}s）...")
+            job = model.runEMT()
             result["details"]["job_id"] = job.id
 
             # 等待完成
@@ -715,9 +747,68 @@ class ModelValidatorSkill(SkillBase):
             result["details"]["completed"] = True
 
             # 检查输出通道
-            plots = emt_result.getPlots()
+            plots = list(emt_result.getPlots())
             result["details"]["plot_count"] = len(plots)
             logger.info(f"  输出通道: {len(plots)} 个")
+
+            if not plots:
+                raise RuntimeError("EMT结果缺少 plot 输出")
+
+            valid_trace = None
+            for plot_index, _plot in enumerate(plots):
+                channel_names = emt_result.getPlotChannelNames(plot_index) or []
+                if not channel_names:
+                    continue
+
+                for channel_name in channel_names:
+                    trace = emt_result.getPlotChannelData(plot_index, channel_name)
+                    if not isinstance(trace, dict):
+                        continue
+
+                    x_values = trace.get("x") or []
+                    y_values = trace.get("y") or []
+                    if len(x_values) < 2 or len(y_values) < 2:
+                        continue
+                    if len(x_values) != len(y_values):
+                        continue
+
+                    numeric_samples = [
+                        self._coerce_number(value)
+                        for value in y_values[: min(len(y_values), 2000)]
+                    ]
+                    numeric_samples = [value for value in numeric_samples if value is not None]
+                    if not numeric_samples:
+                        continue
+
+                    y_min = min(numeric_samples)
+                    y_max = max(numeric_samples)
+                    if abs(y_max - y_min) < 1e-9 and abs(y_max) < 1e-9:
+                        continue
+
+                    valid_trace = {
+                        "plot_index": plot_index,
+                        "channel_name": channel_name,
+                        "point_count": len(x_values),
+                        "y_min": y_min,
+                        "y_max": y_max,
+                    }
+                    break
+
+                if valid_trace:
+                    break
+
+            if not valid_trace:
+                raise RuntimeError("EMT结果缺少非空有效波形")
+
+            result["details"]["sample_trace"] = valid_trace
+            logger.info(
+                "  有效波形: plot-%s / %s (%s 点)"
+                % (
+                    valid_trace["plot_index"],
+                    valid_trace["channel_name"],
+                    valid_trace["point_count"],
+                )
+            )
 
             logger.info("  ✅ 暂态验证通过")
 
