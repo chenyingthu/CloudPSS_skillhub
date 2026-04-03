@@ -23,8 +23,6 @@ def validate_all_test_models():
         # 风电模型
         {"rid": "model/holdme/test_IEEE39_with_Wind_50MW", "base_rid": "model/holdme/IEEE39", "name": "风电50MW"},
         {"rid": "model/holdme/test_IEEE39_with_Wind_100MW", "base_rid": "model/holdme/IEEE39", "name": "风电100MW"},
-        {"rid": "model/holdme/test_IEEE39_with_Wind_WGSource", "base_rid": "model/holdme/IEEE39", "name": "WGSource风电"},
-
         # 保护模型
         {"rid": "model/holdme/test_IEEE39_with_DifferentialProtection", "base_rid": "model/holdme/IEEE39", "name": "差动保护"},
         {"rid": "model/holdme/test_IEEE39_with_OverCurrentProtection", "base_rid": "model/holdme/IEEE39", "name": "过流保护"},
@@ -72,7 +70,7 @@ def validate_all_test_models():
         # 分类统计
         categories = {
             "光伏": ["光伏50MW", "光伏100MW", "光伏150MW"],
-            "风电": ["风电50MW", "风电100MW", "WGSource风电"],
+            "风电": ["风电50MW", "风电100MW"],
             "保护": ["差动保护", "过流保护", "零序保护"],
             "线路": ["线路150km", "线路200km"],
             "其他": ["新增母线"]

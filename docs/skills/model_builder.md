@@ -10,25 +10,23 @@
 - ✅ **批量生成**: 参数扫描批量生成模型变体，支持占位符替换
 - ✅ **自动保存**: 直接保存到 CloudPSS 平台，生成可访问的 RID
 - ✅ **Duck Typing**: 使用 `getattr()` 安全访问组件属性，兼容不同 SDK 版本
+- ✅ **新能源兼容映射**: 旧配置中的 `WGSource` / `PVStation` / `PV_Inverter` 会自动映射到公开且支持潮流的组件
 
-## 已验证的测试算例
+## 当前推荐的新能源接入路径
 
-使用此技能成功创建了 **12个测试算例**，全部通过验证：
+对于需要真实进入潮流计算的新能源算例，当前主线建议使用以下公开组件：
 
-| 类别 | 算例名称 | RID | 状态 |
-|-----|---------|-----|-----|
-| **光伏** | IEEE39_with_PV_50MW | `model/holdme/test_IEEE39_with_PV_50MW` | ✅ 已验证 |
-| | IEEE39_with_PV_100MW | `model/holdme/test_IEEE39_with_PV_100MW` | ✅ 已验证 |
-| | IEEE39_with_PV_150MW | `model/holdme/test_IEEE39_with_PV_150MW` | ✅ 已验证 |
-| **风电** | IEEE39_with_Wind_50MW | `model/holdme/test_IEEE39_with_Wind_50MW` | ✅ 已验证 |
-| | IEEE39_with_Wind_100MW | `model/holdme/test_IEEE39_with_Wind_100MW` | ✅ 已验证 |
-| | IEEE39_with_Wind_WGSource | `model/holdme/test_IEEE39_with_Wind_WGSource` | ✅ 已验证 |
-| **保护** | IEEE39_with_DifferentialProtection | `model/holdme/test_IEEE39_with_DifferentialProtection` | ✅ 已验证 |
-| | IEEE39_with_OverCurrentProtection | `model/holdme/test_IEEE39_with_OverCurrentProtection` | ✅ 已验证 |
-| | IEEE39_with_ZeroSeqProtection | `model/holdme/test_IEEE39_with_ZeroSeqProtection` | ✅ 已验证 |
-| **线路** | IEEE39_Line_Length_150 | `model/holdme/test_IEEE39_Line_Length_150` | ✅ 已验证 |
-| | IEEE39_Line_Length_200 | `model/holdme/test_IEEE39_Line_Length_200` | ✅ 已验证 |
-| **母线** | IEEE39_New_Bus | `model/holdme/test_IEEE39_New_Bus` | ✅ 已验证 |
+| 类别 | 推荐组件 | 说明 |
+|-----|---------|-----|
+| **风电** | `model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1` | 支持潮流，适合作为风电场等值接入 |
+| **光伏** | `model/open-cloudpss/PVS_01-avm-stdm-v1b5` | 支持潮流，适合作为光伏电站接入 |
+
+兼容说明：
+- 旧配置中的 `model/CloudPSS/WGSource` 会自动映射到 `WTG_PMSG_01-avm-stdm-v2b1`
+- 旧配置中的 `model/CloudPSS/DFIG_WindFarm_Equivalent_Model` 也会自动映射到 `WTG_PMSG_01-avm-stdm-v2b1`
+- 旧配置中的 `model/CloudPSS/PVStation` 和 `model/CloudPSS/PV_Inverter` 会自动映射到 `PVS_01-avm-stdm-v1b5`
+- `pin_connection.target_bus` 可以写成 `Bus14` / `bus14` / 母线组件 key，技能会自动解析到真实可连接信号
+- `WGSource_Bus30` 这类旧设计已退役，不再作为推荐测试算例保留
 
 ## 配置说明
 
@@ -48,11 +46,16 @@ modifications:
 
   # 添加新组件
   - action: add_component
-    component_type: model/CloudPSS/PVStation
+    component_type: model/open-cloudpss/PVS_01-avm-stdm-v1b5
     label: "PV_Bus10"
     parameters:
-      额定容量: 100
-      有功功率参考值: 0.8
+      P_cmd: 50
+      pf_P: 50
+      pf_Q: 0
+      Pctrl_mode: "0"
+    pin_connection:
+      target_bus: Bus14
+      pin_name: "0"
     position:
       x: 400
       y: 300
@@ -95,10 +98,15 @@ output:
 
 ```yaml
 - action: add_component
-  component_type: model/CloudPSS/PVStation
+  component_type: model/open-cloudpss/PVS_01-avm-stdm-v1b5
   label: "PV_Bus10"
   parameters:
-    额定容量: 100
+    P_cmd: 50
+    pf_P: 50
+    pf_Q: 0
+    Pctrl_mode: "0"
+  pin_connection:
+    target_bus: Bus14
   position: {x: 400, y: 300}
 ```
 
@@ -123,10 +131,15 @@ batch:
 
 modifications:
   - action: add_component
-    component_type: model/CloudPSS/PVStation
+    component_type: model/open-cloudpss/PVS_01-avm-stdm-v1b5
     label: "PV_{pv_capacity}MW"
     parameters:
-      额定容量: "{pv_capacity}"
+      P_cmd: "{pv_capacity}"
+      pf_P: "{pv_capacity}"
+      pf_Q: 0
+      Pctrl_mode: "0"
+    pin_connection:
+      target_bus: Bus14
 ```
 
 **参数占位符**: 使用 `{param_name}` 格式，批量生成时自动替换。
@@ -136,9 +149,9 @@ modifications:
 ### 新能源组件
 | 组件名称 | RID | 说明 |
 |---------|-----|-----|
-| 光伏发电站 | `model/CloudPSS/PVStation` | 光伏电站模型 |
-| DFIG风电场 | `model/CloudPSS/DFIG_WindFarm_Equivalent_Model` | 双馈风电等值模型 |
-| 风电电源 | `model/CloudPSS/WGSource` | 风电场电源模型 |
+| 光伏电站（推荐） | `model/open-cloudpss/PVS_01-avm-stdm-v1b5` | 公开可访问，支持潮流的光伏封装模型 |
+| 风电场（推荐） | `model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1` | 公开可访问，支持潮流的 PMSG 风机封装模型 |
+| DFIG风电场 | `model/CloudPSS/DFIG_WindFarm_Equivalent_Model` | 旧写法，运行时会自动映射到公开 PMSG 风机模型 |
 
 ### 保护组件
 | 组件名称 | RID | 说明 |
@@ -165,12 +178,16 @@ base_model:
 
 modifications:
   - action: add_component
-    component_type: model/CloudPSS/PVStation
+    component_type: model/open-cloudpss/PVS_01-avm-stdm-v1b5
     label: "PV_Bus10_50MW"
     parameters:
-      额定容量: 50
-      有功功率参考值: 0.8
-      功率因数: 1.0
+      P_cmd: 50
+      pf_P: 50
+      pf_Q: 0
+      Pctrl_mode: "0"
+    pin_connection:
+      target_bus: Bus14
+      pin_name: "0"
     position: {x: 400, y: 300}
 
 output:
@@ -195,11 +212,16 @@ batch:
 
 modifications:
   - action: add_component
-    component_type: model/CloudPSS/PVStation
+    component_type: model/open-cloudpss/PVS_01-avm-stdm-v1b5
     label: "PV_Bus10_{capacity}MW"
     parameters:
-      额定容量: "{capacity}"
-      有功功率参考值: 0.8
+      P_cmd: "{capacity}"
+      pf_P: "{capacity}"
+      pf_Q: 0
+      Pctrl_mode: "0"
+    pin_connection:
+      target_bus: Bus14
+      pin_name: "0"
 
 output:
   save: true
