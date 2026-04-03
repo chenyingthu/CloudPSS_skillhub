@@ -7,6 +7,7 @@ auth:
   token_file: .cloudpss_token
 
 # 要验证的模型列表
+# 2026-04-03 起，这里只保留已修复并可稳定通过真实潮流验证的新能源样例。
 models:
   # 新能源模型验证
   - rid: model/holdme/test_IEEE39_with_PV_50MW
@@ -16,6 +17,10 @@ models:
   - rid: model/holdme/test_IEEE39_with_Wind_50MW
     base_rid: model/holdme/IEEE39
     name: "IEEE39+50MW风电"
+
+  - rid: model/holdme/test_ieee39_hybrid
+    base_rid: model/holdme/IEEE39
+    name: "IEEE39+混合新能源"
 
   # 保护模型验证
   - rid: model/holdme/test_IEEE39_with_DifferentialProtection

@@ -10,7 +10,8 @@
 """
 
 import logging
-from typing import Dict, List, Any, Optional
+import re
+from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
 from copy import deepcopy
@@ -106,11 +107,27 @@ class ModelBuilderSkill(SkillBase):
         "model/CloudPSS/DFIG_external_ctrl",  # DFIG外部控制模型
         "model/CloudPSS/DFIG_WindFarm_Equivalent_Model",  # DFIG风电场等值模型
         "model/CloudPSS/PVStation",  # 光伏电站模型
+        "model/CloudPSS/PV_Inverter",  # 旧版光伏逆变器示例别名
         "model/CloudPSS/PVStation_external_ctrl",  # 光伏电站外部控制模型
+        "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1",  # 支持潮流的公开风机封装模型
+        "model/open-cloudpss/PVS_01-avm-stdm-v1b5",  # 支持潮流的公开光伏封装模型
         # 保护装置
         "model/CloudPSS/DistanceRelay",  # 距离保护
         "model/CloudPSS/OvercurrentRelay",  # 过流保护
     ]
+
+    COMPONENT_TYPE_ALIASES = {
+        # WGSource 已知不适合做潮流算例，自动映射到公开可用的 PMSG 封装模型
+        "model/CloudPSS/WGSource": "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1",
+        "model/CloudPSS/DFIG_WindFarm_Equivalent_Model": "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1",
+        # 旧文档/示例里的光伏类型统一映射到公开可访问且可参与潮流的封装模型
+        "model/CloudPSS/PVStation": "model/open-cloudpss/PVS_01-avm-stdm-v1b5",
+        "model/CloudPSS/PV_Inverter": "model/open-cloudpss/PVS_01-avm-stdm-v1b5",
+    }
+
+    CONNECTABLE_BUS_RIDS = {
+        "model/CloudPSS/_newBus_3p",
+    }
 
     config_schema = {
         "type": "object",
@@ -320,11 +337,12 @@ class ModelBuilderSkill(SkillBase):
 
     def _add_component(self, config: Dict):
         """添加组件（集成元数据验证和自动补全）"""
-        comp_type = config["component_type"]
+        raw_comp_type = config["component_type"]
         label = config["label"]
-        params = config.get("parameters", {})
+        raw_params = config.get("parameters", {})
         position = config.get("position", {})
         pin_connection = config.get("pin_connection", {})
+        comp_type, params = self._prepare_component_definition(raw_comp_type, raw_params)
 
         logger.debug(f"添加组件: {label} ({comp_type})")
 
@@ -393,7 +411,7 @@ class ModelBuilderSkill(SkillBase):
         # 处理引脚连接
         pins = {}
         if pin_connection:
-            target_bus = pin_connection.get("target_bus")
+            target_bus = self._resolve_target_bus(pin_connection.get("target_bus"))
             pin_name = pin_connection.get("pin_name", "0")
             if target_bus:
                 pins[pin_name] = target_bus
@@ -405,7 +423,8 @@ class ModelBuilderSkill(SkillBase):
                 definition=comp_type,
                 label=label,
                 args=params,
-                pins=pins
+                pins=pins,
+                position=position or None,
             )
             self.modifications_applied.append(f"add:{label}")
             if pins:
@@ -419,6 +438,138 @@ class ModelBuilderSkill(SkillBase):
             logger.warning(f"SDK添加组件失败，尝试备用方法: {e}")
             component_def["data"]["pins"] = pins
             self._add_component_direct(component_def)
+
+    def _prepare_component_definition(
+        self,
+        component_type: str,
+        params: Dict[str, Any]
+    ) -> Tuple[str, Dict[str, Any]]:
+        """为新增元件准备真实可用的组件类型和参数。"""
+        effective_type = self.COMPONENT_TYPE_ALIASES.get(component_type, component_type)
+        effective_params = deepcopy(params)
+
+        if effective_type != component_type:
+            logger.info(f"  组件类型映射: {component_type} -> {effective_type}")
+
+        if effective_type == "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1":
+            effective_params = self._prepare_public_wind_parameters(effective_params)
+        elif effective_type == "model/open-cloudpss/PVS_01-avm-stdm-v1b5":
+            effective_params = self._prepare_public_pv_parameters(effective_params)
+
+        return effective_type, effective_params
+
+    @staticmethod
+    def _prepare_public_wind_parameters(params: Dict[str, Any]) -> Dict[str, Any]:
+        """把旧风电配置翻译成公开 PMSG 模型可用的潮流参数。"""
+        prepared = deepcopy(params)
+        capacity = ModelBuilderSkill._first_present(
+            prepared,
+            ["pf_P", "P_cmd", "Pnom", "额定容量", "capacity_mw", "有功功率参考值"]
+        )
+        if capacity is not None:
+            prepared["P_cmd"] = capacity
+            prepared["pf_P"] = capacity
+
+        if "Vpcc" in prepared and "Vbase" not in prepared:
+            prepared["Vbase"] = prepared.pop("Vpcc")
+
+        prepared.setdefault("Pctrl_mode", "0")
+        prepared.setdefault("pf_Q", 0.0)
+        prepared.setdefault("Q_cmd", 0.0)
+        return ModelBuilderSkill._drop_keys(
+            prepared,
+            {"Pnom", "额定容量", "capacity_mw", "有功功率参考值"}
+        )
+
+    @staticmethod
+    def _prepare_public_pv_parameters(params: Dict[str, Any]) -> Dict[str, Any]:
+        """把旧 PVStation 风格参数翻译成公开光伏封装模型的潮流参数。"""
+        prepared = deepcopy(params)
+        capacity = ModelBuilderSkill._first_present(
+            prepared,
+            ["pf_P", "P_cmd", "Pnom", "额定容量", "capacity_mw", "有功功率参考值"]
+        )
+        if capacity is not None:
+            prepared["P_cmd"] = capacity
+            prepared["pf_P"] = capacity
+
+        if "Vpcc" in prepared and "Vbase" not in prepared:
+            prepared["Vbase"] = prepared.pop("Vpcc")
+
+        prepared.setdefault("Pctrl_mode", "0")
+        prepared.setdefault("pf_Q", 0.0)
+        prepared.setdefault("Q_cmd", 0.0)
+        return ModelBuilderSkill._drop_keys(
+            prepared,
+            {"Pnom", "额定容量", "capacity_mw", "有功功率参考值", "Irradiance"}
+        )
+
+    @staticmethod
+    def _first_present(params: Dict[str, Any], candidates: List[str]) -> Optional[Any]:
+        """从一组候选键中读取第一个非空值。"""
+        for key in candidates:
+            value = params.get(key)
+            if value is not None:
+                return value
+        return None
+
+    @staticmethod
+    def _drop_keys(params: Dict[str, Any], keys: set) -> Dict[str, Any]:
+        """移除已经翻译过的旧参数键，避免传给新组件定义。"""
+        return {key: value for key, value in params.items() if key not in keys}
+
+    @staticmethod
+    def _normalize_lookup_value(value: Any) -> str:
+        """把用户输入和模型内部名字归一化后再做匹配。"""
+        if value is None:
+            return ""
+        return re.sub(r"[^a-z0-9]+", "", str(value).lower())
+
+    def _resolve_target_bus(self, target_bus: Optional[str]) -> Optional[str]:
+        """把文档里的 Bus14 之类写法解析成模型真实可连接的 pin 信号名。"""
+        if not target_bus:
+            return None
+
+        normalized_target = self._normalize_lookup_value(target_bus)
+        if not normalized_target:
+            return target_bus
+
+        try:
+            bus_components = {}
+            for bus_rid in self.CONNECTABLE_BUS_RIDS:
+                try:
+                    bus_components.update(self.model.getComponentsByRid(bus_rid) or {})
+                except Exception as exc:
+                    logger.debug(f"获取母线组件 {bus_rid} 失败: {exc}")
+
+            for key, comp in bus_components.items():
+                args = getattr(comp, "args", {}) or {}
+                pins = getattr(comp, "pins", {}) or {}
+                candidates = [
+                    key,
+                    getattr(comp, "label", None),
+                    args.get("Name"),
+                    pins.get("0"),
+                ]
+
+                if target_bus in candidates:
+                    return pins.get("0") or args.get("Name") or target_bus
+
+                normalized_candidates = {
+                    self._normalize_lookup_value(candidate): candidate
+                    for candidate in candidates
+                    if candidate is not None
+                }
+                if normalized_target in normalized_candidates:
+                    return pins.get("0") or args.get("Name") or str(normalized_candidates[normalized_target])
+
+        except Exception as exc:
+            logger.error(f"解析目标母线失败: {exc}")
+
+        raise ValueError(
+            f"找不到目标母线 '{target_bus}'。"
+            "请传入母线 key，或使用如 'bus14' / 'Bus14' 这类可映射到现有母线的名称。"
+        )
 
     def _add_component_direct(self, component_def: Dict):
         """直接修改模型内部结构添加组件"""

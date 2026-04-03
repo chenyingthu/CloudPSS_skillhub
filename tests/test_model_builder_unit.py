@@ -37,11 +37,77 @@ class TestModelBuilderUnit:
 
     def test_default_component_types(self, skill):
         """测试默认组件类型列表"""
-        assert len(skill.DEFAULT_COMPONENT_TYPES) == 13
+        assert len(skill.DEFAULT_COMPONENT_TYPES) == 16
         assert "model/CloudPSS/_newBus_3p" in skill.DEFAULT_COMPONENT_TYPES
         assert "model/CloudPSS/PVStation" in skill.DEFAULT_COMPONENT_TYPES
+        assert "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1" in skill.DEFAULT_COMPONENT_TYPES
+        assert "model/open-cloudpss/PVS_01-avm-stdm-v1b5" in skill.DEFAULT_COMPONENT_TYPES
         assert "model/CloudPSS/DistanceRelay" in skill.DEFAULT_COMPONENT_TYPES
         print("✅ 默认组件类型列表正确")
+
+    def test_prepare_component_definition_maps_legacy_wind_component(self, skill):
+        """测试旧风电组件自动映射到支持潮流的公开模型"""
+        for legacy_type in [
+            "model/CloudPSS/WGSource",
+            "model/CloudPSS/DFIG_WindFarm_Equivalent_Model",
+        ]:
+            comp_type, params = skill._prepare_component_definition(
+                legacy_type,
+                {"Pnom": 80.0, "Vpcc": 0.69}
+            )
+
+            assert comp_type == "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1"
+            assert params["P_cmd"] == 80.0
+            assert params["pf_P"] == 80.0
+            assert params["Vbase"] == 0.69
+            assert params["Pctrl_mode"] == "0"
+            assert params["pf_Q"] == 0.0
+            assert params["Q_cmd"] == 0.0
+            assert "Pnom" not in params
+            assert "Vpcc" not in params
+        print("✅ 旧风电组件映射正确")
+
+    def test_prepare_component_definition_maps_legacy_pv_component(self, skill):
+        """测试旧光伏组件自动映射到支持潮流的公开模型"""
+        comp_type, params = skill._prepare_component_definition(
+            "model/CloudPSS/PVStation",
+            {"Pnom": 50.0, "Vpcc": 0.69, "Irradiance": 1000.0}
+        )
+
+        assert comp_type == "model/open-cloudpss/PVS_01-avm-stdm-v1b5"
+        assert params["P_cmd"] == 50.0
+        assert params["pf_P"] == 50.0
+        assert params["Vbase"] == 0.69
+        assert params["Pctrl_mode"] == "0"
+        assert params["pf_Q"] == 0.0
+        assert params["Q_cmd"] == 0.0
+        assert "Pnom" not in params
+        assert "Vpcc" not in params
+        assert "Irradiance" not in params
+        print("✅ 旧光伏组件映射正确")
+
+    def test_resolve_target_bus_accepts_display_name(self, skill):
+        """测试目标母线显示名自动解析为真实可连接信号名"""
+        bus_component = Mock()
+        bus_component.label = "newBus_3p-37"
+        bus_component.args = {"Name": "bus14"}
+        bus_component.pins = {"0": "bus14"}
+        skill.model = Mock()
+        skill.model.getComponentsByRid.return_value = {"canvas_0_211": bus_component}
+
+        assert skill._resolve_target_bus("Bus14") == "bus14"
+        assert skill._resolve_target_bus("bus14") == "bus14"
+        assert skill._resolve_target_bus("canvas_0_211") == "bus14"
+        print("✅ 目标母线自动解析正确")
+
+    def test_resolve_target_bus_missing_raises(self, skill):
+        """测试找不到目标母线时直接失败，而不是假成功"""
+        skill.model = Mock()
+        skill.model.getComponentsByRid.return_value = {}
+
+        with pytest.raises(ValueError, match="找不到目标母线"):
+            skill._resolve_target_bus("Bus99")
+        print("✅ 缺失目标母线会报错")
 
     def test_validate_valid_config(self, skill):
         """测试有效配置验证"""

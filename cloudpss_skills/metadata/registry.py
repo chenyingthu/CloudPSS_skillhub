@@ -231,6 +231,9 @@ class ComponentMetadataRegistry:
 
         count = 0
         for json_file in directory.glob('*.json'):
+            if json_file.name.startswith('_'):
+                logger.debug(f"跳过索引文件: {json_file}")
+                continue
             try:
                 count += self.load_from_file(json_file)
             except Exception as e:

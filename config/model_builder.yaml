@@ -34,13 +34,18 @@ modifications:
       x: 400
       y: 300
 
-  # 示例4: 添加光伏逆变器
+  # 示例4: 添加支持潮流的公开光伏封装模型
   - action: add_component
-    component_type: model/CloudPSS/PV_Inverter
+    component_type: model/open-cloudpss/PVS_01-avm-stdm-v1b5
     label: "PV_Bus10"
     parameters:
-      额定容量: 100
-      有功功率参考值: 0.8
+      P_cmd: 50
+      pf_P: 50
+      pf_Q: 0
+      Pctrl_mode: "0"
+    pin_connection:
+      target_bus: Bus14
+      pin_name: "0"
     position:
       x: 450
       y: 350
