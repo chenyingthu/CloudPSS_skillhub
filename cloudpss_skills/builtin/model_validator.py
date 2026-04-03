@@ -11,6 +11,7 @@
 """
 
 import logging
+import re
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -21,6 +22,32 @@ from cloudpss_skills.core.auth_utils import setup_auth, DEFAULT_TIMEOUT, DEFAULT
 from cloudpss_skills.metadata.integration import get_metadata_integration
 
 logger = logging.getLogger(__name__)
+
+
+BUS_COLUMN = "Bus"
+NODE_COLUMN = "Node"
+VM_COLUMN = "<i>V</i><sub>m</sub> / pu"
+P_GEN_COLUMN = "<i>P</i><sub>gen</sub> / MW"
+Q_GEN_COLUMN = "<i>Q</i><sub>gen</sub> / MVar"
+
+
+def table_rows(table: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """把 CloudPSS 表格结果展平成行列表。"""
+    columns = table.get("data", {}).get("columns", [])
+    labels = [
+        column.get("name") or column.get("title") or f"col_{index}"
+        for index, column in enumerate(columns)
+    ]
+    row_count = len(columns[0].get("data", [])) if columns else 0
+    rows = []
+    for row_index in range(row_count):
+        rows.append(
+            {
+                label: column.get("data", [None] * row_count)[row_index]
+                for label, column in zip(labels, columns)
+            }
+        )
+    return rows
 
 
 class ValidationPhase(Enum):
@@ -77,6 +104,16 @@ class ModelValidatorSkill(SkillBase):
     name = "model_validator"
     description = "系统性验证测试算例有效性（拓扑/潮流/暂态）"
     version = "1.0.0"
+
+    RENEWABLE_KEYWORDS = (
+        "wgsource",
+        "wind",
+        "dfig_windfarm_equivalent_model",
+        "wtg_pmsg",
+        "pvstation",
+        "pv_inverter",
+        "pvs_01",
+    )
 
     config_schema = {
         "type": "object",
@@ -228,12 +265,14 @@ class ModelValidatorSkill(SkillBase):
 
         # 阶段1: 拓扑验证
         if "topology" in phases:
-            report.phases["topology"] = self._validate_topology(rid)
+            report.phases["topology"] = self._validate_topology(model_info)
 
         # 阶段2: 潮流验证
         if "powerflow" in phases:
             report.phases["powerflow"] = self._validate_powerflow(
-                rid, validation_config.get("powerflow_tolerance", DEFAULT_POWERFLOW_TOLERANCE)
+                model_info,
+                validation_config.get("powerflow_tolerance", DEFAULT_POWERFLOW_TOLERANCE),
+                validation_config.get("timeout", DEFAULT_TIMEOUT),
             )
 
         # 阶段3: 暂态验证
@@ -264,7 +303,71 @@ class ModelValidatorSkill(SkillBase):
 
         return report
 
-    def _validate_topology(self, rid: str) -> Dict:
+    @staticmethod
+    def _component_name(comp_id: str, comp: Any) -> str:
+        args = getattr(comp, "args", {}) or {}
+        return getattr(comp, "label", None) or args.get("Name") or comp_id
+
+    @staticmethod
+    def _normalize_name(value: Any) -> str:
+        if value is None:
+            return ""
+        return re.sub(r"[^a-z0-9]+", "", str(value).lower())
+
+    @classmethod
+    def _is_bus_component(cls, comp: Any) -> bool:
+        definition = (getattr(comp, "definition", "") or "").lower()
+        return "_newbus" in definition or definition.endswith("bus_3p")
+
+    @classmethod
+    def _is_renewable_component(cls, comp: Any) -> bool:
+        definition = (getattr(comp, "definition", "") or "").lower()
+        return any(keyword in definition for keyword in cls.RENEWABLE_KEYWORDS)
+
+    @staticmethod
+    def _first_connected_pin(pins: Dict[str, Any]) -> Optional[str]:
+        for pin_value in (pins or {}).values():
+            if isinstance(pin_value, str) and pin_value and not pin_value.startswith("@"):
+                return pin_value
+        return None
+
+    @staticmethod
+    def _coerce_number(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, dict):
+            for key in ("source", "value"):
+                nested = value.get(key)
+                if nested is not None:
+                    return ModelValidatorSkill._coerce_number(nested)
+        try:
+            return float(str(value))
+        except (TypeError, ValueError):
+            return None
+
+    def _expected_active_power(self, comp: Any) -> Optional[float]:
+        args = getattr(comp, "args", {}) or {}
+        for key in ("pf_P", "P_cmd", "Pnom", "额定容量"):
+            value = self._coerce_number(args.get(key))
+            if value is not None and value > 0:
+                return value
+        return None
+
+    def _build_bus_signal_map(self, components: Dict[str, Any]) -> Dict[str, str]:
+        bus_signals = {}
+        for comp_id, comp in components.items():
+            if not self._is_bus_component(comp):
+                continue
+            args = getattr(comp, "args", {}) or {}
+            pins = getattr(comp, "pins", {}) or {}
+            for candidate in (comp_id, args.get("Name"), pins.get("0"), getattr(comp, "label", None)):
+                if candidate:
+                    bus_signals[str(candidate)] = comp_id
+        return bus_signals
+
+    def _validate_topology(self, model_info: Dict[str, Any]) -> Dict:
         """拓扑验证"""
         logger.info("\n[阶段1] 拓扑验证...")
         from cloudpss import Model
@@ -278,6 +381,7 @@ class ModelValidatorSkill(SkillBase):
         }
 
         try:
+            rid = model_info["rid"]
             model = Model.fetch(rid)
             components = model.getAllComponents()
 
@@ -285,89 +389,87 @@ class ModelValidatorSkill(SkillBase):
             logger.info(f"  元件总数: {len(components)}")
 
             # 检查母线数量
-            buses = [c for c in components.values()
-                     if "bus" in getattr(c, "definition", "").lower()]
+            buses = [c for c in components.values() if self._is_bus_component(c)]
             result["details"]["bus_count"] = len(buses)
             logger.info(f"  母线数量: {len(buses)}")
 
-            # 检查发电机/电源元件
-            generator_types = ["gen", "source", "pv", "wind", "wgsource"]
-            generators = []
-            for comp_id, comp in components.items():
-                defn = getattr(comp, "definition", "").lower()
-                if any(x in defn for x in generator_types):
-                    generators.append((comp_id, comp))
+            renewable_components = [
+                (comp_id, comp)
+                for comp_id, comp in components.items()
+                if self._is_renewable_component(comp)
+            ]
+            result["details"]["renewable_count"] = len(renewable_components)
+            logger.info(f"  新能源元件数量: {len(renewable_components)}")
 
-            result["details"]["generator_count"] = len(generators)
-            logger.info(f"  电源数量: {len(generators)}")
+            bus_signals = self._build_bus_signal_map(components)
+            disconnected_renewables = []
+            metadata_issues = []
+            verified_connections = []
 
-            # ========== 关键修复：电源元件引脚验证 ==========
-            disconnected_generators = []
+            for comp_id, comp in renewable_components:
+                comp_label = self._component_name(comp_id, comp)
+                comp_type = getattr(comp, "definition", "unknown")
+                pins = getattr(comp, "pins", {}) or {}
+                connected_pin = self._first_connected_pin(pins)
+                connected_bus_id = bus_signals.get(connected_pin)
 
-            # 获取所有母线名称用于验证连接
-            bus_names = set()
-            for comp_id, comp in components.items():
-                if "bus" in getattr(comp, "definition", "").lower():
-                    bus_names.add(comp_id)
-                    bus_name = getattr(comp, "name", None)
-                    if bus_name:
-                        bus_names.add(bus_name)
+                if not connected_pin:
+                    disconnected_renewables.append({
+                        "id": comp_id,
+                        "label": comp_label,
+                        "type": comp_type,
+                        "reason": "没有任何有效电气引脚连接"
+                    })
+                elif not connected_bus_id:
+                    disconnected_renewables.append({
+                        "id": comp_id,
+                        "label": comp_label,
+                        "type": comp_type,
+                        "reason": f"引脚连接 '{connected_pin}' 不是有效母线信号"
+                    })
+                else:
+                    verified_connections.append({
+                        "id": comp_id,
+                        "label": comp_label,
+                        "type": comp_type,
+                        "signal": connected_pin,
+                        "bus_id": connected_bus_id,
+                    })
 
-            for comp_id, comp in generators:
-                defn = getattr(comp, "definition", "").lower()
-                pins = getattr(comp, "pins", {})
+                args = getattr(comp, "args", {}) or {}
+                validation = self._metadata_integration.validate_parameters(comp_type, args)
+                if not validation.valid:
+                    metadata_issues.append({
+                        "id": comp_id,
+                        "label": comp_label,
+                        "type": comp_type,
+                        "errors": validation.errors,
+                    })
 
-                # 修复1: 检查电源元件必须有引脚
-                if not pins or not isinstance(pins, dict):
-                    # 只检查关键电源（风机、光伏等），忽略控制元件
-                    if any(x in defn for x in ["wgsource", "pv", "wind"]):
-                        disconnected_generators.append({
-                            "id": comp_id,
-                            "name": getattr(comp, "name", comp_id),
-                            "type": getattr(comp, "definition", "unknown"),
-                            "reason": "无引脚（电源元件必须至少有一个引脚连接到母线）"
-                        })
-                    continue
+                required = self._metadata_integration.get_required_parameters(comp_type)
+                missing = [p for p in required if p not in args or args[p] is None]
+                if missing:
+                    metadata_issues.append({
+                        "id": comp_id,
+                        "label": comp_label,
+                        "type": comp_type,
+                        "errors": [f"缺少必需参数: {', '.join(missing)}"],
+                    })
 
-                # 修复2: 检查关键电源元件（风机、光伏）的引脚连接
-                # SyncGeneratorRouter 可能有内部连接机制，不强制检查
-                if any(x in defn for x in ["wgsource", "pv", "wind"]):
-                    has_power_pin = False
-                    for pin_name, pin_value in pins.items():
-                        if pin_value and pin_value != "" and not pin_value.startswith("@"):
-                            # 检查是否连接到母线
-                            if pin_value in bus_names:
-                                has_power_pin = True
-                                break
-
-                    if not has_power_pin:
-                        # 检查是否有任何非空引脚（可能使用内部连接）
-                        any_connected = any(
-                            v and v != "" and not v.startswith("@")
-                            for v in pins.values()
-                        )
-                        if not any_connected:
-                            disconnected_generators.append({
-                                "id": comp_id,
-                                "name": getattr(comp, "name", comp_id),
-                                "type": getattr(comp, "definition", "unknown"),
-                                "reason": f"引脚未连接到母线（pins={pins}）"
-                            })
-
-            if disconnected_generators:
+            if disconnected_renewables:
                 result["passed"] = False
-                for dg in disconnected_generators:
+                for dg in disconnected_renewables:
                     result["errors"].append(
-                        f"电源元件 '{dg['name']}' ({dg['type']}) {dg['reason']}"
+                        f"新能源元件 '{dg['label']}' ({dg['type']}) {dg['reason']}"
                     )
-                result["details"]["disconnected_generators"] = disconnected_generators
-                logger.error(f"  ❌ {len(disconnected_generators)} 个电源元件未正确连接")
+                result["details"]["disconnected_renewables"] = disconnected_renewables
+                logger.error(f"  ❌ {len(disconnected_renewables)} 个新能源元件未正确连接")
 
             # 检查其他悬空引脚（非电源类）
             dangling = []
             for comp_id, comp in components.items():
-                # 跳过已检查的电源元件
-                if any(dg["id"] == comp_id for dg in disconnected_generators):
+                # 跳过已检查的新能源元件
+                if any(dg["id"] == comp_id for dg in disconnected_renewables):
                     continue
 
                 pins = getattr(comp, "pins", {})
@@ -381,9 +483,8 @@ class ModelValidatorSkill(SkillBase):
                         })
 
             if dangling:
-                result["warnings"].append(f"发现 {len(dangling)} 个元件有悬空引脚")
                 result["details"]["dangling_count"] = len(dangling)
-                logger.warning(f"  ⚠️ 悬空引脚: {len(dangling)} 个")
+                logger.info(f"  非关键悬空引脚: {len(dangling)} 个")
 
             # 检查参数完整性
             incomplete = []
@@ -396,44 +497,8 @@ class ModelValidatorSkill(SkillBase):
                         incomplete.append({"id": comp_id, "empty_params": empty})
 
             if incomplete:
-                result["warnings"].append(f"发现 {len(incomplete)} 个元件参数不完整")
-                logger.warning(f"  ⚠️ 参数不完整: {len(incomplete)} 个")
-
-            # ========== 元数据集成：基于元数据的参数验证 ==========
-            logger.info("  执行元数据参数验证...")
-            metadata_issues = []
-            for comp_id, comp in components.items():
-                comp_type = getattr(comp, "definition", "")
-                comp_label = getattr(comp, "label", comp_id)
-                args = getattr(comp, "args", {})
-
-                if not comp_type:
-                    continue
-
-                # 使用元数据验证参数
-                validation = self._metadata_integration.validate_parameters(comp_type, args)
-                if not validation.valid:
-                    metadata_issues.append({
-                        "id": comp_id,
-                        "label": comp_label,
-                        "type": comp_type,
-                        "errors": validation.errors
-                    })
-                    for error in validation.errors:
-                        logger.error(f"  ❌ {comp_label}: {error}")
-
-                # 检查必需参数
-                required = self._metadata_integration.get_required_parameters(comp_type)
-                if required:
-                    missing = [p for p in required if p not in args or args[p] is None]
-                    if missing:
-                        metadata_issues.append({
-                            "id": comp_id,
-                            "label": comp_label,
-                            "type": comp_type,
-                            "errors": [f"缺少必需参数: {', '.join(missing)}"]
-                        })
-                        logger.error(f"  ❌ {comp_label}: 缺少必需参数 {missing}")
+                result["details"]["incomplete_count"] = len(incomplete)
+                logger.info(f"  非关键参数缺失: {len(incomplete)} 个")
 
             if metadata_issues:
                 result["passed"] = False
@@ -443,7 +508,10 @@ class ModelValidatorSkill(SkillBase):
                             f"元件 '{issue['label']}' ({issue['type']}): {error}"
                         )
                 result["details"]["metadata_issues"] = metadata_issues
-                logger.error(f"  ❌ {len(metadata_issues)} 个元件元数据验证失败")
+                logger.error(f"  ❌ {len(metadata_issues)} 个新能源元件元数据验证失败")
+
+            if verified_connections:
+                result["details"]["renewable_connections"] = verified_connections
 
             if result["passed"]:
                 logger.info("  ✅ 拓扑验证通过")
@@ -457,7 +525,7 @@ class ModelValidatorSkill(SkillBase):
 
         return result
 
-    def _validate_powerflow(self, rid: str, tolerance: float) -> Dict:
+    def _validate_powerflow(self, model_info: Dict[str, Any], tolerance: float, timeout: int) -> Dict:
         """潮流验证"""
         logger.info("\n[阶段2] 潮流验证...")
         from cloudpss import Model
@@ -472,6 +540,7 @@ class ModelValidatorSkill(SkillBase):
         }
 
         try:
+            rid = model_info["rid"]
             model = Model.fetch(rid)
             logger.info("  提交潮流计算任务...")
 
@@ -480,7 +549,7 @@ class ModelValidatorSkill(SkillBase):
 
             # 等待完成
             start = time.time()
-            while time.time() - start < DEFAULT_TIMEOUT:
+            while time.time() - start < timeout:
                 status = job.status()
                 if status == 1:  # 完成
                     break
@@ -488,23 +557,36 @@ class ModelValidatorSkill(SkillBase):
                     raise RuntimeError("潮流计算失败")
                 time.sleep(2)
 
-            if time.time() - start >= DEFAULT_TIMEOUT:
+            if time.time() - start >= timeout:
                 raise TimeoutError("潮流计算超时")
 
             # 获取结果
             pf_result = job.result
             result["details"]["converged"] = True
 
+            bus_tables = pf_result.getBuses()
+            branch_tables = pf_result.getBranches()
+            if not bus_tables:
+                raise RuntimeError("潮流结果缺少母线表")
+            if not branch_tables:
+                raise RuntimeError("潮流结果缺少支路表")
+
+            bus_rows = table_rows(bus_tables[0])
+            branch_rows = table_rows(branch_tables[0])
+            if not bus_rows:
+                raise RuntimeError("潮流母线结果为空")
+            if not branch_rows:
+                raise RuntimeError("潮流支路结果为空")
+
+            result["details"]["bus_count"] = len(bus_rows)
+            result["details"]["branch_count"] = len(branch_rows)
+
             # 检查电压范围
-            buses = pf_result.getBuses()
-            vm_values = []
-            for bus in buses:
-                try:
-                    vm = bus.get("Vm", 0)
-                    if vm:
-                        vm_values.append(float(vm))
-                except:
-                    pass
+            vm_values = [
+                self._coerce_number(row.get(VM_COLUMN))
+                for row in bus_rows
+            ]
+            vm_values = [v for v in vm_values if v is not None]
 
             if vm_values:
                 from cloudpss_skills.core.auth_utils import DEFAULT_VOLTAGE_MIN, DEFAULT_VOLTAGE_MAX
@@ -513,19 +595,65 @@ class ModelValidatorSkill(SkillBase):
                 result["details"]["voltage_max"] = vm_max
                 logger.info(f"  电压范围: {vm_min:.4f} ~ {vm_max:.4f} pu")
 
-                # 电压合理性检查
                 if vm_min < DEFAULT_VOLTAGE_MIN or vm_max > DEFAULT_VOLTAGE_MAX:
-                    result["warnings"].append(
-                        f"电压异常: {vm_min:.3f} ~ {vm_max:.3f} pu"
+                    result["warnings"].append(f"电压异常: {vm_min:.3f} ~ {vm_max:.3f} pu")
+                    logger.warning("  ⚠️ 电压可能异常")
+
+            components = model.getAllComponents()
+            bus_signals = self._build_bus_signal_map(components)
+            renewable_rows = []
+            renewable_failures = []
+            for comp_id, comp in components.items():
+                if not self._is_renewable_component(comp):
+                    continue
+                connected_signal = self._first_connected_pin(getattr(comp, "pins", {}) or {})
+                if not connected_signal:
+                    continue
+                bus_id = bus_signals.get(connected_signal)
+                if not bus_id:
+                    continue
+
+                bus_row = next((row for row in bus_rows if row.get(BUS_COLUMN) == bus_id), None)
+                comp_name = self._component_name(comp_id, comp)
+                expected_p = self._expected_active_power(comp)
+                actual_p = self._coerce_number(bus_row.get(P_GEN_COLUMN)) if bus_row else None
+
+                renewable_rows.append({
+                    "component": comp_name,
+                    "type": getattr(comp, "definition", "unknown"),
+                    "signal": connected_signal,
+                    "bus_id": bus_id,
+                    "expected_p": expected_p,
+                    "actual_p": actual_p,
+                })
+
+                if bus_row is None:
+                    renewable_failures.append(
+                        f"新能源元件 '{comp_name}' 已连接到 {connected_signal}，但潮流结果中找不到对应母线行"
                     )
-                    logger.warning(f"  ⚠️ 电压可能异常")
+                    continue
 
-            # 检查线路潮流
-            branches = pf_result.getBranches()
-            result["details"]["branch_count"] = len(branches)
-            logger.info(f"  支路数量: {len(branches)}")
+                if expected_p is not None:
+                    minimum_expected = max(1.0, expected_p * 0.1)
+                    if actual_p is None or abs(actual_p) < minimum_expected:
+                        renewable_failures.append(
+                            f"新能源元件 '{comp_name}' 接入母线 {connected_signal}，"
+                            f"预期至少约 {minimum_expected:.1f} MW 注入，但实际潮流出力为 {actual_p or 0:.3f} MW"
+                        )
 
-            logger.info("  ✅ 潮流验证通过")
+            if renewable_rows:
+                result["details"]["renewable_rows"] = renewable_rows
+                logger.info(f"  新能源出力检查: {len(renewable_rows)} 个接入点")
+
+            if renewable_failures:
+                result["passed"] = False
+                result["errors"].extend(renewable_failures)
+                logger.error(f"  ❌ {len(renewable_failures)} 个新能源接入点未真实进入潮流结果")
+
+            if result["passed"]:
+                logger.info("  ✅ 潮流验证通过")
+            else:
+                logger.error("  ❌ 潮流验证失败")
 
         except Exception as e:
             result["passed"] = False
