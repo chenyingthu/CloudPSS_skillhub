@@ -254,7 +254,7 @@ class AutoLoopBreakerSkill(SkillBase):
                         init_value, name_prefix
                     )
                     log("INFO", f"  -> 成功插入 {len(broken_loops)} 个解环点")
-                except (AttributeError) as e:
+                except AttributeError as e:
                     log("ERROR", f"解环操作失败: {e}")
                     raise
 
@@ -525,7 +525,7 @@ class AutoLoopBreakerSkill(SkillBase):
 
             try:
                 comp = model.getComponentByKey(comp_key)
-            except (AttributeError, AttributeError, KeyError) as e:
+            except (AttributeError, KeyError) as e:
                 logger.warning(f"获取元件 {comp_key} 失败: {e}")
                 continue
 

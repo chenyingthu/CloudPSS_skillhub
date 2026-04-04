@@ -337,7 +337,7 @@ class AutoChannelSetupSkill(SkillBase):
                 logs=logs,
             )
 
-        except (AttributeError, FileNotFoundError, TypeError, ValueError) as e:
+        except (AttributeError, FileNotFoundError, TypeError, ValueError, RuntimeError, KeyError, ConnectionError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
