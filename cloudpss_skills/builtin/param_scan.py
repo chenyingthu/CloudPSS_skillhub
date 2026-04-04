@@ -201,7 +201,7 @@ class ParamScanSkill(SkillBase):
                     )
                     log("INFO", f"  -> 已设置 {param_name} = {value}")
 
-                except (AttributeError, TypeError) as e:
+                except (AttributeError, TypeError, ValueError) as e:
                     log("ERROR", f"  -> 参数设置失败: {e}")
                     results.append({
                         "value": value,
@@ -250,7 +250,7 @@ class ParamScanSkill(SkillBase):
 
                     results.append(result_data)
 
-                except (AttributeError, ConnectionError, RuntimeError) as e:
+                except (AttributeError, ConnectionError, RuntimeError, FileNotFoundError, ValueError) as e:
                     log("ERROR", f"  -> 仿真异常: {e}")
                     results.append({
                         "value": value,
@@ -300,9 +300,12 @@ class ParamScanSkill(SkillBase):
 
             log("INFO", f"结果已保存: {filepath}")
 
+            # 根据结果确定状态
+            failed_count = sum(1 for r in results if r["status"] != "success")
+
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.SUCCESS,
+                status=SkillStatus.SUCCESS if failed_count == 0 else SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
                 data=scan_result,
@@ -315,7 +318,7 @@ class ParamScanSkill(SkillBase):
                 },
             )
 
-        except (AttributeError, ConnectionError, RuntimeError) as e:
+        except (AttributeError, ConnectionError, RuntimeError, FileNotFoundError, ValueError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

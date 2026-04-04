@@ -404,6 +404,10 @@ class OrthogonalSensitivitySkill(SkillBase):
                 log("INFO", f"  -> 运行 {run.run_id}/{len(runs)}: {run.parameter_values}")
 
                 try:
+                    # 每次运行前深拷贝模型，避免参数改动累积
+                    from copy import deepcopy
+                    working_model = Model(deepcopy(model.toJSON()))
+
                     # 修改模型参数
                     for param in parameters:
                         param_name = param["name"]
@@ -412,10 +416,10 @@ class OrthogonalSensitivitySkill(SkillBase):
 
                         # 查找并修改元件参数
                         if comp_rid:
-                            components = model.getComponentsByRid(comp_rid)
+                            components = working_model.getComponentsByRid(comp_rid)
                         else:
                             # 尝试从参数名解析组件
-                            components = self._find_components_by_param(model, param_name)
+                            components = self._find_components_by_param(working_model, param_name, param.get("component_type"))
 
                         for comp_key, comp in components.items():
                             if hasattr(comp, 'args'):
@@ -430,7 +434,7 @@ class OrthogonalSensitivitySkill(SkillBase):
                     import time
                     import cloudpss
 
-                    runner = model.run(job)
+                    runner = working_model.run(job)
                     start = time.time()
 
                     while not runner.status() and (time.time() - start) < timeout:
@@ -484,9 +488,12 @@ class OrthogonalSensitivitySkill(SkillBase):
 
             log("INFO", f"分析完成: 成功 {success_count}/{len(runs)}")
 
+            # 根据成功率确定状态
+            final_status = SkillStatus.SUCCESS if success_count == len(runs) else SkillStatus.FAILED
+
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.SUCCESS,
+                status=final_status,
                 start_time=start_time,
                 end_time=datetime.now(),
                 data={
@@ -519,13 +526,36 @@ class OrthogonalSensitivitySkill(SkillBase):
                 error=str(e),
             )
 
-    def _find_components_by_param(self, model: Any, param_name: str) -> Dict:
+    def _find_components_by_param(self, model: Any, param_name: str, component_type: Optional[str] = None) -> Dict:
         """根据参数名查找组件"""
-        # 简化实现：返回所有发电机组件
-        try:
-            return model.getComponentsByRid("model/CloudPSS/_newGenerator")
-        except Exception as e:
-            return {}
+        # 如果提供了组件类型，直接按类型查找
+        if component_type:
+            try:
+                return model.getComponentsByRid(component_type)
+            except Exception:
+                return {}
+
+        # 尝试从参数名解析组件类型
+        # 例如 "Gen1.pf_P" -> 发电机类型, "Bus1.V" -> 母线类型
+        if param_name.startswith("Gen") or "generator" in param_name.lower():
+            try:
+                return model.getComponentsByRid("model/CloudPSS/_newGenerator")
+            except Exception:
+                return {}
+        elif param_name.startswith("Bus") or "bus" in param_name.lower():
+            try:
+                return model.getComponentsByRid("model/CloudPSS/_newBus_3p")
+            except Exception:
+                return {}
+        elif param_name.startswith("Load") or "load" in param_name.lower():
+            try:
+                return model.getComponentsByRid("model/CloudPSS/_newLoad_3p")
+            except Exception:
+                return {}
+
+        # 无法识别参数类型，返回空字典
+        logger.warning(f"无法从参数名 '{param_name}' 识别组件类型，请显式指定 component_rid 或 component_type")
+        return {}
 
     def _extract_metric(self, result: Any, target: Dict, model: Any) -> float:
         """从结果中提取指标"""
