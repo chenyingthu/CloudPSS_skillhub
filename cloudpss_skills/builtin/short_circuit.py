@@ -285,7 +285,7 @@ class ShortCircuitSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError) as e:
+        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError, TypeError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

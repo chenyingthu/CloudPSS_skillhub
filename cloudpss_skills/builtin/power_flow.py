@@ -158,6 +158,8 @@ class PowerFlowSkill(SkillBase):
             # 5. 获取结果
             log("INFO", "提取结果...")
             result = job.result
+            if result is None or not result.getBuses() or not result.getBranches():
+                raise RuntimeError("潮流结果为空或缺少母线/支路表")
 
             # 6. 导出
             output_config = config.get("output", {})
@@ -203,7 +205,7 @@ class PowerFlowSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError) as e:
+        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError, TypeError) as e:
             log("ERROR", str(e))
             return SkillResult(
                 skill_name=self.name,

@@ -13,6 +13,84 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+def fetch_job_with_result(job_id: str):
+    """
+    获取任务及其结果。
+
+    对 EMT 历史任务，CloudPSS SDK 的 ``Job.fetch(job_id).result`` 默认不会回放
+    已结束任务的历史 plot 消息，导致 ``getPlots()`` 为空。这里在检测到空波形时，
+    主动从输出流做一次历史回放。
+    """
+    from cloudpss import Job
+
+    job = Job.fetch(job_id)
+    result = job.result
+
+    if result is None:
+        return job, result
+
+    if hasattr(result, "getPlots"):
+        try:
+            if len(list(result.getPlots())) == 0 and getattr(job, "output", None):
+                replayed = replay_historical_emt_result(job)
+                if replayed is not None:
+                    job._result = replayed
+                    result = replayed
+        except Exception as e:
+            logger.debug(f"历史 EMT 结果回放失败，回退到SDK默认结果: {e}")
+
+    return job, result
+
+
+def replay_historical_emt_result(job):
+    """
+    为已完成的 EMT 任务回放历史输出流，恢复 plot 数据。
+    """
+    import websocket
+    from cloudpss.job.messageStreamReceiver import MessageStreamReceiver
+    from cloudpss.job.result import getResultClass
+
+    output_id = getattr(job, "output", None)
+    if not output_id:
+        return None
+
+    receiver = MessageStreamReceiver(output_id, baseUrl=getattr(job, "baseUrl", None), job=job)
+    path = receiver._MessageStreamReceiver__path("1970-01-01T00:00:00Z")
+    ws = None
+
+    try:
+        ws = websocket.create_connection(
+            path,
+            header=["User-Agent: cloudpss-sdk-python/history-replay"],
+            timeout=10,
+        )
+        setattr(ws, "url", path)
+        receiver.ws = ws
+
+        while True:
+            try:
+                message = ws.recv()
+            except websocket.WebSocketConnectionClosedException:
+                break
+
+            if message is None:
+                break
+
+            if isinstance(message, str):
+                continue
+
+            receiver._MessageStreamReceiver__on_message(message)
+    finally:
+        if ws is not None:
+            try:
+                ws.close()
+            except Exception:
+                pass
+
+    result_class = getResultClass(job.context[0])
+    return result_class(job, receiver)
+
+
 def get_components_by_type(model, comp_type: str) -> Dict[str, Dict]:
     """
     动态获取指定类型的组件列表
@@ -25,17 +103,34 @@ def get_components_by_type(model, comp_type: str) -> Dict[str, Dict]:
         组件字典，key为组件key，value为组件定义
     """
     try:
-        revision = model.getRevision()
-        cells = revision.get("implements", {}).get("diagram", {}).get("cells", [])
+        if hasattr(model, "getRevision"):
+            revision = model.getRevision()
+            cells = revision.get("implements", {}).get("diagram", {}).get("cells", [])
+
+            components = {}
+            for cell in cells:
+                if cell.get("type") == "standard.Image":
+                    data = cell.get("data", {})
+                    if data.get("rid") == comp_type:
+                        components[cell.get("key")] = data
+
+            logger.debug(f"通过revision获取到 {len(components)} 个类型为 {comp_type} 的组件")
+            return components
 
         components = {}
-        for cell in cells:
-            if cell.get("type") == "standard.Image":
-                data = cell.get("data", {})
-                if data.get("rid") == comp_type:
-                    components[cell.get("key")] = data
+        for key, comp in model.getAllComponents().items():
+            if getattr(comp, "definition", None) != comp_type:
+                continue
+            components[key] = {
+                "key": key,
+                "label": getattr(comp, "label", ""),
+                "name": getattr(comp, "name", ""),
+                "args": getattr(comp, "args", {}) or {},
+                "pins": getattr(comp, "pins", {}) or {},
+                "definition": getattr(comp, "definition", ""),
+            }
 
-        logger.debug(f"获取到 {len(components)} 个类型为 {comp_type} 的组件")
+        logger.debug(f"通过getAllComponents获取到 {len(components)} 个类型为 {comp_type} 的组件")
         return components
 
     except Exception as e:

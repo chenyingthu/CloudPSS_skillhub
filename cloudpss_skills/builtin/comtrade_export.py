@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.utils import fetch_job_with_result
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +142,7 @@ class ComtradeExportSkill(SkillBase):
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
         """执行COMTRADE导出"""
-        from cloudpss import Job, setToken
+        from cloudpss import setToken
 
         start_time = datetime.now()
         logs = []
@@ -180,8 +181,7 @@ class ComtradeExportSkill(SkillBase):
 
             log("INFO", f"获取任务结果: {job_id}")
 
-            job = Job.fetch(job_id)
-            result = job.result
+            job, result = fetch_job_with_result(job_id)
 
             if result is None:
                 raise RuntimeError("任务结果为空")
@@ -253,7 +253,7 @@ class ComtradeExportSkill(SkillBase):
                 all_times.update(ch_data["time"])
             sorted_times = sorted(all_times)
 
-            log("INFO", f"数据点数: {len(sorted_times)}, 采样率: {sampling_rate:.2f} Hz")
+            log("INFO", f"数据点数: {len(sorted_times)}, 采样率: {(sampling_rate or 1000.0):.2f} Hz")
 
             # 6. 准备输出路径
             output_path = Path(output_config.get("path", "./results/"))
@@ -397,7 +397,7 @@ class ComtradeExportSkill(SkillBase):
                     "job_id": job_id,
                     "channels_exported": len(channels_to_export),
                     "samples": len(sorted_times),
-                    "sampling_rate_hz": sampling_rate,
+                    "sampling_rate_hz": sampling_rate or 1000.0,
                     "file_type": file_type,
                     "cfg_file": str(cfg_path),
                     "dat_file": str(dat_path),
@@ -410,7 +410,7 @@ class ComtradeExportSkill(SkillBase):
                 },
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError) as e:
+        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError, TypeError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.utils import fetch_job_with_result
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +114,7 @@ class WaveformExportSkill(SkillBase):
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
         """执行导出"""
-        from cloudpss import Job, setToken
+        from cloudpss import setToken
 
         start_time = datetime.now()
         logs = []
@@ -143,15 +144,12 @@ class WaveformExportSkill(SkillBase):
             if not token:
                 raise ValueError("未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件")
 
-            if not token:
-                raise ValueError("未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件")
-
             setToken(token)
 
             # 2. 获取任务
             job_id = source_config["job_id"]
             log("INFO", f"获取任务: {job_id}")
-            job = Job.fetch(job_id)
+            job, result = fetch_job_with_result(job_id)
 
             # 3. 检查结果
             if job.status() != 1:
@@ -159,7 +157,6 @@ class WaveformExportSkill(SkillBase):
 
             # 4. 获取结果
             log("INFO", "提取结果...")
-            result = job.result
             plots = list(result.getPlots())
             log("INFO", f"波形分组数: {len(plots)}")
 
@@ -280,7 +277,7 @@ class WaveformExportSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError) as e:
+        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError, TypeError) as e:
             log("ERROR", str(e))
             return SkillResult(
                 skill_name=self.name,

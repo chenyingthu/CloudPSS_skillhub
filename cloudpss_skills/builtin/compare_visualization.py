@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.utils import fetch_job_with_result
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +191,7 @@ class CompareVisualizationSkill(SkillBase):
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
         """执行对比可视化"""
-        from cloudpss import Job, setToken
+        from cloudpss import setToken
         import matplotlib
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
@@ -220,6 +221,9 @@ class CompareVisualizationSkill(SkillBase):
                 if token_path.exists():
                     token = token_path.read_text().strip()
 
+            if not token:
+                raise ValueError("未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件")
+
             setToken(token)
             log("INFO", "认证成功")
 
@@ -245,8 +249,7 @@ class CompareVisualizationSkill(SkillBase):
                 log("INFO", f"获取任务: {label} ({job_id})")
 
                 try:
-                    job = Job.fetch(job_id)
-                    result = job.result
+                    job, result = fetch_job_with_result(job_id)
 
                     if result is None:
                         log("WARNING", f"  -> 任务 {label} 结果为空，跳过")
@@ -628,7 +631,7 @@ class CompareVisualizationSkill(SkillBase):
                 },
             )
 
-        except (KeyError, AttributeError, ConnectionError) as e:
+        except (KeyError, AttributeError, ConnectionError, RuntimeError, FileNotFoundError, ValueError, TypeError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

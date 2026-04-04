@@ -301,7 +301,12 @@ class ConfigBatchRunnerSkill(SkillBase):
                     while not runner.status() and elapsed < timeout:
                         time.sleep(polling_interval)
                         elapsed += polling_interval
-                        logs_buffer = runner.result.getLogs()
+                        logs_buffer = []
+                        try:
+                            if hasattr(runner, "result") and hasattr(runner.result, "getLogs"):
+                                logs_buffer = runner.result.getLogs() or []
+                        except (AttributeError, RuntimeError, TypeError):
+                            logs_buffer = []
                         if logs_buffer and idx == 0:  # 只打印第一个配置的日志
                             for log_entry in logs_buffer[-3:]:  # 最近3条
                                 if isinstance(log_entry, dict) and "data" in log_entry:
@@ -346,7 +351,7 @@ class ConfigBatchRunnerSkill(SkillBase):
                     results.append(result)
                     runner_ids.append((runner_id, current_time, cfg_name, model.rid, model.name))
 
-                except (KeyError, AttributeError) as e:
+                except (KeyError, AttributeError, ValueError, RuntimeError, TimeoutError, TypeError, FileNotFoundError, ConnectionError) as e:
                     error_msg = str(e)
                     log("ERROR", f"  -> 运行失败: {error_msg}")
                     result = ConfigRunResult(
@@ -424,7 +429,7 @@ class ConfigBatchRunnerSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, ValueError, RuntimeError) as e:
+        except (KeyError, AttributeError, ValueError, RuntimeError, TimeoutError, TypeError, FileNotFoundError, ConnectionError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

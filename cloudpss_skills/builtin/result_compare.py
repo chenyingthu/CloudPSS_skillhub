@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.utils import fetch_job_with_result
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +125,7 @@ class ResultCompareSkill(SkillBase):
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
         """执行结果对比"""
-        from cloudpss import Job, setToken
+        from cloudpss import setToken
 
         start_time = datetime.now()
         logs = []
@@ -170,8 +171,7 @@ class ResultCompareSkill(SkillBase):
                 log("INFO", f"获取任务: {label} ({job_id})")
 
                 try:
-                    job = Job.fetch(job_id)
-                    result = job.result
+                    job, result = fetch_job_with_result(job_id)
 
                     if result is None:
                         log("WARNING", f"  -> 任务 {label} 结果为空")
@@ -267,6 +267,10 @@ class ResultCompareSkill(SkillBase):
 
                 comparison[channel] = channel_comparison
 
+            # 检查是否有有效对比数据，避免生成空报告
+            if len(all_channels) == 0:
+                raise RuntimeError("没有有效的通道数据进行对比")
+
             # 4. 导出结果
             output_config = config.get("output", {})
             output_path = Path(output_config.get("path", "./results/"))
@@ -296,19 +300,6 @@ class ResultCompareSkill(SkillBase):
 
             log("INFO", f"对比报告已保存: {filepath}")
 
-            # 检查是否有有效对比数据
-            if len(all_channels) == 0:
-                log("ERROR", "没有有效的通道数据进行对比")
-                return SkillResult(
-                    skill_name=self.name,
-                    status=SkillStatus.FAILED,
-                    start_time=start_time,
-                    end_time=datetime.now(),
-                    data={"error": "没有有效的通道数据进行对比"},
-                    artifacts=artifacts,
-                    logs=logs,
-                )
-
             # 构建结果数据
             result_data = {
                 "timestamp": datetime.now().isoformat(),
@@ -331,7 +322,7 @@ class ResultCompareSkill(SkillBase):
                 },
             )
 
-        except (KeyError, AttributeError, RuntimeError, FileNotFoundError, ValueError) as e:
+        except (KeyError, AttributeError, RuntimeError, FileNotFoundError, ValueError, TypeError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

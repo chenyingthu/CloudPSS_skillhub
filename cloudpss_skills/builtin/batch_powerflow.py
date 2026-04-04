@@ -200,6 +200,9 @@ class BatchPowerFlowSkill(SkillBase):
                         waited += 2
 
                     if status == 1:
+                        result = job.result
+                        if result is None or not result.getBuses() or not result.getBranches():
+                            raise RuntimeError("潮流结果为空或缺少母线/支路表")
                         converged_count += 1
                         result_data = {
                             "model_rid": model_rid,
@@ -222,7 +225,7 @@ class BatchPowerFlowSkill(SkillBase):
 
                     results.append(result_data)
 
-                except (AttributeError, ConnectionError, RuntimeError) as e:
+                except (AttributeError, ConnectionError, RuntimeError, FileNotFoundError, ValueError, TypeError) as e:
                     failed_count += 1
                     log("ERROR", f"  -> 计算异常: {e}")
                     results.append({
@@ -352,7 +355,7 @@ class BatchPowerFlowSkill(SkillBase):
                 },
             )
 
-        except (AttributeError, ConnectionError, RuntimeError, FileNotFoundError, OSError) as e:
+        except (AttributeError, ConnectionError, RuntimeError, FileNotFoundError, OSError, ValueError, TypeError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

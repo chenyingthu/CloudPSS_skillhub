@@ -18,6 +18,7 @@ from datetime import datetime
 
 from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult
 from cloudpss_skills.core.auth_utils import setup_auth, DEFAULT_TIMEOUT
+from cloudpss_skills.core.registry import register
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class RenewableIntegrationReport:
     stability_impact: Dict[str, Any]
 
 
+@register
 class RenewableIntegrationSkill(SkillBase):
     """
     新能源接入评估技能
@@ -352,7 +354,8 @@ class RenewableIntegrationSkill(SkillBase):
             "recommendation": recommendation,
             "threshold": config.get("analysis", {}).get("scr", {}).get("threshold", 3.0),
             "passed": scr >= config.get("analysis", {}).get("scr", {}).get("threshold", 3.0),
-            "calculation_method": "基于系统拓扑估算"
+            "calculation_method": "基于系统拓扑估算",
+            "verified": False,
         }
 
     def _analyze_voltage_variation(self, model_rid: str, config: Dict) -> Dict:
@@ -428,7 +431,8 @@ class RenewableIntegrationSkill(SkillBase):
             "tolerance_percent": tolerance * 100,
             "passed": max_change <= tolerance,
             "note": f"电压变化基于{renewable_capacity}MW新能源容量估算",
-            "warning": "此结果是基于简化估算，未进行实际仿真验证，仅供初步评估参考"
+            "warning": "此结果是基于简化估算，未进行实际仿真验证，仅供初步评估参考",
+            "verified": False,
         }
 
     def _extract_voltages_from_result(self, pf_result) -> list:
@@ -501,7 +505,8 @@ class RenewableIntegrationSkill(SkillBase):
             "thd_percent": round(thd, 2),
             "thd_limit_percent": limit * 100,
             "passed": thd / 100 <= limit,
-            "warning": "此结果是基于典型值的简化估算，未进行实际仿真验证，仅供初步评估参考"
+            "warning": "此结果是基于典型值的简化估算，未进行实际仿真验证，仅供初步评估参考",
+            "verified": False,
         }
 
     def _verify_lvrt_compliance(self, model_rid: str, config: Dict) -> Dict:
@@ -549,7 +554,8 @@ class RenewableIntegrationSkill(SkillBase):
             "lvrt_curve": req["curve"],
             "compliant": assumed_compliant,
             "notes": "基于模型配置验证，建议通过EMT仿真详细验证",
-            "warning": "此结果是基于假设的简化验证，未进行实际EMT仿真，仅供初步评估参考"
+            "warning": "此结果是基于假设的简化验证，未进行实际EMT仿真，仅供初步评估参考",
+            "verified": False,
         }
 
     def _assess_stability_impact(self, model_rid: str, config: Dict) -> Dict:
@@ -597,7 +603,8 @@ class RenewableIntegrationSkill(SkillBase):
                 "继续监控电压稳定性",
                 "建议定期进行暂态稳定校核"
             ],
-            "warning": "此结果是基于典型值的简化评估，未进行实际暂态仿真验证，仅供初步评估参考"
+            "warning": "此结果是基于典型值的简化评估，未进行实际暂态仿真验证，仅供初步评估参考",
+            "verified": False,
         }
 
     def _generate_summary(self, analysis_results: Dict) -> Dict:
@@ -608,13 +615,18 @@ class RenewableIntegrationSkill(SkillBase):
 
         overall_passed = all(r.get("passed", True) for r in analysis_results.values()
                             if isinstance(r, dict))
+        overall_verified = all(r.get("verified", True) for r in analysis_results.values()
+                              if isinstance(r, dict))
 
         return {
             "total_analysis": total_count,
             "passed": passed_count,
             "overall_passed": overall_passed,
+            "overall_verified": overall_verified,
+            "certifiable": overall_passed and overall_verified,
             "assessment": "通过" if overall_passed else "需要改进",
-            "recommendations": self._generate_recommendations(analysis_results)
+            "recommendations": self._generate_recommendations(analysis_results),
+            "limitations": [] if overall_verified else ["当前评估包含估算/假设结果，不能作为已完成真实并网验证的结论"],
         }
 
     def _generate_recommendations(self, analysis_results: Dict) -> List[str]:

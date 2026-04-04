@@ -144,6 +144,8 @@ class ReportGeneratorSkill(SkillBase):
 
             # 收集技能结果
             collected_results = self._collect_skill_results(skills, skill_results)
+            if skills and not skill_results:
+                raise RuntimeError("未提供真实的skill_results，不能基于占位结果生成正式报告")
 
             # 生成报告章节
             self.sections = self._generate_sections(report_config, collected_results)
@@ -187,7 +189,7 @@ class ReportGeneratorSkill(SkillBase):
                 artifacts=artifacts
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError) as e:
+        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, TypeError, ValueError) as e:
             logger.error(f"报告生成失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,

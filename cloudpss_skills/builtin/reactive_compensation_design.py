@@ -34,6 +34,20 @@ from cloudpss_skills.core.utils import (
 logger = logging.getLogger(__name__)
 
 
+def _matches_bus_identifier(candidate: str, target: str) -> bool:
+    candidate_norm = (candidate or "").strip().lower()
+    target_norm = (target or "").strip().lower()
+    if not candidate_norm or not target_norm:
+        return False
+    if candidate_norm == target_norm:
+        return True
+    if target_norm in candidate_norm or candidate_norm in target_norm:
+        return True
+    candidate_digits = "".join(ch for ch in candidate_norm if ch.isdigit())
+    target_digits = "".join(ch for ch in target_norm if ch.isdigit())
+    return bool(candidate_digits and candidate_digits == target_digits)
+
+
 @register
 class ReactiveCompensationDesignSkill(SkillBase):
     """无功补偿设计技能"""
@@ -147,15 +161,27 @@ class ReactiveCompensationDesignSkill(SkillBase):
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
         """执行无功补偿设计"""
+        from cloudpss import setToken
+
         start_time = datetime.now()
         logs = []
         artifacts = []
 
         try:
+            auth = config.get("auth", {})
+            token = auth.get("token")
+            if not token:
+                token_file = auth.get("token_file", ".cloudpss_token")
+                token_path = Path(token_file)
+                if not token_path.exists():
+                    raise FileNotFoundError(f"Token文件不存在: {token_file}")
+                token = token_path.read_text().strip()
+            setToken(token)
+
             # 1. 获取模型
             model_rid = config["model"]["rid"]
             logger.info(f"无功补偿设计开始 - 模型: {model_rid}")
-            logs.append(LogEntry(level="INFO", message=f"加载模型: {model_rid}"))
+            logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"加载模型: {model_rid}"))
 
             model = Model.fetch(model_rid)
 
@@ -164,15 +190,18 @@ class ReactiveCompensationDesignSkill(SkillBase):
 
             if not target_buses:
                 return SkillResult(
+                    skill_name=self.name,
                     status=SkillStatus.FAILED,
+                    start_time=start_time,
+                    end_time=datetime.now(),
                     data={},
                     artifacts=artifacts,
-                    logs=logs + [LogEntry(level="ERROR", message="未找到补偿目标母线")],
+                    logs=logs + [LogEntry(timestamp=datetime.now(), level="ERROR", message="未找到补偿目标母线")],
                     metrics={"duration": (datetime.now() - start_time).total_seconds()}
                 )
 
             logger.info(f"补偿目标母线: {[b['label'] for b in target_buses]}")
-            logs.append(LogEntry(level="INFO", message=f"补偿目标母线: {len(target_buses)}个"))
+            logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"补偿目标母线: {len(target_buses)}个"))
 
             # 3. 根据设备类型添加补偿设备
             comp_config = config.get("compensation", {})
@@ -188,7 +217,9 @@ class ReactiveCompensationDesignSkill(SkillBase):
                     avr_ka=comp_config.get("avr_ka", 14.2)
                 )
                 logger.info(f"添加了 {len(sync_ids)} 个调相机")
-                logs.append(LogEntry(level="INFO", message=f"添加了 {len(sync_ids)} 个调相机"))
+                logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"添加了 {len(sync_ids)} 个调相机"))
+                if not sync_ids:
+                    raise RuntimeError("未成功添加任何调相机，无法开展补偿设计")
 
                 # 迭代优化
                 iteration_config = config.get("iteration", {})
@@ -213,7 +244,9 @@ class ReactiveCompensationDesignSkill(SkillBase):
                     control_mode=comp_config.get("control_mode", "voltage_control")
                 )
                 logger.info(f"添加了 {len(svg_ids)} 个SVG")
-                logs.append(LogEntry(level="INFO", message=f"添加了 {len(svg_ids)} 个SVG"))
+                logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"添加了 {len(svg_ids)} 个SVG"))
+                if not svg_ids:
+                    raise RuntimeError("未成功添加任何SVG，无法开展补偿设计")
 
                 # SVG不需要迭代优化，直接使用初始容量
                 iteration_result = {
@@ -234,7 +267,9 @@ class ReactiveCompensationDesignSkill(SkillBase):
                     control_mode=comp_config.get("control_mode", "voltage_control")
                 )
                 logger.info(f"添加了 {len(svc_ids)} 个SVC")
-                logs.append(LogEntry(level="INFO", message=f"添加了 {len(svc_ids)} 个SVC"))
+                logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"添加了 {len(svc_ids)} 个SVC"))
+                if not svc_ids:
+                    raise RuntimeError("未成功添加任何SVC，无法开展补偿设计")
 
                 # SVC不需要迭代优化，直接使用初始容量
                 iteration_result = {
@@ -256,7 +291,9 @@ class ReactiveCompensationDesignSkill(SkillBase):
                     num_steps=num_steps
                 )
                 logger.info(f"添加了 {len(cap_ids)} 个电容器组")
-                logs.append(LogEntry(level="INFO", message=f"添加了 {len(cap_ids)} 个电容器组"))
+                logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"添加了 {len(cap_ids)} 个电容器组"))
+                if not cap_ids:
+                    raise RuntimeError("未成功添加任何电容器组，无法开展补偿设计")
 
                 # 电容器组不需要迭代优化，直接使用初始容量
                 iteration_result = {
@@ -271,7 +308,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
                 raise ValueError(f"不支持的设备类型: {device_type}")
 
             logger.info(f"迭代优化完成 - 迭代次数: {iteration_result['iterations']}")
-            logs.append(LogEntry(level="INFO", message=f"迭代优化完成，共{iteration_result['iterations']}次迭代"))
+            logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"迭代优化完成，共{iteration_result['iterations']}次迭代"))
 
             # 5. 生成输出
             output_config = config.get("output", {})
@@ -326,10 +363,14 @@ class ReactiveCompensationDesignSkill(SkillBase):
             ))
 
             duration = (datetime.now() - start_time).total_seconds()
-            logs.append(LogEntry(level="INFO", message=f"无功补偿设计完成，耗时 {duration:.2f}s"))
+            logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"无功补偿设计完成，耗时 {duration:.2f}s"))
 
+            overall_status = SkillStatus.SUCCESS if iteration_result.get("converged", False) else SkillStatus.FAILED
             return SkillResult(
-                status=SkillStatus.SUCCESS,
+                skill_name=self.name,
+                status=overall_status,
+                start_time=start_time,
+                end_time=datetime.now(),
                 data=result_data,
                 artifacts=artifacts,
                 logs=logs,
@@ -341,13 +382,17 @@ class ReactiveCompensationDesignSkill(SkillBase):
                 }
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError) as e:
+        except (KeyError, AttributeError, ZeroDivisionError, FileNotFoundError, RuntimeError, ValueError, TypeError, ConnectionError) as e:
             logger.error(f"无功补偿设计失败: {e}", exc_info=True)
             return SkillResult(
+                skill_name=self.name,
                 status=SkillStatus.FAILED,
+                start_time=start_time,
+                end_time=datetime.now(),
                 data={},
                 artifacts=artifacts,
-                logs=logs + [LogEntry(level="ERROR", message=f"设计失败: {str(e)}")],
+                logs=logs + [LogEntry(timestamp=datetime.now(), level="ERROR", message=f"设计失败: {str(e)}")],
+                error=str(e),
                 metrics={"duration": (datetime.now() - start_time).total_seconds()}
             )
 
@@ -361,10 +406,16 @@ class ReactiveCompensationDesignSkill(SkillBase):
             buses = get_bus_components(model)
             target_buses = []
             for key, data in buses.items():
-                if data.get("label") in target_labels:
+                label = data.get("label", "")
+                bus_name = str(data.get("args", {}).get("Name", ""))
+                if any(
+                    _matches_bus_identifier(label, target) or _matches_bus_identifier(bus_name, target)
+                    for target in target_labels
+                ):
                     target_buses.append({
                         "key": key,
-                        "label": data.get("label"),
+                        "label": label,
+                        "name": bus_name,
                         "voltage": float(data.get("args", {}).get("V", 1)) * float(data.get("args", {}).get("VBase", 1))
                     })
             return target_buses
@@ -388,10 +439,13 @@ class ReactiveCompensationDesignSkill(SkillBase):
             for bus_info in selected_buses:
                 label = bus_info["label"]
                 for key, data in buses.items():
-                    if data.get("label") == label:
+                    current_label = data.get("label", "")
+                    bus_name = str(data.get("args", {}).get("Name", ""))
+                    if _matches_bus_identifier(current_label, label) or _matches_bus_identifier(bus_name, label):
                         target_buses.append({
                             "key": key,
-                            "label": label,
+                            "label": current_label,
+                            "name": bus_name,
                             "voltage": float(data.get("args", {}).get("V", 1)) * float(data.get("args", {}).get("VBase", 1)),
                             "vsi": bus_info.get("vsi", 0)
                         })
@@ -462,13 +516,13 @@ class ReactiveCompensationDesignSkill(SkillBase):
 
                 sync_pins = {"0": f"CompBus_{i}"}
 
-                key1, _ = model.addComponent(
-                    definition="model/CloudPSS/SyncGeneratorRouter",
-                    key=sync_id,
-                    args=sync_args,
-                    pins=sync_pins
+                sync_comp = model.addComponent(
+                    "model/CloudPSS/SyncGeneratorRouter",
+                    sync_id,
+                    sync_args,
+                    sync_pins
                 )
-                sync_ids.append(key1)
+                sync_ids.append(sync_comp.id)
 
                 # 添加变压器
                 tran_id = f"Tran_{i}"
@@ -492,13 +546,13 @@ class ReactiveCompensationDesignSkill(SkillBase):
 
                 tran_pins = {"0": bus_pin, "1": f"CompBus_{i}"}
 
-                key2, _ = model.addComponent(
-                    definition="model/CloudPSS/_newTransformer_3p2w",
-                    key=tran_id,
-                    args=tran_args,
-                    pins=tran_pins
+                transformer = model.addComponent(
+                    "model/CloudPSS/_newTransformer_3p2w",
+                    tran_id,
+                    tran_args,
+                    tran_pins
                 )
-                tran_ids.append(key2)
+                tran_ids.append(transformer.id)
 
                 # 添加AVR调压器
                 avr_id = f"AVR_{i}"
@@ -514,10 +568,10 @@ class ReactiveCompensationDesignSkill(SkillBase):
                 avr_pins = {"0": f"CompBus_{i}"}
 
                 model.addComponent(
-                    definition="model/CloudPSS/_PSASP_AVR_11to12",
-                    key=avr_id,
-                    args=avr_args,
-                    pins=avr_pins
+                    "model/CloudPSS/_PSASP_AVR_11to12",
+                    avr_id,
+                    avr_args,
+                    avr_pins
                 )
 
             except (AttributeError, TypeError) as e:
@@ -575,13 +629,13 @@ class ReactiveCompensationDesignSkill(SkillBase):
 
                 svg_pins = {"0": bus_key}
 
-                key, _ = model.addComponent(
-                    definition="model/CloudPSS/SVG",
-                    key=svg_id,
-                    args=svg_args,
-                    pins=svg_pins
+                svg_comp = model.addComponent(
+                    "model/CloudPSS/SVG",
+                    svg_id,
+                    svg_args,
+                    svg_pins
                 )
-                svg_ids.append(key)
+                svg_ids.append(svg_comp.id)
 
                 logger.info(f"已添加SVG {svg_name} 到母线 {bus['label']}，容量: {initial_capacity} MVar")
 
@@ -640,13 +694,13 @@ class ReactiveCompensationDesignSkill(SkillBase):
 
                 svc_pins = {"0": bus_key}
 
-                key, _ = model.addComponent(
-                    definition="model/CloudPSS/SVC",
-                    key=svc_id,
-                    args=svc_args,
-                    pins=svc_pins
+                svc_comp = model.addComponent(
+                    "model/CloudPSS/SVC",
+                    svc_id,
+                    svc_args,
+                    svc_pins
                 )
-                svc_ids.append(key)
+                svc_ids.append(svc_comp.id)
 
                 logger.info(f"已添加SVC {svc_name} 到母线 {bus['label']}，容量: {initial_capacity} MVar")
 
@@ -706,13 +760,13 @@ class ReactiveCompensationDesignSkill(SkillBase):
 
                 cap_pins = {"0": bus_key}
 
-                key, _ = model.addComponent(
+                cap_comp = model.addComponent(
                     "model/CloudPSS/_newCapacitor",
                     cap_id,
                     cap_args,
                     cap_pins
                 )
-                cap_ids.append(key)
+                cap_ids.append(cap_comp.id)
 
                 logger.info(f"已添加电容器组 {cap_name} 到母线 {bus['label']}，"
                            f"总容量: {initial_capacity} MVar，级数: {num_steps}")

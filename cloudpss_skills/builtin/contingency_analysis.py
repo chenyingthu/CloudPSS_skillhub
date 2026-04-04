@@ -351,7 +351,7 @@ class ContingencyAnalysisSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, RuntimeError, TimeoutError, TypeError) as e:
+        except (KeyError, AttributeError, RuntimeError, TimeoutError, TypeError, FileNotFoundError, ValueError, ConnectionError) as e:
             log("ERROR", f"执行失败: {e}")
             import traceback
             log("DEBUG", traceback.format_exc())

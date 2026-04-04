@@ -210,7 +210,7 @@ class LossAnalysisSkill(SkillBase):
                 data=result_data
             )
 
-        except (KeyError, AttributeError, ConnectionError) as e:
+        except (KeyError, AttributeError, ConnectionError, RuntimeError, FileNotFoundError, TypeError, ValueError) as e:
             logger.error(f"网损分析失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,
@@ -325,21 +325,12 @@ class LossAnalysisSkill(SkillBase):
 
                 logger.info(f"从潮流结果提取了{len(self.branch_losses)}条线路的损耗")
 
-            # 如果没有从潮流结果获取到数据，使用模型组件作为备选
             if len(self.branch_losses) == 0:
-                self._calculate_line_losses_from_model()
+                raise RuntimeError("未从真实潮流结果提取到线路损耗")
 
         except (KeyError) as e:
             logger.error(f"计算线路损耗失败: {e}")
-            self._calculate_line_losses_from_model()
-
-    def _calculate_line_losses_from_model(self):
-        """从模型组件计算线路损耗（备选方法）
-
-        当潮流结果不可用时，返回空结果并提示需要运行潮流计算
-        """
-        logger.warning("无法获取潮流结果，无法计算线路损耗")
-        logger.info("提示：请确保模型可以成功运行潮流计算以获取准确的线路损耗数据")
+            raise RuntimeError("从潮流结果提取线路损耗失败") from e
 
     def _calculate_transformer_losses(self, power_flow_result):
         """计算变压器损耗 - 从真实潮流结果中提取"""

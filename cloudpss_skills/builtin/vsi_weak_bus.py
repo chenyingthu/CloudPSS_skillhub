@@ -34,6 +34,20 @@ from cloudpss_skills.core.utils import (
 logger = logging.getLogger(__name__)
 
 
+def _matches_bus_identifier(candidate: str, target: str) -> bool:
+    candidate_norm = (candidate or "").strip().lower()
+    target_norm = (target or "").strip().lower()
+    if not candidate_norm or not target_norm:
+        return False
+    if candidate_norm == target_norm:
+        return True
+    if target_norm in candidate_norm or candidate_norm in target_norm:
+        return True
+    candidate_digits = "".join(ch for ch in candidate_norm if ch.isdigit())
+    target_digits = "".join(ch for ch in target_norm if ch.isdigit())
+    return bool(candidate_digits and candidate_digits == target_digits)
+
+
 @register
 class VSIWeakBusSkill(SkillBase):
     """VSI弱母线分析技能"""
@@ -131,15 +145,27 @@ class VSIWeakBusSkill(SkillBase):
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
         """执行VSI弱母线分析"""
+        from cloudpss import setToken
+
         start_time = datetime.now()
         logs = []
         artifacts = []
 
         try:
+            auth = config.get("auth", {})
+            token = auth.get("token")
+            if not token:
+                token_file = auth.get("token_file", ".cloudpss_token")
+                token_path = Path(token_file)
+                if not token_path.exists():
+                    raise FileNotFoundError(f"Token文件不存在: {token_file}")
+                token = token_path.read_text().strip()
+            setToken(token)
+
             # 1. 获取模型
             model_rid = config["model"]["rid"]
             logger.info(f"VSI弱母线分析开始 - 模型: {model_rid}")
-            logs.append(LogEntry(level="INFO", message=f"加载模型: {model_rid}"))
+            logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"加载模型: {model_rid}"))
 
             model = Model.fetch(model_rid)
 
@@ -156,15 +182,18 @@ class VSIWeakBusSkill(SkillBase):
 
             if not test_buses:
                 return SkillResult(
+                    skill_name=self.name,
                     status=SkillStatus.FAILED,
+                    start_time=start_time,
+                    end_time=datetime.now(),
                     data={},
                     artifacts=artifacts,
-                    logs=logs + [LogEntry(level="ERROR", message="未找到符合条件的测试母线")],
+                    logs=logs + [LogEntry(timestamp=datetime.now(), level="ERROR", message="未找到符合条件的测试母线")],
                     metrics={"duration": (datetime.now() - start_time).total_seconds()}
                 )
 
             logger.info(f"选定 {len(test_buses)} 个测试母线")
-            logs.append(LogEntry(level="INFO", message=f"选定 {len(test_buses)} 个测试母线"))
+            logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"选定 {len(test_buses)} 个测试母线"))
 
             # 3. 添加VSI无功源
             injection_config = vsi_config.get("injection", {})
@@ -179,7 +208,9 @@ class VSIWeakBusSkill(SkillBase):
             )
 
             logger.info(f"添加了 {len(vsi_q_keys)} 个VSI无功源")
-            logs.append(LogEntry(level="INFO", message=f"添加了 {len(vsi_q_keys)} 个VSI无功源"))
+            logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"添加了 {len(vsi_q_keys)} 个VSI无功源"))
+            if not vsi_q_keys:
+                raise RuntimeError("未成功添加任何VSI无功源，无法开展有效弱母线分析")
 
             # 4. 添加量测
             sim_config = vsi_config.get("simulation", {})
@@ -193,7 +224,7 @@ class VSIWeakBusSkill(SkillBase):
             q_measure_k = measure_indices["dQMeasureK"]
 
             logger.info(f"量测通道: 电压={voltage_measure_k}, 无功={q_measure_k}")
-            logs.append(LogEntry(level="INFO", message=f"量测通道: 电压={voltage_measure_k}, 无功={q_measure_k}"))
+            logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"量测通道: 电压={voltage_measure_k}, 无功={q_measure_k}"))
 
             # 5. 设置仿真参数
             end_time = injection_config.get("start_time", 8.0) + len(test_buses) * injection_config.get("interval", 1.5)
@@ -202,7 +233,7 @@ class VSIWeakBusSkill(SkillBase):
 
             # 6. 运行EMT仿真
             logger.info("开始EMT仿真...")
-            logs.append(LogEntry(level="INFO", message="开始EMT仿真"))
+            logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message="开始EMT仿真"))
 
             try:
                 # 使用SDK支持的参数调用runEMT
@@ -218,30 +249,36 @@ class VSIWeakBusSkill(SkillBase):
 
                 if job.status() != 1:
                     return SkillResult(
+                        skill_name=self.name,
                         status=SkillStatus.FAILED,
+                        start_time=start_time,
+                        end_time=datetime.now(),
                         data={},
                         artifacts=artifacts,
-                        logs=logs + [LogEntry(level="ERROR", message="EMT仿真失败或未在时间内完成")],
+                        logs=logs + [LogEntry(timestamp=datetime.now(), level="ERROR", message="EMT仿真失败或未在时间内完成")],
                         metrics={"duration": (datetime.now() - start_time).total_seconds()}
                     )
 
                 emt_result = job.result
                 logger.info("EMT仿真完成")
-                logs.append(LogEntry(level="INFO", message="EMT仿真完成"))
+                logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message="EMT仿真完成"))
 
             except (KeyError, AttributeError, ConnectionError, TypeError) as e:
                 logger.error(f"EMT仿真失败: {e}")
                 return SkillResult(
+                    skill_name=self.name,
                     status=SkillStatus.FAILED,
+                    start_time=start_time,
+                    end_time=datetime.now(),
                     data={},
                     artifacts=artifacts,
-                    logs=logs + [LogEntry(level="ERROR", message=f"EMT仿真失败: {str(e)}")],
+                    logs=logs + [LogEntry(timestamp=datetime.now(), level="ERROR", message=f"EMT仿真失败: {str(e)}")],
                     metrics={"duration": (datetime.now() - start_time).total_seconds()}
                 )
 
             # 7. 计算VSI
             logger.info("开始计算VSI...")
-            logs.append(LogEntry(level="INFO", message="开始计算VSI"))
+            logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message="开始计算VSI"))
 
             vsi_results = self._calculate_vsi(
                 emt_result,
@@ -254,7 +291,7 @@ class VSIWeakBusSkill(SkillBase):
             )
 
             logger.info(f"VSI计算完成 - 母线数: {len(vsi_results['vsi_i'])}")
-            logs.append(LogEntry(level="INFO", message=f"VSI计算完成 - 母线数: {len(vsi_results['vsi_i'])}"))
+            logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"VSI计算完成 - 母线数: {len(vsi_results['vsi_i'])}"))
 
             # 8. 识别弱母线
             analysis_config = config.get("analysis", {})
@@ -319,23 +356,30 @@ class VSIWeakBusSkill(SkillBase):
             ))
 
             duration = (datetime.now() - start_time).total_seconds()
-            logs.append(LogEntry(level="INFO", message=f"VSI弱母线分析完成，耗时 {duration:.2f}s"))
+            logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"VSI弱母线分析完成，耗时 {duration:.2f}s"))
 
             return SkillResult(
+                skill_name=self.name,
                 status=SkillStatus.SUCCESS,
+                start_time=start_time,
+                end_time=datetime.now(),
                 data=result_data,
                 artifacts=artifacts,
                 logs=logs,
                 metrics={"duration": duration, "bus_count": len(test_buses), "weak_count": len(weak_buses)}
             )
 
-        except (KeyError, AttributeError, ConnectionError) as e:
+        except (KeyError, AttributeError, ConnectionError, FileNotFoundError, RuntimeError, ValueError, TypeError) as e:
             logger.error(f"VSI弱母线分析失败: {e}", exc_info=True)
             return SkillResult(
+                skill_name=self.name,
                 status=SkillStatus.FAILED,
+                start_time=start_time,
+                end_time=datetime.now(),
                 data={},
                 artifacts=artifacts,
-                logs=logs + [LogEntry(level="ERROR", message=f"分析失败: {str(e)}")],
+                logs=logs + [LogEntry(timestamp=datetime.now(), level="ERROR", message=f"分析失败: {str(e)}")],
+                error=str(e),
                 metrics={"duration": (datetime.now() - start_time).total_seconds()}
             )
 
@@ -363,13 +407,18 @@ class VSIWeakBusSkill(SkillBase):
 
                 # 名称筛选
                 label = data.get("label", "")
+                bus_name = str(data.get("args", {}).get("Name", ""))
                 if name_keywords:
-                    if not any(kw in label for kw in name_keywords):
+                    if not any(
+                        _matches_bus_identifier(label, kw) or _matches_bus_identifier(bus_name, kw)
+                        for kw in name_keywords
+                    ):
                         continue
 
                 test_buses.append({
                     "key": key,
                     "label": label,
+                    "name": bus_name,
                     "voltage": bus_voltage,
                     "v_base": v_base,
                     "v_base_kv": v_base_kv
@@ -423,13 +472,13 @@ class VSIWeakBusSkill(SkillBase):
             shunt_pins = {"0": f"VSI_Bus_{k}"}
 
             try:
-                key1, _ = model.addComponent(
-                    definition="model/CloudPSS/_newShuntLC_3p",
-                    key=shunt_id,
-                    args=shunt_args,
-                    pins=shunt_pins
+                component = model.addComponent(
+                    "model/CloudPSS/_newShuntLC_3p",
+                    shunt_id,
+                    shunt_args,
+                    shunt_pins
                 )
-                vsi_q_keys.append(key1)
+                vsi_q_keys.append(component.id)
             except (AttributeError, TypeError) as e:
                 logger.warning(f"添加无功源 {shunt_id} 失败: {e}")
                 continue
@@ -456,10 +505,10 @@ class VSIWeakBusSkill(SkillBase):
 
             try:
                 model.addComponent(
-                    definition="model/CloudPSS/_newBreaker_3p",
-                    key=breaker_id,
-                    args=breaker_args,
-                    pins=breaker_pins
+                    "model/CloudPSS/_newBreaker_3p",
+                    breaker_id,
+                    breaker_args,
+                    breaker_pins
                 )
             except (AttributeError, TypeError) as e:
                 logger.warning(f"添加断路器 {breaker_id} 失败: {e}")
@@ -481,10 +530,10 @@ class VSIWeakBusSkill(SkillBase):
 
             try:
                 model.addComponent(
-                    definition="model/CloudPSS/_newStepGen",
-                    key=f"VSI_Step_{k}",
-                    args=signal_args,
-                    pins=signal_pins
+                    "model/CloudPSS/_newStepGen",
+                    f"VSI_Step_{k}",
+                    signal_args,
+                    signal_pins
                 )
             except (AttributeError, TypeError) as e:
                 logger.warning(f"添加信号源 {signal_name} 失败: {e}")
@@ -621,7 +670,7 @@ class VSIWeakBusSkill(SkillBase):
                         q_injected = 100
 
                     # 计算VSI
-                    delta_v = v_before - v_after
+                    delta_v = abs(v_before - v_after)
                     vsi = delta_v / q_injected if q_injected != 0 else 0
                     vsi_values.append(vsi)
 

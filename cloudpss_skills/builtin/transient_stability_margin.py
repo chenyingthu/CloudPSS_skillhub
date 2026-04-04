@@ -18,6 +18,7 @@ from datetime import datetime
 
 from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult
 from cloudpss_skills.core.auth_utils import setup_auth, DEFAULT_TIMEOUT
+from cloudpss_skills.core.registry import register
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ class StabilityMargin:
     stability_status: str  # stable/marginal/unstable
 
 
+@register
 class TransientStabilityMarginSkill(SkillBase):
     """
     暂态稳定裕度评估技能
@@ -263,7 +265,9 @@ class TransientStabilityMarginSkill(SkillBase):
             "cct_seconds": round(cct, 4),
             "iterations": iterations,
             "tolerance": tolerance,
-            "method": "bisection"
+            "method": "bisection",
+            "verified": False,
+            "limitation": "当前CCT判据仍基于 smoke 级 EMT 提交和简化稳定性判别，不能替代真实功角/转速稳定校核",
         }
 
     def _check_stability(self, model, location: str, fault_type: str, clearing_time: float) -> bool:
@@ -334,7 +338,8 @@ class TransientStabilityMarginSkill(SkillBase):
             "margin_seconds": round(margin_seconds, 4),
             "margin_percent": round(margin_percent, 2),
             "stability_status": status,
-            "assessment": self._margin_assessment(margin_percent)
+            "assessment": self._margin_assessment(margin_percent),
+            "verified": False,
         }
 
     def _margin_assessment(self, margin_percent: float) -> str:

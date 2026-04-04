@@ -511,7 +511,7 @@ class OrthogonalSensitivitySkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError) as e:
+        except (KeyError, AttributeError, ValueError, RuntimeError, TimeoutError, TypeError, FileNotFoundError) as e:
             log("ERROR", f"执行失败: {e}")
             import traceback
             log("DEBUG", traceback.format_exc())
@@ -535,23 +535,22 @@ class OrthogonalSensitivitySkill(SkillBase):
             except Exception:
                 return {}
 
-        # 尝试从参数名解析组件类型
-        # 例如 "Gen1.pf_P" -> 发电机类型, "Bus1.V" -> 母线类型
-        if param_name.startswith("Gen") or "generator" in param_name.lower():
-            try:
-                return model.getComponentsByRid("model/CloudPSS/_newGenerator")
-            except Exception:
-                return {}
-        elif param_name.startswith("Bus") or "bus" in param_name.lower():
-            try:
-                return model.getComponentsByRid("model/CloudPSS/_newBus_3p")
-            except Exception:
-                return {}
-        elif param_name.startswith("Load") or "load" in param_name.lower():
-            try:
-                return model.getComponentsByRid("model/CloudPSS/_newLoad_3p")
-            except Exception:
-                return {}
+        component_name = param_name.split(".", 1)[0]
+        matches = {}
+        try:
+            for key, comp in model.getAllComponents().items():
+                if not hasattr(comp, "args"):
+                    continue
+                label = getattr(comp, "label", "") or ""
+                name = getattr(comp, "name", "") or ""
+                comp_key = str(key)
+                if component_name == label or component_name == name or component_name in comp_key:
+                    matches[key] = comp
+        except Exception:
+            return {}
+
+        if matches:
+            return matches
 
         # 无法识别参数类型，返回空字典
         logger.warning(f"无法从参数名 '{param_name}' 识别组件类型，请显式指定 component_rid 或 component_type")

@@ -336,7 +336,7 @@ class EmtN1ScreeningSkill(SkillBase):
                 log("INFO", f"研究报告: {report_path}")
 
             # 根据结果确定状态
-            failed_count = sum(1 for r in results if r.get("status") == "error")
+            failed_count = len(branch_ids) - len(results)
 
             return SkillResult(
                 skill_name=self.name,
@@ -354,7 +354,7 @@ class EmtN1ScreeningSkill(SkillBase):
                 },
             )
 
-        except (KeyError, AttributeError, RuntimeError, FileNotFoundError, ValueError) as e:
+        except (KeyError, AttributeError, RuntimeError, FileNotFoundError, ValueError, TimeoutError, TypeError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

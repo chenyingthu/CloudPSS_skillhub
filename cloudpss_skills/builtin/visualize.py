@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.utils import fetch_job_with_result
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +131,7 @@ class VisualizeSkill(SkillBase):
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
         """执行可视化"""
-        from cloudpss import Job, setToken
+        from cloudpss import setToken
         import matplotlib
         matplotlib.use('Agg')  # 非交互式后端
         import matplotlib.pyplot as plt
@@ -162,13 +163,17 @@ class VisualizeSkill(SkillBase):
                 auth = config.get("auth", {})
                 token = auth.get("token")
                 if not token:
+                    token_file = auth.get("token_file", ".cloudpss_token")
+                    token_path = Path(token_file)
+                    if token_path.exists():
+                        token = token_path.read_text().strip()
+                if not token:
                     raise ValueError("未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件")
 
                 setToken(token)
 
                 job_id = source_config["job_id"]
-                job = Job.fetch(job_id)
-                result = job.result
+                _job, result = fetch_job_with_result(job_id)
 
                 if result is None:
                     raise RuntimeError("任务结果为空")
@@ -180,7 +185,7 @@ class VisualizeSkill(SkillBase):
 
                 # 从第一个plot提取
                 channel_names = result.getPlotChannelNames(0)
-                target_channels = plot_config.get("channels", channel_names)
+                target_channels = plot_config.get("channels") or channel_names
 
                 data = {"time": []}
                 for channel in target_channels:
@@ -264,7 +269,10 @@ class VisualizeSkill(SkillBase):
 
             filename = output_config.get("filename", f"waveform_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
             fmt = output_config.get("format", "png")
-            filepath = output_path / f"{filename}.{fmt}"
+            if Path(filename).suffix.lower() == f".{fmt}":
+                filepath = output_path / filename
+            else:
+                filepath = output_path / f"{filename}.{fmt}"
 
             dpi = output_config.get("dpi", 150)
             plt.savefig(filepath, dpi=dpi, bbox_inches='tight')
@@ -293,7 +301,7 @@ class VisualizeSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError) as e:
+        except (KeyError, AttributeError, RuntimeError, FileNotFoundError, ValueError, TypeError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

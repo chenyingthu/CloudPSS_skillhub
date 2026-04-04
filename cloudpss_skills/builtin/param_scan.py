@@ -318,7 +318,7 @@ class ParamScanSkill(SkillBase):
                 },
             )
 
-        except (AttributeError, ConnectionError, RuntimeError, FileNotFoundError, ValueError) as e:
+        except (AttributeError, ConnectionError, RuntimeError, FileNotFoundError, ValueError, TimeoutError, TypeError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

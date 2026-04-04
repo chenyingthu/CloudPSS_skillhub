@@ -307,9 +307,10 @@ class VoltageStabilitySkill(SkillBase):
                 self._generate_report(result_data, report_path, target_buses)
                 artifacts.append(Artifact(type="markdown", path=str(report_path), size=report_path.stat().st_size, description="电压稳定性分析报告"))
 
+            overall_status = SkillStatus.SUCCESS if converged_cases else SkillStatus.FAILED
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.SUCCESS,
+                status=overall_status,
                 start_time=start_time,
                 end_time=datetime.now(),
                 data=result_data,
@@ -317,7 +318,7 @@ class VoltageStabilitySkill(SkillBase):
                 logs=logs,
             )
 
-        except (AttributeError, ConnectionError, RuntimeError, FileNotFoundError, ValueError) as e:
+        except (AttributeError, ConnectionError, RuntimeError, FileNotFoundError, ValueError, TypeError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

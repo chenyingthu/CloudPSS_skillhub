@@ -262,6 +262,9 @@ class PowerQualityAnalysisSkill(SkillBase):
                 else:
                     log("WARNING", "未检测到单相通道")
 
+            if not three_phase and not single_phase:
+                raise RuntimeError("未检测到任何可分析的通道")
+
             pq_results = {
                 "harmonic": {},
                 "voltage_dip": {},

@@ -18,8 +18,10 @@ from datetime import datetime
 import re
 import csv
 import json
+from pathlib import Path
 
 from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult
+from cloudpss_skills.core.registry import register
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +37,7 @@ class ComponentInfo:
     updated_at: str = ""
 
 
+@register
 class ComponentCatalogSkill(SkillBase):
     """
     组件目录技能
@@ -220,10 +223,11 @@ class ComponentCatalogSkill(SkillBase):
             artifacts = []
             if output_path:
                 from cloudpss_skills.core import Artifact
+                output_file = Path(output_path)
                 artifacts.append(Artifact(
                     type="file",
-                    path=output_path,
-                    size=0,
+                    path=str(output_file),
+                    size=output_file.stat().st_size if output_file and output_file.exists() else 0,
                     description="组件目录输出"
                 ))
 

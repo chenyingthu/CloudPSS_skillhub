@@ -220,7 +220,7 @@ class N2SecuritySkill(SkillBase):
                 data=report
             )
 
-        except (KeyError, AttributeError, ConnectionError) as e:
+        except (KeyError, AttributeError, ConnectionError, RuntimeError, TimeoutError, FileNotFoundError, ValueError, TypeError) as e:
             logger.error(f"N-2安全校核失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,

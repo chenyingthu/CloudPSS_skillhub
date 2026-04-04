@@ -162,11 +162,23 @@ class BatchTaskManagerSkill(SkillBase):
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
         """执行批量任务管理"""
+        from cloudpss import setToken
+
         start_time = datetime.now()
         logs = []
         artifacts = []
 
         try:
+            auth = config.get("auth", {})
+            token = auth.get("token")
+            if not token:
+                token_file = auth.get("token_file", ".cloudpss_token")
+                token_path = Path(token_file)
+                if not token_path.exists():
+                    raise FileNotFoundError(f"Token文件不存在: {token_file}")
+                token = token_path.read_text().strip()
+            setToken(token)
+
             tasks_config = config.get("tasks", [])
             execution_config = config.get("execution", {})
 
@@ -287,7 +299,7 @@ class BatchTaskManagerSkill(SkillBase):
                 }
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError) as e:
+        except (KeyError, AttributeError, ZeroDivisionError, FileNotFoundError, ValueError, RuntimeError, TimeoutError, TypeError) as e:
             logger.error(f"批量任务管理失败: {e}", exc_info=True)
             return SkillResult(
                 status=SkillStatus.FAILED,
@@ -422,7 +434,7 @@ class BatchTaskManagerSkill(SkillBase):
                 else:  # 超时
                     raise TimeoutError(f"任务超时: {timeout}s")
 
-            except (KeyError, AttributeError, ConnectionError, ValueError, RuntimeError, TimeoutError) as e:
+            except (KeyError, AttributeError, ConnectionError, ValueError, RuntimeError, TimeoutError, TypeError, FileNotFoundError) as e:
                 task.retry_count += 1
                 if task.retry_count > task.max_retries or not enable_retry:
                     task.status = TaskStatus.FAILED
