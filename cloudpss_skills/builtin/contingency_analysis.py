@@ -338,9 +338,12 @@ class ContingencyAnalysisSkill(SkillBase):
                 self._generate_report(result_data, report_path, voltage_limit, thermal_limit)
                 artifacts.append(Artifact(type="markdown", path=str(report_path), size=report_path.stat().st_size, description="预想事故分析报告"))
 
+            # 根据结果确定状态
+            has_failures = failed > 0 or summary.get("errors", 0) > 0
+
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.SUCCESS,
+                status=SkillStatus.SUCCESS if not has_failures else SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
                 data=result_data,

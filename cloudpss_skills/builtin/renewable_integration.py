@@ -237,9 +237,12 @@ class RenewableIntegrationSkill(SkillBase):
 
             logger.info("新能源接入评估完成")
 
+            # 根据整体评估结果确定状态
+            overall_passed = report.get("summary", {}).get("overall_passed", True)
+
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.SUCCESS,
+                status=SkillStatus.SUCCESS if overall_passed else SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
                 data=report
