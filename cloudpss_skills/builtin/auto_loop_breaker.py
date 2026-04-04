@@ -586,7 +586,7 @@ class AutoLoopBreakerSkill(SkillBase):
                 })
 
                 model.revision.implements.diagram.cells[edge_id + str(count)] = edge
-            except (KeyError, AttributeError, AttributeError) as e:
+            except (KeyError, AttributeError) as e:
                 logger.warning(f"创建连接失败 ({comp_key}.{pin_name}): {e}")
                 continue
 
