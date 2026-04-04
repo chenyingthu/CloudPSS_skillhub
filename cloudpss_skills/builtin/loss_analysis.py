@@ -336,44 +336,10 @@ class LossAnalysisSkill(SkillBase):
     def _calculate_line_losses_from_model(self):
         """从模型组件计算线路损耗（备选方法）
 
-        TODO: 当前使用典型值估算，未来应从模型参数计算准确损耗
-        当潮流结果不可用时，提供基于组件参数的损耗估算
+        当潮流结果不可用时，返回空结果并提示需要运行潮流计算
         """
-        try:
-            lines = get_components_by_type(self.model, "model/CloudPSS/TransmissionLine")
-
-            if not lines:
-                logger.warning("未找到线路组件，无法计算损耗")
-                return
-
-            logger.info(f"使用模型组件估算 {len(lines)} 条线路的损耗（注：此为估算值，准确值需运行潮流计算）")
-
-            for line_key, line_data in list(lines.items())[:20]:
-                try:
-                    line_label = line_data.get('label', line_key)
-
-                    # TODO: 从线路参数计算损耗，当前使用典型值估算
-                    # 未来实现：根据线路长度、电阻、电流计算 P_loss = I²R
-                    import random
-                    p_loss = random.uniform(0.5, 8.0)
-
-                    loss = BranchLoss(
-                        branch_id=line_label,
-                        from_bus='',
-                        to_bus='',
-                        p_loss_mw=p_loss,
-                        q_loss_mvar=p_loss * 0.3,
-                        current_ka=random.uniform(0.5, 2.0),
-                        loading_percent=random.uniform(30, 80)
-                    )
-                    self.branch_losses.append(loss)
-                except (KeyError, AttributeError) as e:
-                    logger.warning(f"计算线路损耗失败: {e}")
-
-            logger.info(f"使用备选方法估算了{len(self.branch_losses)}条线路的损耗（估算值）")
-
-        except (KeyError, AttributeError) as e:
-            logger.error(f"备选方法也失败: {e}")
+        logger.warning("无法获取潮流结果，无法计算线路损耗")
+        logger.info("提示：请确保模型可以成功运行潮流计算以获取准确的线路损耗数据")
 
     def _calculate_transformer_losses(self, power_flow_result):
         """计算变压器损耗 - 从真实潮流结果中提取"""

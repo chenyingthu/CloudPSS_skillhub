@@ -216,6 +216,17 @@ class ComponentCatalogSkill(SkillBase):
             tag_stats = self._get_tag_statistics(filtered)
             result_data["tag_statistics"] = tag_stats
 
+            # 构建 artifacts
+            artifacts = []
+            if output_path:
+                from cloudpss_skills.core import Artifact
+                artifacts.append(Artifact(
+                    type="file",
+                    path=output_path,
+                    size=0,
+                    description="组件目录输出"
+                ))
+
             logger.info(f"组件目录获取完成: {len(filtered)} 个组件")
             return SkillResult(
                 skill_name=self.name,
@@ -223,7 +234,7 @@ class ComponentCatalogSkill(SkillBase):
                 start_time=start_time,
                 end_time=datetime.now(),
                 data=result_data,
-                artifacts=[output_path] if output_path else []
+                artifacts=artifacts
             )
 
         except (KeyError, AttributeError, ConnectionError, FileNotFoundError, ValueError, TypeError) as e:
