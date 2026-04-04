@@ -139,7 +139,11 @@ class WaveformExportSkill(SkillBase):
                 token_path = Path(token_file)
                 if token_path.exists():
                     token = token_path.read_text().strip()
-                    setToken(token)
+
+            if not token:
+                raise ValueError("未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件")
+
+            setToken(token)
 
             # 2. 获取任务
             job_id = source_config["job_id"]
@@ -273,7 +277,7 @@ class WaveformExportSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError) as e:
+        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError) as e:
             log("ERROR", str(e))
             return SkillResult(
                 skill_name=self.name,

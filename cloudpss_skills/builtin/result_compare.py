@@ -296,6 +296,19 @@ class ResultCompareSkill(SkillBase):
 
             log("INFO", f"对比报告已保存: {filepath}")
 
+            # 检查是否有有效对比数据
+            if len(all_channels) == 0:
+                log("ERROR", "没有有效的通道数据进行对比")
+                return SkillResult(
+                    skill_name=self.name,
+                    status=SkillStatus.FAILED,
+                    start_time=start_time,
+                    end_time=datetime.now(),
+                    data={"error": "没有有效的通道数据进行对比"},
+                    artifacts=artifacts,
+                    logs=logs,
+                )
+
             # 构建结果数据
             result_data = {
                 "timestamp": datetime.now().isoformat(),
@@ -318,7 +331,7 @@ class ResultCompareSkill(SkillBase):
                 },
             )
 
-        except (KeyError, AttributeError) as e:
+        except (KeyError, AttributeError, RuntimeError, FileNotFoundError, ValueError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
