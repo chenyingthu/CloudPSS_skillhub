@@ -300,7 +300,7 @@ class N1SecuritySkill(SkillBase):
 
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.SUCCESS if failed == 0 else SkillStatus.SUCCESS,
+                status=SkillStatus.SUCCESS if failed == 0 else SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
                 data=result_data,

@@ -339,7 +339,7 @@ class BatchPowerFlowSkill(SkillBase):
 
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.SUCCESS,
+                status=SkillStatus.SUCCESS if failed_count == 0 else SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
                 data=batch_result,
@@ -352,7 +352,7 @@ class BatchPowerFlowSkill(SkillBase):
                 },
             )
 
-        except (AttributeError, ConnectionError, RuntimeError) as e:
+        except (AttributeError, ConnectionError, RuntimeError, FileNotFoundError, OSError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
