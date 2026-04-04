@@ -422,7 +422,7 @@ class BatchTaskManagerSkill(SkillBase):
                 else:  # 超时
                     raise TimeoutError(f"任务超时: {timeout}s")
 
-            except (KeyError, AttributeError, ConnectionError) as e:
+            except (KeyError, AttributeError, ConnectionError, ValueError, RuntimeError, TimeoutError) as e:
                 task.retry_count += 1
                 if task.retry_count > task.max_retries or not enable_retry:
                     task.status = TaskStatus.FAILED
@@ -436,11 +436,8 @@ class BatchTaskManagerSkill(SkillBase):
 
     async def _run_emt_task(self, model, task: BatchTask) -> Any:
         """运行EMT任务"""
-        cfg = task.config
-        job = model.runEMT(
-            endTime=cfg.get("end_time", 10.0),
-            step=cfg.get("step_time", 0.0001)
-        )
+        # 使用SDK支持的参数调用runEMT
+        job = model.runEMT()
         return job
 
     async def _run_power_flow_task(self, model, task: BatchTask) -> Any:

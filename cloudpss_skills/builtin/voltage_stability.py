@@ -238,14 +238,15 @@ class VoltageStabilitySkill(SkillBase):
                             collapse_point = scale
                         log("WARNING", f"  电压低于崩溃阈值!")
 
-                except (AttributeError, ConnectionError, RuntimeError) as e:
+                except (AttributeError, ConnectionError, RuntimeError, FileNotFoundError, ValueError) as e:
                     log("ERROR", f"  计算失败: {e}")
                     results.append({
                         "scale": scale,
                         "converged": False,
                         "error": str(e),
                     })
-                    break  # 停止进一步计算
+                    # 记录失败但继续下一个负荷水平，不中断扫描
+                    continue
 
             # 计算最大负荷能力
             if converged_cases:
@@ -316,7 +317,7 @@ class VoltageStabilitySkill(SkillBase):
                 logs=logs,
             )
 
-        except (AttributeError, ConnectionError, RuntimeError) as e:
+        except (AttributeError, ConnectionError, RuntimeError, FileNotFoundError, ValueError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

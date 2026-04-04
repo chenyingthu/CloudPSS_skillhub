@@ -289,7 +289,7 @@ class AutoLoopBreakerSkill(SkillBase):
                     size=report_path.stat().st_size,
                     description="解环分析报告"
                 ))
-            except (AttributeError, ZeroDivisionError, json.JSONDecodeError) as e:
+            except (AttributeError, ZeroDivisionError, json.JSONDecodeError, RuntimeError, ValueError, TypeError) as e:
                 log("ERROR", f"生成报告失败: {e}")
                 # 报告生成失败不中断整体流程
                 pass  # 继续执行
@@ -316,7 +316,7 @@ class AutoLoopBreakerSkill(SkillBase):
                 logs=logs,
             )
 
-        except (AttributeError, ZeroDivisionError, json.JSONDecodeError) as e:
+        except (AttributeError, ZeroDivisionError, json.JSONDecodeError, RuntimeError, ValueError, TypeError) as e:
             log("ERROR", f"执行失败: {e}")
             import traceback
             log("DEBUG", traceback.format_exc())
@@ -445,7 +445,7 @@ class AutoLoopBreakerSkill(SkillBase):
 
             return g, topo_pin_dict, comp_list
 
-        except (KeyError, AttributeError, ConnectionError) as e:
+        except (KeyError, AttributeError, ConnectionError, RuntimeError, ValueError, TypeError) as e:
             logger.error(f"构建拓扑图失败: {e}")
             raise RuntimeError(f"构建模型拓扑图失败: {e}") from e
 
