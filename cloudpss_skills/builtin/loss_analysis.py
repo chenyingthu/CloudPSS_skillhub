@@ -281,7 +281,7 @@ class LossAnalysisSkill(SkillBase):
                                     try:
                                         p_loss = float(branch[key])
                                         break
-                                    except (ValueError, TypeError):
+                                    except (ValueError, TypeError) as e:
                                         # 异常已捕获，无需额外处理
                                         logger.debug(f"忽略预期异常: {e}")
 
@@ -290,7 +290,7 @@ class LossAnalysisSkill(SkillBase):
                                     try:
                                         q_loss = float(branch[key])
                                         break
-                                    except (ValueError, TypeError):
+                                    except (ValueError, TypeError) as e:
                                         # 异常已捕获，无需额外处理
                                         logger.debug(f"忽略预期异常: {e}")
 
@@ -305,7 +305,7 @@ class LossAnalysisSkill(SkillBase):
                                     try:
                                         i_ka = float(branch[key])
                                         break
-                                    except (ValueError, TypeError):
+                                    except (ValueError, TypeError) as e:
                                         # 异常已捕获，无需额外处理
                                         logger.debug(f"忽略预期异常: {e}")
 
@@ -548,7 +548,7 @@ class LossAnalysisSkill(SkillBase):
             try:
                 with open(auth["token_file"], "r") as f:
                     token = f.read().strip()
-            except FileNotFoundError:
+            except FileNotFoundError as e:
                 # 异常已捕获，无需额外处理
                 logger.debug(f"忽略预期异常: {e}")
 

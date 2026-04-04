@@ -358,7 +358,7 @@ class PowerQualityAnalysisSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError) as e:
+        except (KeyError, AttributeError, RuntimeError, TypeError, ValueError) as e:
             log("ERROR", f"执行失败: {e}")
             import traceback
             log("DEBUG", traceback.format_exc())

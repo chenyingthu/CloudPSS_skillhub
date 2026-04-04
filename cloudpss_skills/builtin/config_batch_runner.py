@@ -196,6 +196,9 @@ class ConfigBatchRunnerSkill(SkillBase):
                 if token_path.exists():
                     token = token_path.read_text().strip()
 
+            if not token:
+                raise ValueError("未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件")
+
             setToken(token)
             log("INFO", "认证成功")
 
@@ -399,9 +402,12 @@ class ConfigBatchRunnerSkill(SkillBase):
 
             log("INFO", f"批量运行完成: 成功 {success_count}, 失败 {failed_count}, 超时 {timeout_count}")
 
+            # 根据结果确定状态
+            has_failures = failed_count > 0 or timeout_count > 0
+
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.SUCCESS,
+                status=SkillStatus.SUCCESS if not has_failures else SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
                 data={
@@ -418,7 +424,7 @@ class ConfigBatchRunnerSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError) as e:
+        except (KeyError, AttributeError, ValueError, RuntimeError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

@@ -237,7 +237,7 @@ class CompareVisualizationSkill(SkillBase):
 
             # 3. 获取所有任务数据
             all_data = []
-            for source in sources:
+            for i, source in enumerate(sources):
                 job_id = source["job_id"]
                 label = source.get("label", f"场景{i+1}")
                 color = source.get("color")
