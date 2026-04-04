@@ -525,7 +525,7 @@ class VSIWeakBusSkill(SkillBase):
             # 如果不存在，需要在实际模型中使用相应方法
             voltage_measure_k = 0  # 假设这是第一个通道
 
-        except (KeyError, AttributeError, AttributeError) as e:
+        except (KeyError, AttributeError) as e:
             logger.warning(f"添加电压量测失败: {e}")
             voltage_measure_k = 0
 
@@ -550,7 +550,7 @@ class VSIWeakBusSkill(SkillBase):
 
             q_measure_k = 1  # 假设这是第二个通道
 
-        except (KeyError, AttributeError, AttributeError) as e:
+        except (KeyError, AttributeError) as e:
             logger.warning(f"添加无功量测失败: {e}")
             q_measure_k = 1
 

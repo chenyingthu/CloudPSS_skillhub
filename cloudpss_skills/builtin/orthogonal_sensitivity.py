@@ -447,7 +447,7 @@ class OrthogonalSensitivitySkill(SkillBase):
                         run.error = "仿真超时"
                         log("WARN", f"     超时")
 
-                except (KeyError, AttributeError, AttributeError) as e:
+                except (KeyError, AttributeError) as e:
                     run.status = "failed"
                     run.error = str(e)
                     log("ERROR", f"     失败: {e}")
@@ -504,7 +504,7 @@ class OrthogonalSensitivitySkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, AttributeError) as e:
+        except (KeyError, AttributeError) as e:
             log("ERROR", f"执行失败: {e}")
             import traceback
             log("DEBUG", traceback.format_exc())

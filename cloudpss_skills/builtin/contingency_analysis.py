@@ -380,8 +380,9 @@ class ContingencyAnalysisSkill(SkillBase):
             topology = model.fetchTopology(implementType="powerflow")
             topology_dict = topology.toJSON()
             components = topology_dict.get("components", [])
-        except Exception:
+        except Exception as e:
             # 如果获取拓扑失败，尝试直接从模型获取
+            logger.debug(f"获取拓扑失败，尝试从模型获取: {e}")
             model_dict = model.toJSON()
             components = model_dict.get("components", [])
 

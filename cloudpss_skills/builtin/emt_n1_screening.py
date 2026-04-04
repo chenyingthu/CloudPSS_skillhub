@@ -458,7 +458,7 @@ class EmtN1ScreeningSkill(SkillBase):
                             "postfault_gap": self._trace_rms(trace, *time_windows["prefault"]) - self._trace_rms(trace, *time_windows["postfault"]),
                         }
                         break
-            except Exception:
+            except Exception as e:
                 # 异常已捕获，无需额外处理
                 logger.debug(f"忽略预期异常: {e}")
 

@@ -610,7 +610,7 @@ class ProtectionCoordinationSkill(SkillBase):
             try:
                 with open(auth["token_file"], "r") as f:
                     token = f.read().strip()
-            except FileNotFoundError:
+            except FileNotFoundError as e:
                 # 异常已捕获，无需额外处理
                 logger.debug(f"忽略预期异常: {e}")
 

@@ -271,7 +271,7 @@ class AutoLoopBreakerSkill(SkillBase):
                         log("INFO", f"  -> 模型已保存: {new_key}")
                     else:
                         log("WARN", "  -> 无法解析模型key，跳过保存")
-                except (AttributeError, AttributeError, KeyError) as e:
+                except (AttributeError, KeyError) as e:
                     log("ERROR", f"保存模型失败: {e}")
                     raise
 
