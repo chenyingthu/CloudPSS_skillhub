@@ -205,11 +205,15 @@ class ReportGeneratorSkill(SkillBase):
         if skill_results:
             return skill_results
 
-        # 否则从注册表获取（简化实现）
+        # 如果没有传入skill_results且没有skills列表，返回空
+        if not skills:
+            return collected
+
+        # 否则从注册表获取（简化实现）- 不返回假成功状态
         for skill_name in skills:
             collected[skill_name] = {
-                "status": "success",
-                "summary": f"{skill_name}分析完成",
+                "status": "pending",
+                "summary": f"{skill_name}结果未提供",
                 "data": {}
             }
 

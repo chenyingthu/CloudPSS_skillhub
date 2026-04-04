@@ -167,6 +167,9 @@ class ComtradeExportSkill(SkillBase):
                 if token_path.exists():
                     token = token_path.read_text().strip()
 
+            if not token:
+                raise ValueError("未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件")
+
             setToken(token)
             log("INFO", "认证成功")
 
@@ -407,7 +410,7 @@ class ComtradeExportSkill(SkillBase):
                 },
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError) as e:
+        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

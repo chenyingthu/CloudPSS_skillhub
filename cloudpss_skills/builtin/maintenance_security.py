@@ -201,7 +201,7 @@ class MaintenanceSecuritySkill(SkillBase):
                     }
                     n1_case["severity"] = self._classify_severity(n1_case)
                     n1_results.append(n1_case)
-                except (KeyError, AttributeError, AttributeError) as e:
+                except (KeyError, AttributeError, RuntimeError) as e:
                     log("WARNING", f"    失败: {e}")
 
             # 导出
@@ -246,7 +246,7 @@ class MaintenanceSecuritySkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, AttributeError) as e:
+        except (KeyError, AttributeError, RuntimeError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
@@ -270,9 +270,36 @@ class MaintenanceSecuritySkill(SkillBase):
             import time
             time.sleep(2)
         result = job.result
-        buses = result.getBuses()
-        branches = result.getBranches()
+        # 获取原始表结构并转换为行字典列表
+        buses_table = result.getBuses()
+        branches_table = result.getBranches()
+        # 转换为行字典格式
+        buses = self._table_to_rows(buses_table)
+        branches = self._table_to_rows(branches_table)
         return buses, branches
+
+    def _table_to_rows(self, table):
+        """将CloudPSS表结构转换为行字典列表"""
+        if not table:
+            return []
+        # 如果是列表，已经是行格式
+        if isinstance(table, list):
+            return table
+        # 如果是字典（列格式），转换为行
+        if isinstance(table, dict):
+            rows = []
+            # 获取所有列名
+            columns = list(table.keys())
+            if not columns:
+                return []
+            # 获取行数
+            num_rows = len(table[columns[0]])
+            # 转换为行字典
+            for i in range(num_rows):
+                row = {col: table[col][i] for col in columns}
+                rows.append(row)
+            return rows
+        return []
 
     def _disable_branch(self, model, branch_id):
         model.updateComponent(branch_id, props={"enabled": False})

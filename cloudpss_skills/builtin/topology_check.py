@@ -303,7 +303,7 @@ class TopologyCheckSkill(SkillBase):
 
             # 确定整体状态
             if check_results["summary"]["issues"] > 0:
-                final_status = SkillStatus.SUCCESS  # 仍有报告输出
+                final_status = SkillStatus.FAILED  # 发现问题时返回失败
             else:
                 final_status = SkillStatus.SUCCESS
 

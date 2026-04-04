@@ -143,6 +143,9 @@ class WaveformExportSkill(SkillBase):
             if not token:
                 raise ValueError("未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件")
 
+            if not token:
+                raise ValueError("未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件")
+
             setToken(token)
 
             # 2. 获取任务
@@ -277,7 +280,7 @@ class WaveformExportSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError) as e:
+        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError) as e:
             log("ERROR", str(e))
             return SkillResult(
                 skill_name=self.name,

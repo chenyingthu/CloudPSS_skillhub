@@ -335,9 +335,12 @@ class EmtN1ScreeningSkill(SkillBase):
                 ))
                 log("INFO", f"研究报告: {report_path}")
 
+            # 根据结果确定状态
+            failed_count = sum(1 for r in results if r.get("status") == "error")
+
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.SUCCESS,
+                status=SkillStatus.SUCCESS if failed_count == 0 else SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
                 data=result_data,
@@ -351,7 +354,7 @@ class EmtN1ScreeningSkill(SkillBase):
                 },
             )
 
-        except (KeyError, AttributeError) as e:
+        except (KeyError, AttributeError, RuntimeError, FileNotFoundError, ValueError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
@@ -377,7 +380,7 @@ class EmtN1ScreeningSkill(SkillBase):
                 for comp in components.values():
                     if comp.props.get("enabled", True):
                         branch_ids.append(comp.id)
-            except Exception:
+            except Exception as e:
                 # 异常已捕获，无需额外处理
                 logger.debug(f"忽略预期异常: {e}")
 

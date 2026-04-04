@@ -162,11 +162,9 @@ class VisualizeSkill(SkillBase):
                 auth = config.get("auth", {})
                 token = auth.get("token")
                 if not token:
-                    token_file = auth.get("token_file", ".cloudpss_token")
-                    token_path = Path(token_file)
-                    if token_path.exists():
-                        token = token_path.read_text().strip()
-                        setToken(token)
+                    raise ValueError("未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件")
+
+                setToken(token)
 
                 job_id = source_config["job_id"]
                 job = Job.fetch(job_id)
