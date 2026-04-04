@@ -239,15 +239,22 @@ class RenewableIntegrationSkill(SkillBase):
 
             logger.info("新能源接入评估完成")
 
-            # 根据整体评估结果确定状态
-            overall_passed = report.get("summary", {}).get("overall_passed", True)
+            # 只有在结论通过且所有分析都基于真实可验证结果时才允许成功
+            summary = report.get("summary", {})
+            certifiable = summary.get("certifiable", False)
+            overall_passed = summary.get("overall_passed", False)
+            final_status = SkillStatus.SUCCESS if certifiable and overall_passed else SkillStatus.FAILED
+            error = None
+            if not certifiable:
+                error = "分析包含估算或假设结果，当前不能作为已验证的新能源接入评估结论"
 
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.SUCCESS if overall_passed else SkillStatus.FAILED,
+                status=final_status,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data=report
+                data=report,
+                error=error,
             )
 
         except (KeyError, AttributeError, TypeError, ValueError, RuntimeError) as e:
@@ -618,13 +625,15 @@ class RenewableIntegrationSkill(SkillBase):
         overall_verified = all(r.get("verified", True) for r in analysis_results.values()
                               if isinstance(r, dict))
 
+        assessment = "通过" if overall_passed and overall_verified else "仅供初步评估"
+
         return {
             "total_analysis": total_count,
             "passed": passed_count,
             "overall_passed": overall_passed,
             "overall_verified": overall_verified,
             "certifiable": overall_passed and overall_verified,
-            "assessment": "通过" if overall_passed else "需要改进",
+            "assessment": assessment,
             "recommendations": self._generate_recommendations(analysis_results),
             "limitations": [] if overall_verified else ["当前评估包含估算/假设结果，不能作为已完成真实并网验证的结论"],
         }

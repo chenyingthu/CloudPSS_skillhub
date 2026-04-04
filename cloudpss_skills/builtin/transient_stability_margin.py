@@ -170,18 +170,31 @@ class TransientStabilityMarginSkill(SkillBase):
 
             # 生成总体评估
             report["summary"] = self._generate_summary(report["scenarios"])
+            report["summary"]["verified"] = fully_verified = all(
+                scenario.get("cct", {}).get("verified", True) and scenario.get("margin", {}).get("verified", True)
+                for scenario in report["scenarios"]
+            )
+            if not fully_verified:
+                report["summary"]["overall_assessment"] = "当前结果仅供初步评估"
+                report["summary"]["limitations"] = [
+                    "CCT与裕度仍基于简化稳定性判据，不能作为正式暂态稳定结论"
+                ]
 
             # 输出结果
             self._output_results(report, config.get("output", {}))
 
             logger.info("暂态稳定裕度评估完成")
 
+            final_status = SkillStatus.SUCCESS if fully_verified else SkillStatus.FAILED
+            error = None if fully_verified else "当前CCT与稳定裕度仍基于简化稳定性判据，不能作为正式暂态稳定裕度结论"
+
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.SUCCESS,
+                status=final_status,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data=report
+                data=report,
+                error=error,
             )
 
         except (KeyError, AttributeError) as e:

@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 
 from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult, Artifact
+from cloudpss_skills.core.registry import register
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ class ReportSection:
     tables: List[Dict] = field(default_factory=list)
 
 
+@register
 class ReportGeneratorSkill(SkillBase):
     """
     智能报告生成器技能
@@ -146,6 +148,12 @@ class ReportGeneratorSkill(SkillBase):
             collected_results = self._collect_skill_results(skills, skill_results)
             if skills and not skill_results:
                 raise RuntimeError("未提供真实的skill_results，不能基于占位结果生成正式报告")
+            missing_results = [
+                name for name, result in collected_results.items()
+                if isinstance(result, dict) and result.get("status") == "pending"
+            ]
+            if missing_results:
+                raise RuntimeError(f"以下技能结果缺失，不能生成正式报告: {', '.join(missing_results)}")
 
             # 生成报告章节
             self.sections = self._generate_sections(report_config, collected_results)
@@ -211,7 +219,7 @@ class ReportGeneratorSkill(SkillBase):
         if not skills:
             return collected
 
-        # 否则从注册表获取（简化实现）- 不返回假成功状态
+        # 否则从注册表获取（简化实现）- 明确标记为缺失，供上层拒绝生成正式报告
         for skill_name in skills:
             collected[skill_name] = {
                 "status": "pending",
