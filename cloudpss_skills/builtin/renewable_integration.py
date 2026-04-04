@@ -427,7 +427,8 @@ class RenewableIntegrationSkill(SkillBase):
             "max_voltage_change_percent": round(max_change_percent, 2),
             "tolerance_percent": tolerance * 100,
             "passed": max_change <= tolerance,
-            "note": f"电压变化基于{renewable_capacity}MW新能源容量估算"
+            "note": f"电压变化基于{renewable_capacity}MW新能源容量估算",
+            "warning": "此结果是基于简化估算，未进行实际仿真验证，仅供初步评估参考"
         }
 
     def _extract_voltages_from_result(self, pf_result) -> list:
@@ -499,7 +500,8 @@ class RenewableIntegrationSkill(SkillBase):
             "harmonics": harmonics,
             "thd_percent": round(thd, 2),
             "thd_limit_percent": limit * 100,
-            "passed": thd / 100 <= limit
+            "passed": thd / 100 <= limit,
+            "warning": "此结果是基于典型值的简化估算，未进行实际仿真验证，仅供初步评估参考"
         }
 
     def _verify_lvrt_compliance(self, model_rid: str, config: Dict) -> Dict:
@@ -546,7 +548,8 @@ class RenewableIntegrationSkill(SkillBase):
             "standard": req["name"],
             "lvrt_curve": req["curve"],
             "compliant": assumed_compliant,
-            "notes": "基于模型配置验证，建议通过EMT仿真详细验证"
+            "notes": "基于模型配置验证，建议通过EMT仿真详细验证",
+            "warning": "此结果是基于假设的简化验证，未进行实际EMT仿真，仅供初步评估参考"
         }
 
     def _assess_stability_impact(self, model_rid: str, config: Dict) -> Dict:
@@ -593,7 +596,8 @@ class RenewableIntegrationSkill(SkillBase):
             "recommendations": [
                 "继续监控电压稳定性",
                 "建议定期进行暂态稳定校核"
-            ]
+            ],
+            "warning": "此结果是基于典型值的简化评估，未进行实际暂态仿真验证，仅供初步评估参考"
         }
 
     def _generate_summary(self, analysis_results: Dict) -> Dict:

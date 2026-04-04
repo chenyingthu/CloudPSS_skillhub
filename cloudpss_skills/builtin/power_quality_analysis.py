@@ -216,8 +216,9 @@ class PowerQualityAnalysisSkill(SkillBase):
             log("INFO", f"分析窗口: {analysis_window[0]}-{analysis_window[1]}s")
 
             if not three_phase and not single_phase:
-                log("WARNING", "未指定通道，将使用默认三相通道")
-                three_phase = self._detect_three_phase_channels(base_model)
+                log("WARNING", "未指定通道，将在EMT仿真后自动检测...")
+                # 注意：base_model 是 Model 对象，需要先运行 EMT 获取 result 才能检测通道
+                # 这里暂时不检测，等 EMT 完成后再检测
 
             # 运行EMT仿真
             log("INFO", f"运行EMT仿真 (时长: {emt_duration}s)...")
