@@ -504,10 +504,10 @@ class CompareVisualizationSkill(SkillBase):
                 heatmap_metric = heatmap_config.get("metric", "max")
                 heatmap_title = heatmap_config.get("title", "通道-场景热力图")
 
-                all_channel_names = sorted(set()
-                    for task in all_data
+                all_channel_names = sorted(set(
+                    ch for task in all_data
                     for ch in task["channels"].keys()
-                )
+                ))
                 all_channel_names = sorted(all_channel_names)
 
                 # 构建数据矩阵

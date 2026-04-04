@@ -444,7 +444,7 @@ class PowerQualityAnalysisSkill(SkillBase):
                 channels = result.getPlotChannelNames(i)
                 if channel in channels:
                     return i
-        except Exception:
+        except Exception as e:
             # 异常已捕获，无需额外处理
             logger.debug(f"忽略预期异常: {e}")
         return 0  # 默认返回0
@@ -688,6 +688,24 @@ class PowerQualityAnalysisSkill(SkillBase):
             "overall_status": "PASS",
             "violations": [],
         }
+
+        # 检查是否分析了任何通道
+        total_analyzed = (
+            len(pq_results.get("harmonic", {})) +
+            len(pq_results.get("unbalance", {})) +
+            len(pq_results.get("voltage_dip", {})) +
+            len(pq_results.get("flicker", {})) +
+            len(pq_results.get("dc_offset", {}))
+        )
+
+        if total_analyzed == 0:
+            summary["overall_status"] = "FAIL"
+            summary["violations"].append({
+                "type": "no_data",
+                "message": "未检测到任何有效通道进行分析"
+            })
+            summary["violation_count"] = 1
+            return summary
 
         # 谐波检查
         for ch, data in pq_results.get("harmonic", {}).items():
