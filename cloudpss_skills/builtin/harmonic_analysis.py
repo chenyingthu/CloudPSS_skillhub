@@ -262,7 +262,7 @@ class HarmonicAnalysisSkill(SkillBase):
                 logs=logs,
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, ZeroDivisionError) as e:
             log("ERROR", f"执行失败: {e}")
             import traceback
             log("DEBUG", traceback.format_exc())
@@ -350,7 +350,7 @@ class HarmonicAnalysisSkill(SkillBase):
                         harmonic_results["summary"]["thd_violations"] += 1
                     log_func("INFO", f"  {ch} [AC]: THD={thd:.2f}%")
 
-            except Exception as e:
+            except (KeyError, AttributeError) as e:
                 log_func("WARNING", f"通道 {ch} 分析失败: {e}")
 
         # 分析电流通道
@@ -397,7 +397,7 @@ class HarmonicAnalysisSkill(SkillBase):
                         harmonic_results["summary"]["thd_violations"] += 1
                     log_func("INFO", f"  {ch} [AC]: THD={thd:.2f}%")
 
-            except Exception as e:
+            except (KeyError, AttributeError) as e:
                 log_func("WARNING", f"通道 {ch} 分析失败: {e}")
 
         return harmonic_results

@@ -234,7 +234,7 @@ class ModelParameterExtractorSkill(SkillBase):
                     topo = model.fetchTopology(implementType="emtp", maximumDepth=0).toJSON()
                     topology_data = topo
                     log("INFO", f"  -> 拓扑组件数: {len(topo.get('components', {}))}")
-                except Exception as e:
+                except (KeyError, AttributeError) as e:
                     log("WARN", f"拓扑提取失败: {e}")
 
             # 5. 按类型提取元件参数
@@ -289,7 +289,7 @@ class ModelParameterExtractorSkill(SkillBase):
                         component_groups[comp_type] = comp_list
                         log("INFO", f"     找到 {len(comp_list)} 个{comp_type}")
 
-                except Exception as e:
+                except (AttributeError) as e:
                     log("WARN", f"     提取失败: {e}")
 
             # 6. 提取拓扑连接信息
@@ -379,7 +379,7 @@ class ModelParameterExtractorSkill(SkillBase):
                 logs=logs,
             )
 
-        except Exception as e:
+        except (AttributeError) as e:
             log("ERROR", f"执行失败: {e}")
             import traceback
             log("DEBUG", traceback.format_exc())

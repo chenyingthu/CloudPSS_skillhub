@@ -324,7 +324,7 @@ class ConfigBatchRunnerSkill(SkillBase):
                             if hasattr(runner.result, 'getPlots'):
                                 plots = runner.result.getPlots()
                                 result_summary["plots_count"] = len(plots)
-                        except Exception as e:
+                        except (KeyError, AttributeError) as e:
                             log("DEBUG", f"  -> 获取结果摘要失败: {e}")
 
                         execution_time = time.time() - cfg_start_time
@@ -343,7 +343,7 @@ class ConfigBatchRunnerSkill(SkillBase):
                     results.append(result)
                     runner_ids.append((runner_id, current_time, cfg_name, model.rid, model.name))
 
-                except Exception as e:
+                except (KeyError, AttributeError) as e:
                     error_msg = str(e)
                     log("ERROR", f"  -> 运行失败: {error_msg}")
                     result = ConfigRunResult(
@@ -418,7 +418,7 @@ class ConfigBatchRunnerSkill(SkillBase):
                 logs=logs,
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

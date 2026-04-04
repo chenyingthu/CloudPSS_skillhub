@@ -308,7 +308,7 @@ class TransientStabilitySkill(SkillBase):
                 logs=logs,
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, ZeroDivisionError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

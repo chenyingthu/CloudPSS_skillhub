@@ -237,7 +237,7 @@ class DisturbanceSeveritySkill(SkillBase):
                 metrics={"duration": duration, "channel_count": len(voltage_channels)}
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, ZeroDivisionError) as e:
             logger.error(f"扰动严重度分析失败: {e}", exc_info=True)
             return SkillResult(
                 status=SkillStatus.FAILED,

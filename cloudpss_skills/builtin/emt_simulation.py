@@ -158,7 +158,7 @@ class EmtSimulationSkill(SkillBase):
                 topology_data = topology.toJSON()
                 component_count = len(topology_data.get("components", {}))
                 log("INFO", f"拓扑检查通过，元件数: {component_count}")
-            except Exception as e:
+            except (KeyError, AttributeError) as e:
                 log("ERROR", f"拓扑检查失败: {e}")
                 raise RuntimeError(f"EMT拓扑检查失败: {e}")
 
@@ -264,7 +264,7 @@ class EmtSimulationSkill(SkillBase):
                 metrics={"plot_count": len(plots), "exported_files": len(exported_files)},
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, ConnectionError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

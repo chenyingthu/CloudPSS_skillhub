@@ -201,7 +201,7 @@ class ParamScanSkill(SkillBase):
                     )
                     log("INFO", f"  -> 已设置 {param_name} = {value}")
 
-                except Exception as e:
+                except (AttributeError, TypeError) as e:
                     log("ERROR", f"  -> 参数设置失败: {e}")
                     results.append({
                         "value": value,
@@ -250,7 +250,7 @@ class ParamScanSkill(SkillBase):
 
                     results.append(result_data)
 
-                except Exception as e:
+                except (AttributeError, ConnectionError, RuntimeError) as e:
                     log("ERROR", f"  -> 仿真异常: {e}")
                     results.append({
                         "value": value,
@@ -315,7 +315,7 @@ class ParamScanSkill(SkillBase):
                 },
             )
 
-        except Exception as e:
+        except (AttributeError, ConnectionError, RuntimeError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

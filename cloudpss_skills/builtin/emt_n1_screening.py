@@ -247,7 +247,7 @@ class EmtN1ScreeningSkill(SkillBase):
                     )
                     results.append(result)
                     log("INFO", f"  -> 完成: severity={result['severity']}")
-                except Exception as e:
+                except (KeyError, AttributeError) as e:
                     log("ERROR", f"  -> 失败: {e}")
 
             # 7. 排序和分级
@@ -351,7 +351,7 @@ class EmtN1ScreeningSkill(SkillBase):
                 },
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
@@ -378,7 +378,8 @@ class EmtN1ScreeningSkill(SkillBase):
                     if comp.props.get("enabled", True):
                         branch_ids.append(comp.id)
             except Exception:
-                pass
+                # 异常已捕获，无需额外处理
+                logger.debug(f"忽略预期异常: {e}")
 
         return sorted(branch_ids)
 
@@ -399,7 +400,7 @@ class EmtN1ScreeningSkill(SkillBase):
                 branch_name = branch.args.get("Name") or branch.label or branch.id
                 branch_kind = "transformer" if branch.definition == TRANSFORMER_RID else "line"
                 working_model.updateComponent(branch_id, props={"enabled": False})
-            except Exception as e:
+            except (AttributeError, TypeError) as e:
                 raise RuntimeError(f"停用支路失败: {e}")
 
         # 配置故障
@@ -455,7 +456,8 @@ class EmtN1ScreeningSkill(SkillBase):
                         }
                         break
             except Exception:
-                pass
+                # 异常已捕获，无需额外处理
+                logger.debug(f"忽略预期异常: {e}")
 
         # 计算最坏情况
         worst_post = max(m["postfault_gap"] for m in bus_metrics.values()) if bus_metrics else 0

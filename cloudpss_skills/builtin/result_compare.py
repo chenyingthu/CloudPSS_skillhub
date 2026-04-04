@@ -222,8 +222,9 @@ class ResultCompareSkill(SkillBase):
                         try:
                             data_attrs = [attr for attr in dir(result) if not attr.startswith('_') and not callable(getattr(result, attr))]
                             log("INFO", f"  -> 可用属性: {data_attrs[:5]}")
-                        except:
-                            pass
+                        except Exception as e:
+                            # 异常已捕获，无需额外处理
+                            logger.debug(f"忽略预期异常: {e}")
 
                     all_results.append({
                         "label": label,
@@ -233,7 +234,7 @@ class ResultCompareSkill(SkillBase):
 
                     log("INFO", f"  -> 获取 {len(channels_data)} 个通道")
 
-                except Exception as e:
+                except (KeyError, AttributeError) as e:
                     log("ERROR", f"  -> 获取失败: {e}")
 
             # 3. 生成对比分析
@@ -317,7 +318,7 @@ class ResultCompareSkill(SkillBase):
                 },
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

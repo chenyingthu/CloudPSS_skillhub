@@ -232,7 +232,7 @@ class SmallSignalStabilitySkill(SkillBase):
                 logs=logs,
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, ZeroDivisionError) as e:
             log("ERROR", f"执行失败: {e}")
             import traceback
             log("DEBUG", traceback.format_exc())
@@ -310,7 +310,7 @@ class SmallSignalStabilitySkill(SkillBase):
                     if p in comp.args:
                         try:
                             exciter_data[p] = float(comp.args[p].get('source', '0'))
-                        except:
+                        except Exception as e:
                             exciter_data[p] = 0.0
                 exciters[comp_label] = exciter_data
 
@@ -322,7 +322,7 @@ class SmallSignalStabilitySkill(SkillBase):
                     if p in comp.args:
                         try:
                             pss_data[p] = float(comp.args[p].get('source', '0'))
-                        except:
+                        except Exception as e:
                             pss_data[p] = 0.0
                 pss_systems[comp_label] = pss_data
 
@@ -334,7 +334,7 @@ class SmallSignalStabilitySkill(SkillBase):
                     if p in comp.args:
                         try:
                             gov_data[p] = float(comp.args[p].get('source', '0'))
-                        except:
+                        except Exception as e:
                             gov_data[p] = 0.0
                 governors[comp_label] = gov_data
 
@@ -359,8 +359,8 @@ class SmallSignalStabilitySkill(SkillBase):
                 if 'Tj' in comp.args:
                     try:
                         tj_value = float(comp.args['Tj'].get('source', '0'))
-                    except:
-                        pass
+                    except (ValueError, TypeError):
+                        tj_value = 0.0
                 if tj_value <= 0:
                     tj_value = 3.0  # 默认值
 
@@ -369,94 +369,108 @@ class SmallSignalStabilitySkill(SkillBase):
                 if 'Dm' in comp.args:
                     try:
                         dm_value = float(comp.args['Dm'].get('source', '0'))
-                    except:
-                        pass
+                    except Exception as e:
+                        # 异常已捕获，无需额外处理
+                        logger.debug(f"忽略预期异常: {e}")
 
                 # 提取额定容量 Smva (MVA)
                 smva = base_power
                 if 'Smva' in comp.args:
                     try:
                         smva = float(comp.args['Smva'].get('source', str(base_power)))
-                    except:
-                        pass
+                    except Exception as e:
+                        # 异常已捕获，无需额外处理
+                        logger.debug(f"忽略预期异常: {e}")
 
                 # 提取同步电抗 Xd, Xq
                 xd = 1.8; xq = 1.7
                 if 'Xd' in comp.args:
                     try:
                         xd = float(comp.args['Xd'].get('source', '1.8'))
-                    except:
-                        pass
+                    except Exception as e:
+                        # 异常已捕获，无需额外处理
+                        logger.debug(f"忽略预期异常: {e}")
                 if 'Xq' in comp.args:
                     try:
                         xq = float(comp.args['Xq'].get('source', '1.7'))
-                    except:
-                        pass
+                    except Exception as e:
+                        # 异常已捕获，无需额外处理
+                        logger.debug(f"忽略预期异常: {e}")
 
                 # 提取暂态电抗 Xdp, Xqp
                 xdp = 0.3; xqp = 0.4
                 if 'Xdp_2' in comp.args:
                     try:
                         xdp = float(comp.args['Xdp_2'].get('source', '0.3'))
-                    except:
-                        pass
+                    except Exception as e:
+                        # 异常已捕获，无需额外处理
+                        logger.debug(f"忽略预期异常: {e}")
                 if 'Xqp_2' in comp.args:
                     try:
                         xqp = float(comp.args['Xqp_2'].get('source', '0.4'))
-                    except:
-                        pass
+                    except Exception as e:
+                        # 异常已捕获，无需额外处理
+                        logger.debug(f"忽略预期异常: {e}")
 
                 # 提取暂态时间常数 Td0p, Tq0p
                 td0p = 5.0; tq0p = 0.8
                 if 'Td0p_2' in comp.args:
                     try:
                         td0p = float(comp.args['Td0p_2'].get('source', '5.0'))
-                    except:
-                        pass
+                    except Exception as e:
+                        # 异常已捕获，无需额外处理
+                        logger.debug(f"忽略预期异常: {e}")
                 if 'Tq0p_2' in comp.args:
                     try:
                         tq0p = float(comp.args['Tq0p_2'].get('source', '0.8'))
-                    except:
-                        pass
+                    except Exception as e:
+                        # 异常已捕获，无需额外处理
+                        logger.debug(f"忽略预期异常: {e}")
 
                 # 提取次暂态参数
                 xdpp = xdp; xqpp = xqp
                 if 'Xdpp_2' in comp.args:
                     try:
                         xdpp = float(comp.args['Xdpp_2'].get('source', str(xdp)))
-                    except:
-                        pass
+                    except Exception as e:
+                        # 异常已捕获，无需额外处理
+                        logger.debug(f"忽略预期异常: {e}")
                 if 'Xqpp_2' in comp.args:
                     try:
                         xqpp = float(comp.args['Xqpp_2'].get('source', str(xqp)))
-                    except:
-                        pass
+                    except Exception as e:
+                        # 异常已捕获，无需额外处理
+                        logger.debug(f"忽略预期异常: {e}")
 
                 # 提取定子电阻
                 rs = 0.0
                 if 'Rs' in comp.args:
                     try:
                         rs = float(comp.args['Rs'].get('source', '0'))
-                    except:
-                        pass
+                    except Exception as e:
+                        # 异常已捕获，无需额外处理
+                        logger.debug(f"忽略预期异常: {e}")
 
                 # 提取潮流结果
                 pf_p = 0.0; pf_q = 0.0; pf_v = 1.0
                 if 'pf_P' in comp.args:
                     try:
                         pf_p = float(comp.args['pf_P'].get('source', '0'))
-                    except:
-                        pass
+                    except Exception as e:
+                        # 异常已捕获，无需额外处理
+                        logger.debug(f"忽略预期异常: {e}")
                 if 'pf_Q' in comp.args:
                     try:
                         pf_q = float(comp.args['pf_Q'].get('source', '0'))
-                    except:
-                        pass
+                    except Exception as e:
+                        # 异常已捕获，无需额外处理
+                        logger.debug(f"忽略预期异常: {e}")
                 if 'pf_V' in comp.args:
                     try:
                         pf_v = float(comp.args['pf_V'].get('source', '1.0'))
-                    except:
-                        pass
+                    except Exception as e:
+                        # 异常已捕获，无需额外处理
+                        logger.debug(f"忽略预期异常: {e}")
 
                 gen_data.update({
                     'Tj': tj_value,
@@ -778,7 +792,7 @@ class SmallSignalStabilitySkill(SkillBase):
 
             return participation
 
-        except Exception as e:
+        except (KeyError, AttributeError, ZeroDivisionError) as e:
             log_func("WARNING", f"参与因子计算失败: {e}")
             import traceback
             log_func("DEBUG", traceback.format_exc())

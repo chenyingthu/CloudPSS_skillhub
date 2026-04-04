@@ -287,7 +287,7 @@ class PowerQualityAnalysisSkill(SkillBase):
                         flicker = self._analyze_flicker(result, ch_a, ch_b, ch_c, fundamental)
                         pq_results["flicker"][name] = flicker
 
-                except Exception as e:
+                except (KeyError, AttributeError) as e:
                     log("WARNING", f"三相组 {name} 分析失败: {e}")
 
             # 分析单相通道
@@ -309,7 +309,7 @@ class PowerQualityAnalysisSkill(SkillBase):
                         dc = self._analyze_dc_offset(result, ch, analysis_window)
                         pq_results["dc_offset"][ch] = dc
 
-                except Exception as e:
+                except (KeyError, AttributeError) as e:
                     log("WARNING", f"通道 {ch} 分析失败: {e}")
 
             # 汇总评估
@@ -358,7 +358,7 @@ class PowerQualityAnalysisSkill(SkillBase):
                 logs=logs,
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError) as e:
             log("ERROR", f"执行失败: {e}")
             import traceback
             log("DEBUG", traceback.format_exc())
@@ -395,7 +395,7 @@ class PowerQualityAnalysisSkill(SkillBase):
                         })
                     elif len(channels) == 1:
                         # 单通道电压（如直流电压）作为单相分析
-                        pass
+                        pass  # 单通道无需分组
 
                 # 检测策略2: 查找电流相关的三相plot
                 elif any(keyword in title for keyword in ['电流', 'current', 'i']):
@@ -408,7 +408,7 @@ class PowerQualityAnalysisSkill(SkillBase):
                             "c": channels[2],
                         })
 
-        except Exception as e:
+        except (KeyError, AttributeError) as e:
             logger.warning(f"检测三相通道失败: {e}")
 
         return three_phase_groups
@@ -431,7 +431,7 @@ class PowerQualityAnalysisSkill(SkillBase):
                         if ch not in single_channels:
                             single_channels.append(ch)
 
-        except Exception as e:
+        except (KeyError, AttributeError) as e:
             logger.warning(f"检测单相通道失败: {e}")
 
         return single_channels
@@ -445,7 +445,8 @@ class PowerQualityAnalysisSkill(SkillBase):
                 if channel in channels:
                     return i
         except Exception:
-            pass
+            # 异常已捕获，无需额外处理
+            logger.debug(f"忽略预期异常: {e}")
         return 0  # 默认返回0
 
     def _get_channel_data(self, result, channel: str):
@@ -573,7 +574,7 @@ class PowerQualityAnalysisSkill(SkillBase):
                 "voltage_avg_rms": round(v_avg, 4),
             }
 
-        except Exception as e:
+        except (KeyError, AttributeError, ZeroDivisionError) as e:
             return {"error": str(e)}
 
     def _analyze_voltage_dip(self, result, channel: str, analysis_window: List) -> Dict:
@@ -635,7 +636,7 @@ class PowerQualityAnalysisSkill(SkillBase):
                 "severity": severity,
             }
 
-        except Exception as e:
+        except (KeyError, AttributeError, ZeroDivisionError) as e:
             return {"error": str(e)}
 
     def _analyze_flicker(self, result, ch_a: str, ch_b: str, ch_c: str,
@@ -678,7 +679,7 @@ class PowerQualityAnalysisSkill(SkillBase):
                 "ac_rms": round(ac_rms, 6),
             }
 
-        except Exception as e:
+        except (KeyError, AttributeError, ZeroDivisionError) as e:
             return {"error": str(e)}
 
     def _summarize_pq(self, pq_results: Dict, limits: Dict) -> Dict:

@@ -226,7 +226,7 @@ class ComponentCatalogSkill(SkillBase):
                 artifacts=[output_path] if output_path else []
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, ConnectionError) as e:
             logger.error(f"组件目录获取失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,
@@ -250,7 +250,7 @@ class ComponentCatalogSkill(SkillBase):
             # 使用 fetchMany 获取所有模型
             models = Model.fetchMany(pageSize=page_size, owner=owner)
             logger.info(f"获取到 {len(models)} 个模型")
-        except Exception as e:
+        except (KeyError, AttributeError) as e:
             logger.error(f"获取模型列表失败: {e}")
             raise
 
@@ -310,7 +310,7 @@ class ComponentCatalogSkill(SkillBase):
                 if hasattr(topology, "components"):
                     comp_count = len(topology.components)
                     comp.description += f" (组件数: {comp_count})"
-            except Exception as e:
+            except (KeyError, AttributeError) as e:
                 logger.debug(f"获取 {comp.rid} 详细信息失败: {e}")
 
             enriched.append(comp)
@@ -337,9 +337,10 @@ class ComponentCatalogSkill(SkillBase):
 
     def _output_console(self, components: List[ComponentInfo], group_by_tag: bool):
         """输出到控制台"""
-        print("\n" + "=" * 80)
-        print(f"CloudPSS 组件目录 (共 {len(components)} 个)")
-        print("=" * 80)
+        lines = []
+        lines.append("\n" + "=" * 80)
+        lines.append(f"CloudPSS 组件目录 (共 {len(components)} 个)")
+        lines.append("=" * 80)
 
         if group_by_tag:
             # 按标签分组
@@ -351,20 +352,23 @@ class ComponentCatalogSkill(SkillBase):
                 tag_groups[primary_tag].append(c)
 
             for tag, comps in sorted(tag_groups.items()):
-                print(f"\n【{tag}】 ({len(comps)} 个)")
-                print("-" * 80)
+                lines.append(f"\n【{tag}】 ({len(comps)} 个)")
+                lines.append("-" * 80)
                 for c in comps:
-                    print(f"  {c.name:<40} {c.rid}")
+                    lines.append(f"  {c.name:<40} {c.rid}")
         else:
             # 列表输出
             for i, c in enumerate(components, 1):
-                print(f"\n{i}. {c.name}")
-                print(f"   RID: {c.rid}")
-                print(f"   标签: {', '.join(c.tags)}")
+                lines.append(f"\n{i}. {c.name}")
+                lines.append(f"   RID: {c.rid}")
+                lines.append(f"   标签: {', '.join(c.tags)}")
                 if c.description:
-                    print(f"   描述: {c.description}")
+                    lines.append(f"   描述: {c.description}")
 
-        print("\n" + "=" * 80)
+        lines.append("\n" + "=" * 80)
+
+        for line in lines:
+            logger.info(line)
 
     def _output_json(self, components: List[ComponentInfo], path: str, group_by_tag: bool) -> str:
         """输出为 JSON"""
@@ -436,7 +440,8 @@ class ComponentCatalogSkill(SkillBase):
                 with open(auth["token_file"], "r") as f:
                     token = f.read().strip()
             except FileNotFoundError:
-                pass
+                # 异常已捕获，无需额外处理
+                logger.debug(f"忽略预期异常: {e}")
 
         if not token:
             try:

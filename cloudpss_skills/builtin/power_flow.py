@@ -203,7 +203,7 @@ class PowerFlowSkill(SkillBase):
                 logs=logs,
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, ZeroDivisionError) as e:
             log("ERROR", str(e))
             return SkillResult(
                 skill_name=self.name,

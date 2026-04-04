@@ -187,7 +187,7 @@ class ReportGeneratorSkill(SkillBase):
                 artifacts=artifacts
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, ZeroDivisionError) as e:
             logger.error(f"报告生成失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,

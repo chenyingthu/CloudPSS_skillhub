@@ -296,7 +296,7 @@ class FrequencyResponseSkill(SkillBase):
                 logs=logs,
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, ZeroDivisionError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
@@ -346,7 +346,8 @@ class FrequencyResponseSkill(SkillBase):
                         model.updateComponent(key, args=args)
                         log_func("INFO", f"负荷阶跃: {comp_label}, {base_p}MW -> {new_p}MW @ {disturbance_time}s")
                     except (ValueError, TypeError):
-                        pass
+                        # 异常已捕获，无需额外处理
+                        logger.debug(f"忽略预期异常: {e}")
 
                 elif "_newLoad" in comp_def:
                     # 标准负荷模型
@@ -361,7 +362,8 @@ class FrequencyResponseSkill(SkillBase):
                         model.updateComponent(key, args=args)
                         log_func("INFO", f"负荷阶跃: {comp_label}, {base_p}MW -> {new_p}MW @ {disturbance_time}s")
                     except (ValueError, TypeError):
-                        pass
+                        # 异常已捕获，无需额外处理
+                        logger.debug(f"忽略预期异常: {e}")
 
         elif disturbance_type == "generator_trip":
             # 发电机跳闸

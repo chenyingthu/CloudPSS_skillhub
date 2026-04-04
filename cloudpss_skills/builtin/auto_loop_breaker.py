@@ -197,7 +197,7 @@ class AutoLoopBreakerSkill(SkillBase):
             try:
                 topo_graph, topo_pin_dict, comp_list = self._build_topology_graph(model)
                 log("INFO", f"  -> 发现 {len(topo_graph.nodes)} 个信号节点，{len(topo_graph.edges)} 条连接")
-            except Exception as e:
+            except (AttributeError) as e:
                 log("ERROR", f"拓扑分析失败: {e}")
                 raise
 
@@ -206,7 +206,7 @@ class AutoLoopBreakerSkill(SkillBase):
             try:
                 import networkx as nx
                 has_loops = not nx.is_directed_acyclic_graph(topo_graph)
-            except Exception as e:
+            except ImportError as e:
                 log("ERROR", f"环路检测失败: {e}")
                 raise
 
@@ -235,7 +235,7 @@ class AutoLoopBreakerSkill(SkillBase):
             try:
                 fvs_nodes = self._compute_fvs(topo_graph, max_iter, strategy, random_seed)
                 log("INFO", f"  -> 需要打破 {len(fvs_nodes)} 个环路节点")
-            except Exception as e:
+            except (AttributeError) as e:
                 log("ERROR", f"FVS计算失败: {e}")
                 raise
 
@@ -254,7 +254,7 @@ class AutoLoopBreakerSkill(SkillBase):
                         init_value, name_prefix
                     )
                     log("INFO", f"  -> 成功插入 {len(broken_loops)} 个解环点")
-                except Exception as e:
+                except (AttributeError) as e:
                     log("ERROR", f"解环操作失败: {e}")
                     raise
 
@@ -271,7 +271,7 @@ class AutoLoopBreakerSkill(SkillBase):
                         log("INFO", f"  -> 模型已保存: {new_key}")
                     else:
                         log("WARN", "  -> 无法解析模型key，跳过保存")
-                except Exception as e:
+                except (AttributeError, AttributeError, KeyError) as e:
                     log("ERROR", f"保存模型失败: {e}")
                     raise
 
@@ -289,10 +289,10 @@ class AutoLoopBreakerSkill(SkillBase):
                     size=report_path.stat().st_size,
                     description="解环分析报告"
                 ))
-            except Exception as e:
+            except (AttributeError, ZeroDivisionError, json.JSONDecodeError) as e:
                 log("ERROR", f"生成报告失败: {e}")
                 # 报告生成失败不中断整体流程
-                pass
+                pass  # 继续执行
 
             log("INFO", f"解环完成！共打破 {len(fvs_nodes)} 个环路")
 
@@ -316,7 +316,7 @@ class AutoLoopBreakerSkill(SkillBase):
                 logs=logs,
             )
 
-        except Exception as e:
+        except (AttributeError, ZeroDivisionError, json.JSONDecodeError) as e:
             log("ERROR", f"执行失败: {e}")
             import traceback
             log("DEBUG", traceback.format_exc())
@@ -339,7 +339,7 @@ class AutoLoopBreakerSkill(SkillBase):
             # 获取模型拓扑
             revision = model.revision
             topo = model.fetchTopology(implementType="emtp", maximumDepth=0).toJSON()
-        except Exception as e:
+        except (KeyError, AttributeError) as e:
             logger.error(f"获取模型拓扑失败: {e}")
             raise RuntimeError(f"无法获取模型拓扑: {e}") from e
 
@@ -356,7 +356,7 @@ class AutoLoopBreakerSkill(SkillBase):
                     defn = model.__class__.fetch(comp.definition)
                     r = defn.revision
                     dict_pin[comp.definition] = {r.pins[k]['key']: r.pins[k] for k in range(len(r.pins))}
-                except Exception as e:
+                except (KeyError, AttributeError) as e:
                     logger.debug(f"获取元件定义失败 {comp.definition}: {e}")
                     continue
 
@@ -445,7 +445,7 @@ class AutoLoopBreakerSkill(SkillBase):
 
             return g, topo_pin_dict, comp_list
 
-        except Exception as e:
+        except (KeyError, AttributeError, ConnectionError) as e:
             logger.error(f"构建拓扑图失败: {e}")
             raise RuntimeError(f"构建模型拓扑图失败: {e}") from e
 
@@ -525,7 +525,7 @@ class AutoLoopBreakerSkill(SkillBase):
 
             try:
                 comp = model.getComponentByKey(comp_key)
-            except Exception as e:
+            except (AttributeError, AttributeError, KeyError) as e:
                 logger.warning(f"获取元件 {comp_key} 失败: {e}")
                 continue
 
@@ -563,7 +563,7 @@ class AutoLoopBreakerSkill(SkillBase):
                         comp.position
                     )
                     target_port = '0'
-            except Exception as e:
+            except (AttributeError, TypeError) as e:
                 logger.warning(f"创建解环点失败 ({comp_key}.{pin_name}): {e}")
                 continue
 
@@ -586,7 +586,7 @@ class AutoLoopBreakerSkill(SkillBase):
                 })
 
                 model.revision.implements.diagram.cells[edge_id + str(count)] = edge
-            except Exception as e:
+            except (KeyError, AttributeError, AttributeError) as e:
                 logger.warning(f"创建连接失败 ({comp_key}.{pin_name}): {e}")
                 continue
 

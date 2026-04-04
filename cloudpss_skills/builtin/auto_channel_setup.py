@@ -247,7 +247,7 @@ class AutoChannelSetupSkill(SkillBase):
                     )
                     added_channels.extend(channels)
                     log("INFO", f"  -> 添加 {len(channels)} 个电压量测通道")
-                except Exception as e:
+                except (AttributeError) as e:
                     log("ERROR", f"配置电压量测失败: {e}")
                     if not dry_run:
                         raise
@@ -262,7 +262,7 @@ class AutoChannelSetupSkill(SkillBase):
                     )
                     added_channels.extend(channels)
                     log("INFO", f"  -> 添加 {len(channels)} 个电流量测通道")
-                except Exception as e:
+                except (AttributeError) as e:
                     log("ERROR", f"配置电流量测失败: {e}")
                     if not dry_run:
                         raise
@@ -277,7 +277,7 @@ class AutoChannelSetupSkill(SkillBase):
                     )
                     added_channels.extend(channels)
                     log("INFO", f"  -> 添加 {len(channels)} 个功率量测通道")
-                except Exception as e:
+                except (AttributeError) as e:
                     log("ERROR", f"配置功率量测失败: {e}")
                     if not dry_run:
                         raise
@@ -334,7 +334,7 @@ class AutoChannelSetupSkill(SkillBase):
                 logs=logs,
             )
 
-        except Exception as e:
+        except (AttributeError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

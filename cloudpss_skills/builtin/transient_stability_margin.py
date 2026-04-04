@@ -182,7 +182,7 @@ class TransientStabilityMarginSkill(SkillBase):
                 data=report
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError) as e:
             logger.error(f"暂态稳定裕度评估失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,
@@ -297,7 +297,7 @@ class TransientStabilityMarginSkill(SkillBase):
 
             return assumed_stable
 
-        except Exception as e:
+        except (AttributeError, ConnectionError, RuntimeError) as e:
             logger.warning(f"稳定性检查失败: {e}")
             return False
 
@@ -430,29 +430,33 @@ class TransientStabilityMarginSkill(SkillBase):
 
     def _output_console(self, report: Dict):
         """控制台输出"""
-        print("\n" + "=" * 70)
-        print("暂态稳定裕度评估报告")
-        print("=" * 70)
-        print(f"模型: {report['model_rid']}")
-        print(f"时间: {report['timestamp']}")
-        print(f"\n故障场景数: {len(report['scenarios'])}")
+        lines = []
+        lines.append("\n" + "=" * 70)
+        lines.append("暂态稳定裕度评估报告")
+        lines.append("=" * 70)
+        lines.append(f"模型: {report['model_rid']}")
+        lines.append(f"时间: {report['timestamp']}")
+        lines.append(f"\n故障场景数: {len(report['scenarios'])}")
 
         for scenario in report["scenarios"]:
-            print(f"\n场景: {scenario['fault_location']}")
+            lines.append(f"\n场景: {scenario['fault_location']}")
             if "cct" in scenario:
-                print(f"  CCT: {scenario['cct']['cct_seconds']:.4f} s")
+                lines.append(f"  CCT: {scenario['cct']['cct_seconds']:.4f} s")
             if "margin" in scenario:
                 m = scenario['margin']
-                print(f"  裕度: {m['margin_percent']:.2f}% ({m['stability_status']})")
+                lines.append(f"  裕度: {m['margin_percent']:.2f}% ({m['stability_status']})")
 
         summary = report.get("summary", {})
-        print(f"\n总体评估: {summary.get('overall_assessment', '未知')}")
+        lines.append(f"\n总体评估: {summary.get('overall_assessment', '未知')}")
 
         if "cct_statistics" in summary:
             stats = summary["cct_statistics"]
-            print(f"\nCCT统计:")
-            print(f"  最小: {stats.get('min', 'N/A')}")
-            print(f"  最大: {stats.get('max', 'N/A')}")
-            print(f"  平均: {stats.get('avg', 'N/A')}")
+            lines.append("\nCCT统计:")
+            lines.append(f"  最小: {stats.get('min', 'N/A')}")
+            lines.append(f"  最大: {stats.get('max', 'N/A')}")
+            lines.append(f"  平均: {stats.get('avg', 'N/A')}")
 
-        print("=" * 70)
+        lines.append("=" * 70)
+
+        for line in lines:
+            logger.info(line)

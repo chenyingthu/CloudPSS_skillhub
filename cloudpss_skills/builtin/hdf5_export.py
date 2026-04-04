@@ -211,7 +211,7 @@ class HDF5ExportSkill(SkillBase):
                 }
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, ZeroDivisionError) as e:
             logger.error(f"HDF5导出失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,

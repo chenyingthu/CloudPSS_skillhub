@@ -447,7 +447,7 @@ class OrthogonalSensitivitySkill(SkillBase):
                         run.error = "仿真超时"
                         log("WARN", f"     超时")
 
-                except Exception as e:
+                except (KeyError, AttributeError, AttributeError) as e:
                     run.status = "failed"
                     run.error = str(e)
                     log("ERROR", f"     失败: {e}")
@@ -504,7 +504,7 @@ class OrthogonalSensitivitySkill(SkillBase):
                 logs=logs,
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, AttributeError) as e:
             log("ERROR", f"执行失败: {e}")
             import traceback
             log("DEBUG", traceback.format_exc())
@@ -524,7 +524,7 @@ class OrthogonalSensitivitySkill(SkillBase):
         # 简化实现：返回所有发电机组件
         try:
             return model.getComponentsByRid("model/CloudPSS/_newGenerator")
-        except:
+        except Exception as e:
             return {}
 
     def _extract_metric(self, result: Any, target: Dict, model: Any) -> float:
@@ -550,7 +550,7 @@ class OrthogonalSensitivitySkill(SkillBase):
             else:
                 return 0.0
 
-        except Exception as e:
+        except (KeyError, AttributeError, ZeroDivisionError) as e:
             logger.warning(f"提取指标失败: {e}")
             return 0.0
 

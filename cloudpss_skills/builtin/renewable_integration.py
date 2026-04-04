@@ -245,7 +245,7 @@ class RenewableIntegrationSkill(SkillBase):
                 data=report
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError) as e:
             logger.error(f"新能源接入评估失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,
@@ -302,8 +302,9 @@ class RenewableIntegrationSkill(SkillBase):
                 if "Pgen" in args:
                     try:
                         total_generation += float(args["Pgen"])
-                    except:
-                        pass
+                    except Exception as e:
+                        # 异常已捕获，无需额外处理
+                        logger.debug(f"忽略预期异常: {e}")
 
         # 估算短路容量: 典型电力系统短路容量为总装机容量的1.5-3倍
         if total_generation > 0:
@@ -448,16 +449,18 @@ class RenewableIntegrationSkill(SkillBase):
                             vm_val = float(vm)
                             if vm_val > 0:
                                 voltages.append(vm_val)
-                        except:
-                            pass
+                        except Exception as e:
+                            # 异常已捕获，无需额外处理
+                            logger.debug(f"忽略预期异常: {e}")
             else:
                 for bus in buses:
                     try:
                         vm = float(bus.get("Vm", 0))
                         if vm > 0:
                             voltages.append(vm)
-                    except:
-                        pass
+                    except Exception as e:
+                        # 异常已捕获，无需额外处理
+                        logger.debug(f"忽略预期异常: {e}")
 
         return voltages
 
@@ -643,26 +646,30 @@ class RenewableIntegrationSkill(SkillBase):
 
     def _output_console(self, report: Dict):
         """控制台输出"""
-        print("\n" + "=" * 70)
-        print("新能源接入评估报告")
-        print("=" * 70)
-        print(f"模型: {report['model_rid']}")
-        print(f"时间: {report['timestamp']}")
-        print("\n评估结果:")
+        lines = []
+        lines.append("\n" + "=" * 70)
+        lines.append("新能源接入评估报告")
+        lines.append("=" * 70)
+        lines.append(f"模型: {report['model_rid']}")
+        lines.append(f"时间: {report['timestamp']}")
+        lines.append("\n评估结果:")
 
         for name, result in report["analysis_results"].items():
-            print(f"\n{name}:")
+            lines.append(f"\n{name}:")
             if isinstance(result, dict):
                 for k, v in result.items():
                     if k != "passed":
-                        print(f"  {k}: {v}")
+                        lines.append(f"  {k}: {v}")
 
         summary = report.get("summary", {})
-        print(f"\n总体评估: {summary.get('assessment', '未知')}")
-        print(f"通过项: {summary.get('passed', 0)}/{summary.get('total_analysis', 0)}")
+        lines.append(f"\n总体评估: {summary.get('assessment', '未知')}")
+        lines.append(f"通过项: {summary.get('passed', 0)}/{summary.get('total_analysis', 0)}")
 
-        print("\n建议:")
+        lines.append("\n建议:")
         for rec in summary.get("recommendations", []):
-            print(f"  - {rec}")
+            lines.append(f"  - {rec}")
 
-        print("=" * 70)
+        lines.append("=" * 70)
+
+        for line in lines:
+            logger.info(line)

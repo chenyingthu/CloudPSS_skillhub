@@ -270,7 +270,7 @@ class ContingencyAnalysisSkill(SkillBase):
                     else:
                         failed += 1
 
-                except Exception as e:
+                except (KeyError, AttributeError) as e:
                     log("WARNING", f"故障评估失败 {contingency['name']}: {e}")
                     results.append({
                         "name": contingency['name'],
@@ -348,7 +348,7 @@ class ContingencyAnalysisSkill(SkillBase):
                 logs=logs,
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError) as e:
             log("ERROR", f"执行失败: {e}")
             import traceback
             log("DEBUG", traceback.format_exc())
@@ -487,14 +487,14 @@ class ContingencyAnalysisSkill(SkillBase):
                 # Remove leading '/' if present (fetchTopology adds it, but removeComponent doesn't need it)
                 clean_key = comp_key.lstrip('/')
                 working_model.removeComponent(clean_key)
-            except Exception as e:
+            except (KeyError, AttributeError) as e:
                 log_func("WARNING", f"无法移除元件 {comp_key}: {e}")
 
         # DEBUG: Check component count
         try:
             all_comps = working_model.getAllComponents()
             log_func("INFO", f"Model has {len(all_comps)} components after removal")
-        except Exception as e:
+        except (KeyError, AttributeError) as e:
             log_func("WARNING", f"Could not get component count: {e}")
 
         # 运行潮流计算

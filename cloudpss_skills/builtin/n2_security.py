@@ -217,7 +217,7 @@ class N2SecuritySkill(SkillBase):
                 data=report
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, ConnectionError) as e:
             logger.error(f"N-2安全校核失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,
@@ -315,7 +315,7 @@ class N2SecuritySkill(SkillBase):
                     working_model.removeComponent(branch1["id"])
                     working_model.removeComponent(branch2["id"])
                     logger.info(f"  -> 已移除支路: {branch1['name']}, {branch2['name']}")
-                except Exception as e:
+                except (KeyError, AttributeError) as e:
                     logger.warning(f"  -> 移除支路失败: {e}")
                     results.append(N2ContingencyResult(
                         branch1_id=branch1["id"],
@@ -394,8 +394,9 @@ class N2SecuritySkill(SkillBase):
                                             vm_val = float(vm)
                                             if vm_val > 0:
                                                 voltages.append(vm_val)
-                                        except:
-                                            pass
+                                        except Exception as e:
+                                            # 异常已捕获，无需额外处理
+                                            logger.debug(f"忽略预期异常: {e}")
                             else:
                                 # 传统行式格式
                                 for bus in buses:
@@ -403,8 +404,9 @@ class N2SecuritySkill(SkillBase):
                                         vm = float(bus.get("Vm", 0))
                                         if vm > 0:
                                             voltages.append(vm)
-                                    except:
-                                        pass
+                                    except Exception as e:
+                                        # 异常已捕获，无需额外处理
+                                        logger.debug(f"忽略预期异常: {e}")
 
                         if voltages:
                             max_v = max(voltages)
@@ -414,14 +416,14 @@ class N2SecuritySkill(SkillBase):
                                 violation = f"电压越上限: {max_v:.3f} pu"
                             elif min_v < voltage_min:
                                 violation = f"电压越下限: {min_v:.3f} pu"
-                    except Exception as e:
+                    except (KeyError, AttributeError) as e:
                         logger.warning(f"电压检查失败: {e}")
 
                 # 热稳定检查（简化）
                 if check_thermal and not violation:
                     # 简化处理：假设需要检查支路负载
                     # 实际实现需要从潮流结果中获取支路功率
-                    pass
+                    pass  # TODO: 实现热稳定检查
 
                 # 确定状态
                 if violation:
@@ -444,7 +446,7 @@ class N2SecuritySkill(SkillBase):
                     max_loading_pu=max_load
                 ))
 
-            except Exception as e:
+            except (KeyError, AttributeError) as e:
                 logger.error(f"  -> N-2异常: {e}")
                 results.append(N2ContingencyResult(
                     branch1_id=branch1["id"],
@@ -550,29 +552,33 @@ class N2SecuritySkill(SkillBase):
 
     def _output_console(self, report: Dict):
         """控制台输出"""
-        print("\n" + "=" * 70)
-        print("N-2安全校核报告")
-        print("=" * 70)
-        print(f"模型: {report['model_name']}")
-        print(f"时间: {report['timestamp']}")
+        lines = []
+        lines.append("\n" + "=" * 70)
+        lines.append("N-2安全校核报告")
+        lines.append("=" * 70)
+        lines.append(f"模型: {report['model_name']}")
+        lines.append(f"时间: {report['timestamp']}")
 
         summary = report["summary"]
-        print(f"\n校核统计:")
-        print(f"  总场景数: {summary['total_scenarios']}")
-        print(f"  通过: {summary['passed']}")
-        print(f"  失败: {summary['failed']}")
-        print(f"  错误: {summary['errors']}")
-        print(f"  通过率: {summary['pass_rate']:.1f}%")
+        lines.append("\n校核统计:")
+        lines.append(f"  总场景数: {summary['total_scenarios']}")
+        lines.append(f"  通过: {summary['passed']}")
+        lines.append(f"  失败: {summary['failed']}")
+        lines.append(f"  错误: {summary['errors']}")
+        lines.append(f"  通过率: {summary['pass_rate']:.1f}%")
 
         if report.get("voltage_statistics"):
             vs = report["voltage_statistics"]
-            print(f"\n电压统计:")
-            print(f"  最高电压: {vs['max_overall']:.4f} pu")
-            print(f"  最低电压: {vs['min_overall']:.4f} pu")
+            lines.append("\n电压统计:")
+            lines.append(f"  最高电压: {vs['max_overall']:.4f} pu")
+            lines.append(f"  最低电压: {vs['min_overall']:.4f} pu")
 
         if report.get("critical_pairs"):
-            print(f"\n关键故障对 ({len(report['critical_pairs'])}):")
+            lines.append(f"\n关键故障对 ({len(report['critical_pairs'])}):")
             for pair in report["critical_pairs"][:5]:  # 只显示前5个
-                print(f"  - {pair['branch1']} + {pair['branch2']}: {pair['violation']}")
+                lines.append(f"  - {pair['branch1']} + {pair['branch2']}: {pair['violation']}")
 
-        print("=" * 70)
+        lines.append("=" * 70)
+
+        for line in lines:
+            logger.info(line)

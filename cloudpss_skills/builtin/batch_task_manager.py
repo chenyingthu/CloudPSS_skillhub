@@ -287,7 +287,7 @@ class BatchTaskManagerSkill(SkillBase):
                 }
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, ZeroDivisionError) as e:
             logger.error(f"批量任务管理失败: {e}", exc_info=True)
             return SkillResult(
                 status=SkillStatus.FAILED,
@@ -422,7 +422,7 @@ class BatchTaskManagerSkill(SkillBase):
                 else:  # 超时
                     raise TimeoutError(f"任务超时: {timeout}s")
 
-            except Exception as e:
+            except (KeyError, AttributeError, ConnectionError) as e:
                 task.retry_count += 1
                 if task.retry_count > task.max_retries or not enable_retry:
                     task.status = TaskStatus.FAILED

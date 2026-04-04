@@ -271,6 +271,7 @@ class ModelBuilderSkill(SkillBase):
                         self._apply_modification(mod_config)
                         logger.info(f"  [{i}/{len(modifications)}] {mod_config['action']} 完成")
                     except Exception as e:
+                        # 捕获所有修改操作异常并记录后重新抛出
                         logger.error(f"  [{i}/{len(modifications)}] {mod_config['action']} 失败: {e}")
                         raise
 
@@ -313,6 +314,7 @@ class ModelBuilderSkill(SkillBase):
             )
 
         except Exception as e:
+            # run()方法顶层异常捕获，确保任何错误都返回FAILED状态
             logger.error(f"模型构建失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,
@@ -434,7 +436,8 @@ class ModelBuilderSkill(SkillBase):
             summary = self._metadata_integration.get_component_summary(comp_type)
             logger.debug(f"  元数据: {summary}")
 
-        except Exception as e:
+        except (AttributeError, TypeError, KeyError) as e:
+            # SDK添加组件失败，尝试备用方法
             logger.warning(f"SDK添加组件失败，尝试备用方法: {e}")
             component_def["data"]["pins"] = pins
             self._add_component_direct(component_def)
@@ -595,7 +598,7 @@ class ModelBuilderSkill(SkillBase):
         try:
             self.model.updateComponent(component_key, **params)
             self.modifications_applied.append(f"modify:{component_key}")
-        except Exception as e:
+        except (AttributeError, TypeError) as e:
             logger.warning(f"SDK修改组件失败，尝试备用方法: {e}")
             self._modify_component_direct(component_key, params)
 
@@ -621,7 +624,8 @@ class ModelBuilderSkill(SkillBase):
         try:
             self.model.removeComponent(component_key)
             self.modifications_applied.append(f"remove:{component_key}")
-        except Exception as e:
+        except (AttributeError, TypeError) as e:
+            # SDK删除组件失败
             logger.warning(f"SDK删除组件失败: {e}")
             raise
 
@@ -651,7 +655,7 @@ class ModelBuilderSkill(SkillBase):
                         # components 是 Component 对象字典
                         for key, comp in components.items():
                             all_components[key] = comp
-                except Exception as e:
+                except (AttributeError, KeyError) as e:
                     logger.debug(f"获取组件类型 {comp_type} 失败: {e}")
 
             # 遍历所有组件进行匹配
@@ -677,7 +681,7 @@ class ModelBuilderSkill(SkillBase):
 
             return None
 
-        except Exception as e:
+        except (KeyError, AttributeError, TypeError) as e:
             logger.error(f"查找组件失败: {e}")
             return None
 
@@ -786,7 +790,7 @@ class ModelBuilderSkill(SkillBase):
                 modifications_applied=self.modifications_applied.copy()
             )
 
-        except Exception as e:
+        except (ConnectionError, RuntimeError, ValueError) as e:
             logger.error(f"保存模型失败: {e}")
             raise
 
@@ -802,7 +806,8 @@ class ModelBuilderSkill(SkillBase):
                 with open(auth["token_file"], "r") as f:
                     token = f.read().strip()
             except FileNotFoundError:
-                pass
+                # 异常已捕获，无需额外处理
+                logger.debug(f"忽略预期异常: {e}")
 
         if not token:
             try:

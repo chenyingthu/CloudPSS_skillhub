@@ -341,7 +341,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
                 }
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, ZeroDivisionError) as e:
             logger.error(f"无功补偿设计失败: {e}", exc_info=True)
             return SkillResult(
                 status=SkillStatus.FAILED,
@@ -406,7 +406,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
             try:
                 v = float(data.get("args", {}).get("V", 1)) * float(data.get("args", {}).get("VBase", 1))
                 bus_list.append({"key": key, "label": data.get("label"), "voltage": v})
-            except:
+            except Exception as e:
                 continue
 
         # 按电压排序，选择电压最低的
@@ -430,7 +430,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
         # 创建画布
         try:
             model.createCanvas(canvas_id, "无功补偿设计")
-        except:
+        except Exception as e:
             logger.warning(f"画布 {canvas_id} 可能已存在")
 
         for i, bus in enumerate(target_buses):
@@ -487,7 +487,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
                 try:
                     bus_component = model.getComponentByKey(bus_key)
                     bus_pin = bus_component.pins.get("0", bus_key)
-                except:
+                except Exception as e:
                     bus_pin = bus_key
 
                 tran_pins = {"0": bus_pin, "1": f"CompBus_{i}"}
@@ -520,7 +520,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
                     pins=avr_pins
                 )
 
-            except Exception as e:
+            except (AttributeError, TypeError) as e:
                 logger.warning(f"为母线 {bus['label']} 添加调相机失败: {e}")
                 continue
 
@@ -548,7 +548,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
         # 创建画布
         try:
             model.createCanvas(canvas_id, "无功补偿设计")
-        except:
+        except Exception as e:
             logger.warning(f"画布 {canvas_id} 可能已存在")
 
         for i, bus in enumerate(target_buses):
@@ -585,7 +585,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
 
                 logger.info(f"已添加SVG {svg_name} 到母线 {bus['label']}，容量: {initial_capacity} MVar")
 
-            except Exception as e:
+            except (AttributeError, TypeError) as e:
                 logger.warning(f"为母线 {bus['label']} 添加SVG失败: {e}")
                 continue
 
@@ -613,7 +613,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
         # 创建画布
         try:
             model.createCanvas(canvas_id, "无功补偿设计")
-        except:
+        except Exception as e:
             logger.warning(f"画布 {canvas_id} 可能已存在")
 
         for i, bus in enumerate(target_buses):
@@ -650,7 +650,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
 
                 logger.info(f"已添加SVC {svc_name} 到母线 {bus['label']}，容量: {initial_capacity} MVar")
 
-            except Exception as e:
+            except (AttributeError, TypeError) as e:
                 logger.warning(f"为母线 {bus['label']} 添加SVC失败: {e}")
                 continue
 
@@ -678,7 +678,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
         # 创建画布
         try:
             model.createCanvas(canvas_id, "无功补偿设计")
-        except:
+        except Exception as e:
             logger.warning(f"画布 {canvas_id} 可能已存在")
 
         for i, bus in enumerate(target_buses):
@@ -717,7 +717,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
                 logger.info(f"已添加电容器组 {cap_name} 到母线 {bus['label']}，"
                            f"总容量: {initial_capacity} MVar，级数: {num_steps}")
 
-            except Exception as e:
+            except (KeyError, AttributeError, ZeroDivisionError) as e:
                 logger.warning(f"为母线 {bus['label']} 添加电容器组失败: {e}")
                 continue
 
@@ -751,14 +751,16 @@ class ReactiveCompensationDesignSkill(SkillBase):
                 try:
                     comp = model.getComponentByKey(sync_id)
                     comp.args['Smva'] = str(capacities[i])
-                except:
-                    pass
+                except Exception as e:
+                    # 异常已捕获，无需额外处理
+                    logger.debug(f"忽略预期异常: {e}")
 
                 try:
                     tran = model.getComponentByKey(tran_ids[i])
                     tran.args['Tmva'] = str(capacities[i])
-                except:
-                    pass
+                except Exception as e:
+                    # 异常已捕获，无需额外处理
+                    logger.debug(f"忽略预期异常: {e}")
 
             # 运行EMT仿真
             sim_config = config.get("simulation", {})
@@ -782,7 +784,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
 
                 emt_result = job.result
 
-            except Exception as e:
+            except (KeyError, AttributeError, ConnectionError) as e:
                 logger.error(f"EMT仿真失败: {e}")
                 break
 
@@ -854,7 +856,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
                     capacities[i] = max(comp_config.get("min_capacity", 10),
                                       min(comp_config.get("max_capacity", 800), capacities[i]))
 
-            except Exception as e:
+            except (KeyError, AttributeError) as e:
                 logger.error(f"计算DV失败: {e}")
                 break
 
@@ -907,7 +909,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
 
             return {"dv_up": dv_up_list, "dv_down": dv_down_list}
 
-        except Exception as e:
+        except (KeyError, AttributeError) as e:
             logger.error(f"计算DV失败: {e}")
             return {"dv_up": [], "dv_down": []}
 

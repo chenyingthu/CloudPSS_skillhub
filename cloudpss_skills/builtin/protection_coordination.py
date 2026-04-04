@@ -304,7 +304,7 @@ class ProtectionCoordinationSkill(SkillBase):
                 data=result_data
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, ConnectionError) as e:
             logger.error(f"保护配合分析失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,
@@ -611,7 +611,8 @@ class ProtectionCoordinationSkill(SkillBase):
                 with open(auth["token_file"], "r") as f:
                     token = f.read().strip()
             except FileNotFoundError:
-                pass
+                # 异常已捕获，无需额外处理
+                logger.debug(f"忽略预期异常: {e}")
 
         if not token:
             # 尝试默认token文件

@@ -253,7 +253,7 @@
   },
   "simulation_support": {
     "emt": true,
-    "powerflow": false,
+    "powerflow": true,
     "phasor": false
   }
 }

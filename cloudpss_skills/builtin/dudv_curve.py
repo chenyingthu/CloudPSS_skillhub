@@ -257,7 +257,7 @@ class DUDVCurveSkill(SkillBase):
                 }
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, ZeroDivisionError) as e:
             logger.error(f"DUDV分析失败: {e}", exc_info=True)
             return SkillResult(
                 status=SkillStatus.FAILED,

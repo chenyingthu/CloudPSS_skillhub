@@ -201,7 +201,7 @@ class MaintenanceSecuritySkill(SkillBase):
                     }
                     n1_case["severity"] = self._classify_severity(n1_case)
                     n1_results.append(n1_case)
-                except Exception as e:
+                except (KeyError, AttributeError, AttributeError) as e:
                     log("WARNING", f"    失败: {e}")
 
             # 导出
@@ -246,7 +246,7 @@ class MaintenanceSecuritySkill(SkillBase):
                 logs=logs,
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, AttributeError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
@@ -288,8 +288,9 @@ class MaintenanceSecuritySkill(SkillBase):
                 for comp in components.values():
                     if comp.props.get("enabled", True):
                         branch_ids.append(comp.id)
-            except:
-                pass
+            except Exception as e:
+                # 异常已捕获，无需额外处理
+                logger.debug(f"忽略预期异常: {e}")
         return sorted(branch_ids)
 
     def _classify_severity(self, case):

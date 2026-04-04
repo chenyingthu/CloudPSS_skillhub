@@ -259,7 +259,7 @@ class TopologyCheckSkill(SkillBase):
                         "message": "EMT拓扑检查通过",
                     })
                     check_results["summary"]["passed"] += 1
-                except Exception as e:
+                except (KeyError, AttributeError) as e:
                     log("ERROR", f"EMT拓扑检查失败: {e}")
                     check_results["details"].append({
                         "check": "emt_ready",
@@ -323,7 +323,7 @@ class TopologyCheckSkill(SkillBase):
                 },
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, ConnectionError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

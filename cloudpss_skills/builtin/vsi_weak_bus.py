@@ -231,7 +231,7 @@ class VSIWeakBusSkill(SkillBase):
                 logger.info("EMT仿真完成")
                 logs.append(LogEntry(level="INFO", message="EMT仿真完成"))
 
-            except Exception as e:
+            except (KeyError, AttributeError, ConnectionError) as e:
                 logger.error(f"EMT仿真失败: {e}")
                 return SkillResult(
                     status=SkillStatus.FAILED,
@@ -331,7 +331,7 @@ class VSIWeakBusSkill(SkillBase):
                 metrics={"duration": duration, "bus_count": len(test_buses), "weak_count": len(weak_buses)}
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, ConnectionError) as e:
             logger.error(f"VSI弱母线分析失败: {e}", exc_info=True)
             return SkillResult(
                 status=SkillStatus.FAILED,
@@ -377,7 +377,7 @@ class VSIWeakBusSkill(SkillBase):
                     "v_base_kv": v_base_kv
                 })
 
-            except Exception as e:
+            except (KeyError, AttributeError) as e:
                 logger.warning(f"处理母线 {key} 失败: {e}")
                 continue
 
@@ -403,7 +403,7 @@ class VSIWeakBusSkill(SkillBase):
         # 创建画布
         try:
             model.createCanvas(canvas_id, "VSI动态无功分析")
-        except:
+        except Exception as e:
             logger.warning(f"画布 {canvas_id} 可能已存在")
 
         for k, bus in enumerate(test_buses):
@@ -432,7 +432,7 @@ class VSIWeakBusSkill(SkillBase):
                     pins=shunt_pins
                 )
                 vsi_q_keys.append(key1)
-            except Exception as e:
+            except (AttributeError, TypeError) as e:
                 logger.warning(f"添加无功源 {shunt_id} 失败: {e}")
                 continue
 
@@ -451,7 +451,7 @@ class VSIWeakBusSkill(SkillBase):
             try:
                 bus_component = model.getComponentByKey(bus_key)
                 bus_pin = bus_component.pins.get("0", bus_key)
-            except:
+            except Exception as e:
                 bus_pin = bus_key
 
             breaker_pins = {"0": bus_pin, "1": f"VSI_Bus_{k}"}
@@ -463,7 +463,7 @@ class VSIWeakBusSkill(SkillBase):
                     args=breaker_args,
                     pins=breaker_pins
                 )
-            except Exception as e:
+            except (AttributeError, TypeError) as e:
                 logger.warning(f"添加断路器 {breaker_id} 失败: {e}")
 
             # 添加开关信号（步进信号）
@@ -488,7 +488,7 @@ class VSIWeakBusSkill(SkillBase):
                     args=signal_args,
                     pins=signal_pins
                 )
-            except Exception as e:
+            except (AttributeError, TypeError) as e:
                 logger.warning(f"添加信号源 {signal_name} 失败: {e}")
 
         return vsi_q_keys
@@ -511,7 +511,7 @@ class VSIWeakBusSkill(SkillBase):
                     comp = model.getComponentByKey(key)
                     pin = comp.pins.get("0", key)
                     bus_pins.append(pin)
-                except:
+                except Exception as e:
                     bus_pins.append(key)
 
             # 添加电压量测通道
@@ -527,7 +527,7 @@ class VSIWeakBusSkill(SkillBase):
             # 如果不存在，需要在实际模型中使用相应方法
             voltage_measure_k = 0  # 假设这是第一个通道
 
-        except Exception as e:
+        except (KeyError, AttributeError, AttributeError) as e:
             logger.warning(f"添加电压量测失败: {e}")
             voltage_measure_k = 0
 
@@ -539,7 +539,7 @@ class VSIWeakBusSkill(SkillBase):
                     comp = model.getComponentByKey(key)
                     pin = comp.pins.get("0", key)
                     q_pins.append(pin)
-                except:
+                except Exception as e:
                     q_pins.append(key)
 
             q_channel = {
@@ -552,7 +552,7 @@ class VSIWeakBusSkill(SkillBase):
 
             q_measure_k = 1  # 假设这是第二个通道
 
-        except Exception as e:
+        except (KeyError, AttributeError, AttributeError) as e:
             logger.warning(f"添加无功量测失败: {e}")
             q_measure_k = 1
 
@@ -638,7 +638,7 @@ class VSIWeakBusSkill(SkillBase):
 
             return {"vsi_i": vsi_i, "vsi_ij": vsi_ij}
 
-        except Exception as e:
+        except (KeyError, AttributeError, ZeroDivisionError) as e:
             logger.error(f"计算VSI失败: {e}")
             return {"vsi_i": {}, "vsi_ij": {}}
 

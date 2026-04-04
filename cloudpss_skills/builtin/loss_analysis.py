@@ -210,7 +210,7 @@ class LossAnalysisSkill(SkillBase):
                 data=result_data
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, ConnectionError) as e:
             logger.error(f"网损分析失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,
@@ -282,7 +282,8 @@ class LossAnalysisSkill(SkillBase):
                                         p_loss = float(branch[key])
                                         break
                                     except (ValueError, TypeError):
-                                        pass
+                                        # 异常已捕获，无需额外处理
+                                        logger.debug(f"忽略预期异常: {e}")
 
                             for key in q_loss_keys:
                                 if key in branch and branch[key] is not None:
@@ -290,7 +291,8 @@ class LossAnalysisSkill(SkillBase):
                                         q_loss = float(branch[key])
                                         break
                                     except (ValueError, TypeError):
-                                        pass
+                                        # 异常已捕获，无需额外处理
+                                        logger.debug(f"忽略预期异常: {e}")
 
                             # 提取电流和负载率（如果有）
                             i_ka = 0.0
@@ -304,7 +306,8 @@ class LossAnalysisSkill(SkillBase):
                                         i_ka = float(branch[key])
                                         break
                                     except (ValueError, TypeError):
-                                        pass
+                                        # 异常已捕获，无需额外处理
+                                        logger.debug(f"忽略预期异常: {e}")
 
                             if p_loss > 0.001:  # 只记录有损耗的支路
                                 loss = BranchLoss(
@@ -317,7 +320,7 @@ class LossAnalysisSkill(SkillBase):
                                     loading_percent=min(loading, 100)
                                 )
                                 self.branch_losses.append(loss)
-                        except Exception as e:
+                        except (KeyError) as e:
                             logger.warning(f"处理支路数据失败: {e}")
 
                 logger.info(f"从潮流结果提取了{len(self.branch_losses)}条线路的损耗")
@@ -326,7 +329,7 @@ class LossAnalysisSkill(SkillBase):
             if len(self.branch_losses) == 0:
                 self._calculate_line_losses_from_model()
 
-        except Exception as e:
+        except (KeyError) as e:
             logger.error(f"计算线路损耗失败: {e}")
             self._calculate_line_losses_from_model()
 
@@ -364,12 +367,12 @@ class LossAnalysisSkill(SkillBase):
                         loading_percent=random.uniform(30, 80)
                     )
                     self.branch_losses.append(loss)
-                except Exception as e:
+                except (KeyError, AttributeError) as e:
                     logger.warning(f"计算线路损耗失败: {e}")
 
             logger.info(f"使用备选方法估算了{len(self.branch_losses)}条线路的损耗（估算值）")
 
-        except Exception as e:
+        except (KeyError, AttributeError) as e:
             logger.error(f"备选方法也失败: {e}")
 
     def _calculate_transformer_losses(self, power_flow_result):
@@ -430,12 +433,12 @@ class LossAnalysisSkill(SkillBase):
                             total_loss_mw=core_loss + copper_loss
                         )
                         self.transformer_losses.append(loss)
-                    except Exception as e:
+                    except (KeyError, AttributeError) as e:
                         logger.warning(f"计算变压器损耗失败: {e}")
 
             logger.info(f"计算了{len(self.transformer_losses)}台变压器的损耗")
 
-        except Exception as e:
+        except (KeyError, AttributeError) as e:
             logger.error(f"计算变压器损耗失败: {e}")
 
     def _extract_branch_data(self, power_flow_result, branch_key: str) -> Optional[Dict]:
@@ -546,7 +549,8 @@ class LossAnalysisSkill(SkillBase):
                 with open(auth["token_file"], "r") as f:
                     token = f.read().strip()
             except FileNotFoundError:
-                pass
+                # 异常已捕获，无需额外处理
+                logger.debug(f"忽略预期异常: {e}")
 
         if not token:
             try:

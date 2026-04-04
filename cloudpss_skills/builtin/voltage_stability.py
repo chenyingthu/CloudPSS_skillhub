@@ -238,7 +238,7 @@ class VoltageStabilitySkill(SkillBase):
                             collapse_point = scale
                         log("WARNING", f"  电压低于崩溃阈值!")
 
-                except Exception as e:
+                except (AttributeError, ConnectionError, RuntimeError) as e:
                     log("ERROR", f"  计算失败: {e}")
                     results.append({
                         "scale": scale,
@@ -316,7 +316,7 @@ class VoltageStabilitySkill(SkillBase):
                 logs=logs,
             )
 
-        except Exception as e:
+        except (AttributeError, ConnectionError, RuntimeError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
@@ -398,7 +398,7 @@ class VoltageStabilitySkill(SkillBase):
                 try:
                     model.updateComponent(key, args=args)
                     total_load_p += new_P
-                except Exception as e:
+                except (AttributeError, TypeError) as e:
                     logger.debug(f"Failed to update load {key}: {e}")
 
             else:
@@ -423,7 +423,7 @@ class VoltageStabilitySkill(SkillBase):
                 try:
                     model.updateComponent(key, args=args)
                     total_load_p += new_P
-                except Exception as e:
+                except (AttributeError, TypeError) as e:
                     logger.debug(f"Failed to update load {key}: {e}")
 
         # 同时调整发电机出力（维持功率平衡）
@@ -454,7 +454,7 @@ class VoltageStabilitySkill(SkillBase):
 
                     try:
                         model.updateComponent(key, args=args)
-                    except Exception as e:
+                    except (AttributeError, TypeError) as e:
                         logger.debug(f"Failed to update generator {key}: {e}")
 
     def _extract_bus_voltages(self, result, target_buses: List[str]) -> Dict[str, float]:

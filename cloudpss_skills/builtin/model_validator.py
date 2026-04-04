@@ -240,6 +240,7 @@ class ModelValidatorSkill(SkillBase):
             )
 
         except Exception as e:
+            # run()方法顶层异常捕获，确保任何错误都返回FAILED状态
             logger.error(f"验证失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,
@@ -550,7 +551,7 @@ class ModelValidatorSkill(SkillBase):
             else:
                 logger.error("  ❌ 拓扑验证失败")
 
-        except Exception as e:
+        except (RuntimeError, ConnectionError, TimeoutError) as e:
             result["passed"] = False
             result["errors"].append(f"拓扑验证失败: {e}")
             logger.error(f"  ❌ 拓扑验证失败: {e}")
@@ -687,7 +688,7 @@ class ModelValidatorSkill(SkillBase):
             else:
                 logger.error("  ❌ 潮流验证失败")
 
-        except Exception as e:
+        except (RuntimeError, ConnectionError, TimeoutError) as e:
             result["passed"] = False
             result["errors"].append(f"潮流验证失败: {e}")
             logger.error(f"  ❌ 潮流验证失败: {e}")
@@ -718,7 +719,7 @@ class ModelValidatorSkill(SkillBase):
                 result["details"]["topology_ready"] = True
                 result["details"]["component_count"] = len(topology.components)
                 logger.info(f"  EMT元件数: {len(topology.components)}")
-            except Exception as e:
+            except (KeyError, AttributeError) as e:
                 result["passed"] = False
                 result["errors"].append(f"EMT拓扑检查失败: {e}")
                 logger.error(f"  ❌ EMT拓扑检查失败: {e}")
@@ -812,7 +813,7 @@ class ModelValidatorSkill(SkillBase):
 
             logger.info("  ✅ 暂态验证通过")
 
-        except Exception as e:
+        except (RuntimeError, ConnectionError, TimeoutError) as e:
             result["passed"] = False
             result["errors"].append(f"暂态验证失败: {e}")
             logger.error(f"  ❌ 暂态验证失败: {e}")
@@ -852,7 +853,7 @@ class ModelValidatorSkill(SkillBase):
 
             logger.info("  ✅ 参数对比验证通过")
 
-        except Exception as e:
+        except (KeyError, AttributeError, TypeError) as e:
             result["passed"] = False
             result["errors"].append(f"参数对比失败: {e}")
             logger.error(f"  ❌ 参数对比失败: {e}")
@@ -871,31 +872,37 @@ class ModelValidatorSkill(SkillBase):
 
     def _output_console(self, reports: List[ValidationReport]):
         """控制台输出"""
-        print("\n" + "=" * 80)
-        print("模型验证报告")
-        print("=" * 80)
+        # 使用日志输出报告，便于统一控制输出级别
+        lines = []
+        lines.append("\n" + "=" * 80)
+        lines.append("模型验证报告")
+        lines.append("=" * 80)
 
         for r in reports:
             status = "✅ 通过" if r.overall_passed else "❌ 失败"
-            print(f"\n模型: {r.model_name}")
-            print(f"RID: {r.model_rid}")
-            print(f"结果: {status}")
+            lines.append(f"\n模型: {r.model_name}")
+            lines.append(f"RID: {r.model_rid}")
+            lines.append(f"结果: {status}")
 
             for phase, result in r.phases.items():
                 phase_status = "✅" if result.get("passed") else "❌"
-                print(f"  {phase_status} {phase}")
+                lines.append(f"  {phase_status} {phase}")
 
                 if result.get("errors"):
-                    for e in result["errors"]:
-                        print(f"      错误: {e}")
+                    for e in result.get("errors"):
+                        lines.append(f"      错误: {e}")
                 if result.get("warnings"):
-                    for w in result["warnings"]:
-                        print(f"      警告: {w}")
+                    for w in result.get("warnings"):
+                        lines.append(f"      警告: {w}")
 
         passed = sum(1 for r in reports if r.overall_passed)
-        print(f"\n{'='*80}")
-        print(f"总计: {passed}/{len(reports)} 通过")
-        print("=" * 80)
+        lines.append(f"\n{'='*80}")
+        lines.append(f"总计: {passed}/{len(reports)} 通过")
+        lines.append("=" * 80)
+
+        # 统一使用info级别输出报告
+        for line in lines:
+            logger.info(line)
 
     def _output_json(self, reports: List[ValidationReport], path: str):
         """JSON输出"""

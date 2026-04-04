@@ -309,7 +309,7 @@ class CompareVisualizationSkill(SkillBase):
                     else:
                         log("WARNING", f"  -> 任务 {label} 不是EMT结果类型，跳过")
 
-                except Exception as e:
+                except (KeyError, AttributeError, ConnectionError) as e:
                     log("ERROR", f"  -> 获取失败: {e}")
 
             if len(all_data) < 2:
@@ -628,7 +628,7 @@ class CompareVisualizationSkill(SkillBase):
                 },
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, ConnectionError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

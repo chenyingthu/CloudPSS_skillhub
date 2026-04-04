@@ -222,7 +222,7 @@ class BatchPowerFlowSkill(SkillBase):
 
                     results.append(result_data)
 
-                except Exception as e:
+                except (AttributeError, ConnectionError, RuntimeError) as e:
                     failed_count += 1
                     log("ERROR", f"  -> 计算异常: {e}")
                     results.append({
@@ -352,7 +352,7 @@ class BatchPowerFlowSkill(SkillBase):
                 },
             )
 
-        except Exception as e:
+        except (AttributeError, ConnectionError, RuntimeError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

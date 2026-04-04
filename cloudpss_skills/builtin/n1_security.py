@@ -192,7 +192,7 @@ class N1SecuritySkill(SkillBase):
                 try:
                     working_model.removeComponent(branch["id"])
                     log("INFO", f"  -> 已移除支路 {branch['name']}")
-                except Exception as e:
+                except (KeyError, AttributeError) as e:
                     log("WARNING", f"  -> 移除支路失败: {e}")
                     continue
 
@@ -240,7 +240,7 @@ class N1SecuritySkill(SkillBase):
 
                     results.append(result)
 
-                except Exception as e:
+                except (KeyError, AttributeError, ConnectionError) as e:
                     result = {
                         "branch_id": branch["id"],
                         "branch_name": branch["name"],
@@ -313,7 +313,7 @@ class N1SecuritySkill(SkillBase):
                 },
             )
 
-        except Exception as e:
+        except (KeyError, AttributeError, ConnectionError) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
