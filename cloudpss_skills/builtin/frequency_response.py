@@ -345,7 +345,7 @@ class FrequencyResponseSkill(SkillBase):
                         }
                         model.updateComponent(key, args=args)
                         log_func("INFO", f"负荷阶跃: {comp_label}, {base_p}MW -> {new_p}MW @ {disturbance_time}s")
-                    except (ValueError, TypeError):
+                    except (ValueError, TypeError) as e:
                         # 异常已捕获，无需额外处理
                         logger.debug(f"忽略预期异常: {e}")
 
@@ -361,7 +361,7 @@ class FrequencyResponseSkill(SkillBase):
                         }
                         model.updateComponent(key, args=args)
                         log_func("INFO", f"负荷阶跃: {comp_label}, {base_p}MW -> {new_p}MW @ {disturbance_time}s")
-                    except (ValueError, TypeError):
+                    except (ValueError, TypeError) as e:
                         # 异常已捕获，无需额外处理
                         logger.debug(f"忽略预期异常: {e}")
 
