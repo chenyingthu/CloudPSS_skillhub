@@ -275,8 +275,8 @@ class TransientStabilityMarginSkill(SkillBase):
         import time
 
         try:
-            # 提交EMT仿真（简化，实际需要配置故障）
-            job = model.runEMT(simuTime=5.0)
+            # 提交EMT仿真（使用SDK支持的参数）
+            job = model.runEMT()
 
             max_wait = 60
             start = time.time()
@@ -297,7 +297,7 @@ class TransientStabilityMarginSkill(SkillBase):
 
             return assumed_stable
 
-        except (AttributeError, ConnectionError, RuntimeError) as e:
+        except (AttributeError, ConnectionError, RuntimeError, TypeError) as e:
             logger.warning(f"稳定性检查失败: {e}")
             return False
 

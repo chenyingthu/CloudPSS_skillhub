@@ -205,10 +205,8 @@ class VSIWeakBusSkill(SkillBase):
             logs.append(LogEntry(level="INFO", message="开始EMT仿真"))
 
             try:
-                job = model.runEMT(
-                    endTime=end_time,
-                    step=sim_config.get("step_time", 0.0001)
-                )
+                # 使用SDK支持的参数调用runEMT
+                job = model.runEMT()
 
                 # 等待完成
                 import time
@@ -231,7 +229,7 @@ class VSIWeakBusSkill(SkillBase):
                 logger.info("EMT仿真完成")
                 logs.append(LogEntry(level="INFO", message="EMT仿真完成"))
 
-            except (KeyError, AttributeError, ConnectionError) as e:
+            except (KeyError, AttributeError, ConnectionError, TypeError) as e:
                 logger.error(f"EMT仿真失败: {e}")
                 return SkillResult(
                     status=SkillStatus.FAILED,

@@ -245,7 +245,7 @@ class RenewableIntegrationSkill(SkillBase):
                 data=report
             )
 
-        except (KeyError, AttributeError) as e:
+        except (KeyError, AttributeError, TypeError, ValueError, RuntimeError) as e:
             logger.error(f"新能源接入评估失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,

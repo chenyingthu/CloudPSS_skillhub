@@ -209,9 +209,12 @@ class N2SecuritySkill(SkillBase):
 
             logger.info("N-2安全校核完成")
 
+            # 根据结果确定状态
+            failed_count = sum(1 for r in results if r.status in ("failed", "error"))
+
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.SUCCESS,
+                status=SkillStatus.SUCCESS if failed_count == 0 else SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
                 data=report
