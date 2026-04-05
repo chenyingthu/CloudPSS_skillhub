@@ -707,6 +707,14 @@ class ModelBuilderSkill(SkillBase):
         - {key: "canvas_xxx"}
         """
         try:
+            if "key" in selector:
+                component_key = selector["key"]
+                try:
+                    self.model.getComponentByKey(component_key)
+                    return component_key
+                except Exception:
+                    pass
+
             # 使用 SDK 的 getComponentsByRid 获取所有组件
             # 首先尝试通过类型获取
             all_components = {}
@@ -866,13 +874,17 @@ class ModelBuilderSkill(SkillBase):
         try:
             # 保存模型
             result = self.model.save(branch)
-            # 构建正确的 RID: model/<user>/<branch>
-            # base_model_rid 格式: model/<user>/<original_branch>
-            base_parts = self.base_model_rid.split('/')
-            if len(base_parts) >= 2:
-                new_rid = f"{base_parts[0]}/{base_parts[1]}/{branch}"
-            else:
-                new_rid = result.get("rid", f"model/{branch}")
+            new_rid = (
+                result.get("data", {}).get("createModel", {}).get("rid")
+                or result.get("data", {}).get("updateModel", {}).get("rid")
+                or result.get("rid")
+            )
+            if not new_rid:
+                base_parts = self.base_model_rid.split('/')
+                if len(base_parts) >= 2:
+                    new_rid = f"{base_parts[0]}/{base_parts[1]}/{branch}"
+                else:
+                    new_rid = f"model/{branch}"
 
             logger.info(f"模型已保存: {new_rid}")
 
