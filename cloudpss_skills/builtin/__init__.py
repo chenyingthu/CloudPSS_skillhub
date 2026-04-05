@@ -51,6 +51,7 @@ from . import model_validator
 from . import renewable_integration
 from . import transient_stability_margin
 from . import n2_security
+from . import thevenin_equivalent
 
 # 导出技能类（方便直接导入）
 from .emt_simulation import EmtSimulationSkill
@@ -99,6 +100,7 @@ from .model_validator import ModelValidatorSkill
 from .renewable_integration import RenewableIntegrationSkill
 from .transient_stability_margin import TransientStabilityMarginSkill
 from .n2_security import N2SecuritySkill
+from .thevenin_equivalent import TheveninEquivalentSkill
 
 __all__ = [
     "EmtSimulationSkill",
@@ -147,4 +149,5 @@ __all__ = [
     "RenewableIntegrationSkill",
     "TransientStabilityMarginSkill",
     "N2SecuritySkill",
+    "TheveninEquivalentSkill",
 ]
