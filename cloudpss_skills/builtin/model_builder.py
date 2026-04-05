@@ -219,6 +219,7 @@ class ModelBuilderSkill(SkillBase):
         self._base_model_json = None
         self.modifications_applied = []
         self._original_modifications = []
+        self._strict_connectivity = False
         self._metadata_integration = get_metadata_integration()
         self._metadata_integration.initialize()
 
@@ -257,6 +258,7 @@ class ModelBuilderSkill(SkillBase):
             logger.info(f"获取基础模型: {base_rid}")
             self.model = self._fetch_model(base_rid)
             self._base_model_json = deepcopy(self.model.toJSON())
+            self._strict_connectivity = config.get("output", {}).get("save", True)
 
             # 记录原始模型信息
             original_name = getattr(self.model, 'name', 'Unknown')
@@ -392,7 +394,8 @@ class ModelBuilderSkill(SkillBase):
             if not pin_validation.valid:
                 error_msg = f"组件 {label} 引脚连接验证失败: {'; '.join(pin_validation.errors)}"
                 logger.error(f"  ❌ {error_msg}")
-                # 引脚连接失败不阻止，只警告（因为可能有内部连接机制）
+                if self._strict_connectivity:
+                    raise ValueError(error_msg)
                 logger.warning(f"  ⚠️ {error_msg}")
 
         # 构建组件定义
