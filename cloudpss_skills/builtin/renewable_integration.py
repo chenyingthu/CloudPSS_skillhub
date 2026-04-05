@@ -579,49 +579,76 @@ class RenewableIntegrationSkill(SkillBase):
         """评估稳定性影响"""
         from cloudpss import Model
 
-        model = Model.fetch(model_rid)
+        model_with = Model.fetch(model_rid)
+        renewable_components = self._find_renewable_components(model_with, config)
+        if not renewable_components:
+            return {
+                "error": "未识别到新能源组件，无法评估接入前后稳定性影响",
+                "verified": False,
+            }
 
-        # 运行潮流获取基础状态
-        job = model.runPowerFlow()
-        max_wait = 60
-        import time
-        start = time.time()
-        while time.time() - start < max_wait:
-            status = job.status()
-            if status == 1:
-                break
-            time.sleep(1)
+        voltages_with = self._run_powerflow_and_extract_voltages(model_with)
 
-        pf_result = job.result
+        model_without = Model(deepcopy(model_with.toJSON()))
+        for component_key in renewable_components:
+            try:
+                model_without.removeComponent(component_key)
+            except Exception:
+                model_without.updateComponent(component_key, props={"enabled": False})
 
-        # 评估各类型稳定性（简化）
+        voltages_without = self._run_powerflow_and_extract_voltages(model_without)
+
+        if not voltages_with or not voltages_without:
+            return {
+                "error": "缺少接入前后潮流结果，无法评估稳定性影响",
+                "verified": False,
+            }
+
+        min_with = min(voltages_with)
+        min_without = min(voltages_without)
+        avg_with = sum(voltages_with) / len(voltages_with)
+        avg_without = sum(voltages_without) / len(voltages_without)
+        min_delta = min_with - min_without
+        avg_delta = avg_with - avg_without
+
+        voltage_status = "improved" if min_delta > 0.002 else "degraded" if min_delta < -0.002 else "neutral"
+        voltage_risk = "low" if min_with >= 0.95 else "medium" if min_with >= 0.90 else "high"
+
         stability_assessment = {
             "frequency_stability": {
-                "status": "good",
-                "risk": "low",
-                "notes": "频率响应正常"
+                "status": "not_assessed",
+                "risk": "unknown",
+                "notes": "未运行频率扰动专项仿真，本项未评估"
             },
             "voltage_stability": {
-                "status": "acceptable",
-                "risk": "medium",
-                "notes": "建议监控电压"
+                "status": voltage_status,
+                "risk": voltage_risk,
+                "notes": f"接入后最低电压变化 {min_delta:.4f} pu，平均电压变化 {avg_delta:.4f} pu"
             },
             "transient_stability": {
-                "status": "good",
-                "risk": "low",
-                "notes": "暂态稳定裕度充足"
+                "status": "not_assessed",
+                "risk": "unknown",
+                "notes": "未运行暂态故障扰动专项仿真，本项未评估"
             }
         }
 
+        if voltage_risk == "high":
+            overall_stability = "weak"
+        elif voltage_status == "degraded":
+            overall_stability = "acceptable"
+        else:
+            overall_stability = "good"
+
         return {
-            "overall_stability": "acceptable",
+            "overall_stability": overall_stability,
             "assessments": stability_assessment,
             "recommendations": [
-                "继续监控电压稳定性",
-                "建议定期进行暂态稳定校核"
+                "建议基于真实故障场景补充暂态稳定与LVRT专项校核",
+                "建议持续跟踪接入点及薄弱母线的电压裕度"
             ],
-            "warning": "此结果是基于典型值的简化评估，未进行实际暂态仿真验证，仅供初步评估参考",
-            "verified": False,
+            "renewable_components_removed": renewable_components,
+            "passed": overall_stability != "weak",
+            "verified": True,
         }
 
     def _generate_summary(self, analysis_results: Dict) -> Dict:
