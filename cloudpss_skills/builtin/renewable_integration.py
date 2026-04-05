@@ -577,6 +577,10 @@ class RenewableIntegrationSkill(SkillBase):
                 "verified": False,
             }
 
+        executable = self._detect_lvrt_execution_path(model)
+        if executable["supported"]:
+            return self._run_lvrt_verification(model, config, req, capability, executable)
+
         return {
             "standard": req["name"],
             "lvrt_curve": req["curve"],
@@ -609,8 +613,9 @@ class RenewableIntegrationSkill(SkillBase):
             label = str(getattr(comp, "label", "") or "").lower()
             pins = getattr(comp, "pins", {}) or {}
             args = getattr(comp, "args", {}) or {}
+            infra_component = "vrt_sd" in definition or "vrt_fault" in definition
 
-            if renewable_bus:
+            if renewable_bus and not infra_component:
                 if isinstance(pins, dict):
                     pin_iter = pins.values()
                 elif isinstance(pins, list):
@@ -621,7 +626,7 @@ class RenewableIntegrationSkill(SkillBase):
                 if renewable_bus not in label and renewable_bus not in pin_values:
                     continue
 
-            if not any(token in definition for token in lvrt_keywords.get(renewable_type, [])):
+            if not infra_component and not any(token in definition for token in lvrt_keywords.get(renewable_type, [])):
                 if not (set(args.keys()) & lvrt_param_keys):
                     continue
 
@@ -642,6 +647,123 @@ class RenewableIntegrationSkill(SkillBase):
             "supported": False,
             "reason": "模型中未识别到具备LVRT控制/保护参数的新能源或变流器组件",
             "components": [],
+        }
+
+    def _detect_lvrt_execution_path(self, model) -> Dict[str, Any]:
+        emt_job = next((j for j in model.jobs if j.get("rid") == "function/CloudPSS/emtps"), None)
+        if not emt_job:
+            return {"supported": False, "reason": "模型没有EMT仿真方案"}
+
+        output_groups = emt_job.get("args", {}).get("output_channels", [])
+        has_state_group = False
+        has_voltage_group = False
+        for group in output_groups:
+            name = str(group.get("0", ""))
+            if "电压穿越状态" in name:
+                has_state_group = True
+            if "并网点电压" in name:
+                has_voltage_group = True
+
+        fault_component_key = None
+        for key, comp in model.getAllComponents().items():
+            definition = str(getattr(comp, "definition", "") or "")
+            if "VRT_Fault" in definition:
+                fault_component_key = key
+                break
+
+        if fault_component_key and has_state_group and has_voltage_group:
+            return {
+                "supported": True,
+                "fault_component_key": fault_component_key,
+            }
+
+        return {
+            "supported": False,
+            "reason": "模型缺少可自动触发的VRT故障模块或缺少State/Vrms_HV默认输出组",
+        }
+
+    def _run_lvrt_verification(self, model, config: Dict, req: Dict[str, Any], capability: Dict[str, Any], execution: Dict[str, Any]) -> Dict[str, Any]:
+        from cloudpss import Model
+        import time
+
+        working = Model(deepcopy(model.toJSON()))
+        fault_mode = str(config.get("analysis", {}).get("lvrt_compliance", {}).get("fault_mode", "1"))
+        working.updateComponent(
+            execution["fault_component_key"],
+            args={"Fault_VRT": {"source": fault_mode, "ɵexp": ""}}
+        )
+
+        job = working.runEMT()
+        start = time.time()
+        while time.time() - start < 90:
+            status = job.status()
+            if status == 1:
+                break
+            if status == 2:
+                raise RuntimeError("LVRT专项EMT仿真失败")
+            time.sleep(2)
+
+        result = job.result
+        plots = list(result.getPlots())
+        state_data = None
+        voltage_data = None
+        curve_data = None
+        for plot_idx in range(len(plots)):
+            names = result.getPlotChannelNames(plot_idx) or []
+            for channel_name in names:
+                if channel_name == "State:0":
+                    state_data = result.getPlotChannelData(plot_idx, channel_name)
+                elif channel_name == "Vrms_HV [p.u.]:0":
+                    voltage_data = result.getPlotChannelData(plot_idx, channel_name)
+                elif channel_name == "LVRT_Curve:0":
+                    curve_data = result.getPlotChannelData(plot_idx, channel_name)
+
+        if not state_data or not voltage_data:
+            return {
+                "standard": req["name"],
+                "lvrt_curve": req["curve"],
+                "supported": True,
+                "supported_components": capability["components"],
+                "compliant": False,
+                "passed": False,
+                "notes": "模型具备LVRT能力，但未能提取State或并网点电压输出",
+                "warning": "LVRT状态量测链仍不完整，无法给出正式结论",
+                "verified": False,
+            }
+
+        state_values = [float(v) for v in state_data.get("y", [])]
+        voltage_values = [float(v) for v in voltage_data.get("y", [])]
+        curve_values = [float(v) for v in curve_data.get("y", [])] if curve_data else []
+        entered_lvrt = any(v <= -1.0 for v in state_values)
+        tripped = any(v <= -3.0 for v in state_values)
+        recovered = abs(state_values[-1]) < 1e-6 if state_values else False
+        min_voltage = min(voltage_values) if voltage_values else None
+        max_lvrt_curve = max(curve_values) if curve_values else None
+        compliant = entered_lvrt and not tripped and recovered
+
+        return {
+            "standard": req["name"],
+            "lvrt_curve": req["curve"],
+            "supported": True,
+            "supported_components": capability["components"],
+            "fault_mode": fault_mode,
+            "job_id": job.id,
+            "state_summary": {
+                "entered_lvrt": entered_lvrt,
+                "tripped": tripped,
+                "recovered": recovered,
+                "min_state": min(state_values) if state_values else None,
+                "max_state": max(state_values) if state_values else None,
+                "final_state": state_values[-1] if state_values else None,
+            },
+            "voltage_summary": {
+                "min_voltage_pu": min_voltage,
+                "max_voltage_pu": max(voltage_values) if voltage_values else None,
+                "max_lvrt_curve_pu": max_lvrt_curve,
+            },
+            "compliant": compliant,
+            "passed": compliant,
+            "verified": True,
         }
 
     def _assess_stability_impact(self, model_rid: str, config: Dict) -> Dict:

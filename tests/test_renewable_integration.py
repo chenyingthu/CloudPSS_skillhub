@@ -239,3 +239,38 @@ class TestRenewableIntegrationSkill:
         assert "error" in stability or "assessments" in stability
 
         print(f"\n✅ 稳定性评估检查完成: {stability}")
+
+    def test_verified_lvrt_execution_on_wind_lvrt_case(self, skill, live_auth):
+        """测试基于专用风机LVRT算例的真实低电压穿越验证"""
+        config = {
+            "skill": "renewable_integration",
+            "auth": {"token": live_auth},
+            "model": {"rid": "model/holdme/codex_lvrt_case_fix_20260405_114928", "source": "cloud"},
+            "renewable": {"type": "wind", "bus": "PCC", "capacity": 50},
+            "analysis": {
+                "scr": {"enabled": False},
+                "voltage_variation": {"enabled": False},
+                "harmonic_injection": {"enabled": False},
+                "lvrt_compliance": {"enabled": True, "standard": "gb", "fault_mode": "1"},
+                "stability_impact": {"enabled": False},
+            },
+            "output": {"format": "json", "path": "./test_renewable_lvrt_verified.json"},
+        }
+
+        result = skill.run(config)
+        assert result.status.value == "success", result.error
+
+        lvrt = result.data["analysis_results"]["lvrt_compliance"]
+        assert lvrt["supported"] is True
+        assert lvrt["verified"] is True
+        assert lvrt["passed"] is True
+        assert lvrt["compliant"] is True
+        assert lvrt["state_summary"]["entered_lvrt"] is True
+        assert lvrt["state_summary"]["tripped"] is False
+        assert lvrt["state_summary"]["recovered"] is True
+
+        summary = result.data["summary"]
+        assert summary["certifiable"] is True
+        assert summary["overall_verified"] is True
+
+        print(f"\n✅ LVRT真实验证完成: job={lvrt['job_id']} state={lvrt['state_summary']}")
