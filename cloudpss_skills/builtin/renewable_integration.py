@@ -15,10 +15,12 @@ import logging
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
+from copy import deepcopy
 
 from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult
 from cloudpss_skills.core.auth_utils import setup_auth, DEFAULT_TIMEOUT
 from cloudpss_skills.core.registry import register
+from cloudpss_skills.core.utils import parse_cloudpss_table
 
 logger = logging.getLogger(__name__)
 
@@ -372,53 +374,40 @@ class RenewableIntegrationSkill(SkillBase):
         """
         from cloudpss import Model
         import time
-        import copy
 
-        renewable_config = config.get("renewable", {})
-        renewable_capacity = renewable_config.get("capacity", 100)
-
-        # 获取当前模型（含新能源）
         model_with_renewable = Model.fetch(model_rid)
+        renewable_components = self._find_renewable_components(model_with_renewable, config)
+        if not renewable_components:
+            return {
+                "error": "未在模型中识别到可用于对比的新能源组件",
+                "passed": False,
+                "verified": False,
+            }
 
         # 运行带新能源的潮流
-        job_with = model_with_renewable.runPowerFlow()
-        max_wait = 60
-        start = time.time()
-        while time.time() - start < max_wait:
-            status = job_with.status()
-            if status == 1:
-                break
-            if status == 2:
-                raise RuntimeError("潮流计算失败")
-            time.sleep(1)
-
-        pf_result_with = job_with.result
-        voltages_with = self._extract_voltages_from_result(pf_result_with)
-
-        # 如果没有电压数据，返回错误
+        voltages_with = self._run_powerflow_and_extract_voltages(model_with_renewable)
         if not voltages_with:
-            return {"error": "无法获取含新能源的电压数据"}
+            return {"error": "无法获取含新能源的电压数据", "passed": False, "verified": False}
 
-        # 估算无新能源时的电压
-        # 方法：基于新能源注入功率估算电压变化
-        # 简化模型: ΔV ≈ P * R + Q * X / V
+        model_without_renewable = Model(deepcopy(model_with_renewable.toJSON()))
+        for component_key in renewable_components:
+            try:
+                model_without_renewable.removeComponent(component_key)
+            except Exception:
+                model_without_renewable.updateComponent(component_key, props={"enabled": False})
 
-        # 估算电压变化率
-        # 对于IEEE39系统，100MW光伏接入通常引起1-3%的电压变化
-        # 这里使用简化估算
-        estimated_voltage_change_percent = min(renewable_capacity / 100.0 * 0.5, 5.0)  # 每100MW约0.5%变化
+        voltages_without = self._run_powerflow_and_extract_voltages(model_without_renewable)
+        if not voltages_without:
+            return {"error": "无法获取去除新能源后的电压数据", "passed": False, "verified": False}
 
         # 计算含新能源时的电压统计
         v_max_with = max(voltages_with)
         v_min_with = min(voltages_with)
         v_avg_with = sum(voltages_with) / len(voltages_with)
 
-        # 估算无新能源时的电压
-        # 假设新能源使电压略有升高（无功支撑）或降低（有功注入）
-        voltage_change_direction = 1.0  # 正表示电压升高
-        v_max_without = v_max_with - estimated_voltage_change_percent / 100.0 * voltage_change_direction
-        v_min_without = v_min_with - estimated_voltage_change_percent / 100.0 * voltage_change_direction
-        v_avg_without = v_avg_with - estimated_voltage_change_percent / 100.0 * voltage_change_direction
+        v_max_without = max(voltages_without)
+        v_min_without = min(voltages_without)
+        v_avg_without = sum(voltages_without) / len(voltages_without)
 
         # 计算电压变化
         max_change = max(abs(v_max_with - v_max_without), abs(v_min_with - v_min_without))
@@ -437,44 +426,65 @@ class RenewableIntegrationSkill(SkillBase):
             "max_voltage_change_percent": round(max_change_percent, 2),
             "tolerance_percent": tolerance * 100,
             "passed": max_change <= tolerance,
-            "note": f"电压变化基于{renewable_capacity}MW新能源容量估算",
-            "warning": "此结果是基于简化估算，未进行实际仿真验证，仅供初步评估参考",
-            "verified": False,
+            "renewable_components_removed": renewable_components,
+            "verified": True,
         }
+
+    def _find_renewable_components(self, model, config: Dict) -> List[str]:
+        renewable_type = config.get("renewable", {}).get("type", "pv").lower()
+        renewable_bus = str(config.get("renewable", {}).get("bus", "")).lower()
+        matched = []
+
+        for key, comp in model.getAllComponents().items():
+            definition = str(getattr(comp, "definition", "") or "").lower()
+            label = str(getattr(comp, "label", "") or "").lower()
+            pins = getattr(comp, "pins", {}) or {}
+
+            if renewable_type == "pv":
+                if not any(token in definition for token in ["pv", "pvs"]):
+                    continue
+            elif renewable_type == "wind":
+                if not any(token in definition for token in ["wind", "wg", "wtg", "dfig"]):
+                    continue
+
+            if renewable_bus:
+                pin_values = " ".join(str(v).lower() for v in pins.values())
+                if renewable_bus not in label and renewable_bus not in pin_values:
+                    continue
+
+            matched.append(key)
+
+        return matched
+
+    def _run_powerflow_and_extract_voltages(self, model) -> List[float]:
+        import time
+
+        job = model.runPowerFlow()
+        start = time.time()
+        while time.time() - start < 60:
+            status = job.status()
+            if status == 1:
+                break
+            if status == 2:
+                raise RuntimeError("潮流计算失败")
+            time.sleep(1)
+
+        return self._extract_voltages_from_result(job.result)
 
     def _extract_voltages_from_result(self, pf_result) -> list:
         """从潮流结果中提取电压列表"""
-        buses = pf_result.getBuses()
+        buses = parse_cloudpss_table(pf_result.getBuses())
         voltages = []
 
-        if buses and len(buses) > 0:
-            bus_data = buses[0]
-            if isinstance(bus_data, dict) and 'data' in bus_data:
-                columns = bus_data['data'].get('columns', [])
-                vm_column = None
-                for col in columns:
-                    col_name = col.get('name', '')
-                    if col_name == 'Vm' or 'V</i><sub>m</sub>' in col_name or col_name.startswith('Vm'):
-                        vm_column = col.get('data', [])
-                        break
-
-                if vm_column:
-                    for vm in vm_column:
-                        try:
-                            vm_val = float(vm)
-                            if vm_val > 0:
-                                voltages.append(vm_val)
-                        except Exception as e:
-                            # 异常已捕获，无需额外处理
-                            logger.debug(f"忽略预期异常: {e}")
-            else:
-                for bus in buses:
+        for bus in buses:
+            for key in ("Vm", "Vm / pu", "Vmpu"):
+                if key in bus:
                     try:
-                        vm = float(bus.get("Vm", 0))
+                        vm = float(bus.get(key, 0))
                         if vm > 0:
                             voltages.append(vm)
+                            break
                     except Exception as e:
-                        # 异常已捕获，无需额外处理
                         logger.debug(f"忽略预期异常: {e}")
 
         return voltages
