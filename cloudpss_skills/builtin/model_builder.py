@@ -216,6 +216,7 @@ class ModelBuilderSkill(SkillBase):
         super().__init__()
         self.model = None
         self.base_model_rid = None
+        self._base_model_json = None
         self.modifications_applied = []
         self._original_modifications = []
         self._metadata_integration = get_metadata_integration()
@@ -255,6 +256,7 @@ class ModelBuilderSkill(SkillBase):
             self.base_model_rid = base_rid
             logger.info(f"获取基础模型: {base_rid}")
             self.model = self._fetch_model(base_rid)
+            self._base_model_json = deepcopy(self.model.toJSON())
 
             # 记录原始模型信息
             original_name = getattr(self.model, 'name', 'Unknown')
@@ -264,7 +266,8 @@ class ModelBuilderSkill(SkillBase):
             modifications = config.get("modifications", [])
             # 存储原始修改配置，供批量生成使用
             self._original_modifications = deepcopy(modifications)
-            if modifications:
+            batch_config = config.get("batch", {})
+            if modifications and not batch_config.get("enabled", False):
                 logger.info(f"执行 {len(modifications)} 个修改操作...")
                 for i, mod_config in enumerate(modifications, 1):
                     try:
@@ -277,7 +280,6 @@ class ModelBuilderSkill(SkillBase):
 
             # 处理批量生成
             generated_models = []
-            batch_config = config.get("batch", {})
             if batch_config.get("enabled", False):
                 logger.info("执行批量生成...")
                 generated_models = self._batch_generate(batch_config, config.get("output", {}))
@@ -345,6 +347,7 @@ class ModelBuilderSkill(SkillBase):
         position = config.get("position", {})
         pin_connection = config.get("pin_connection", {})
         comp_type, params = self._prepare_component_definition(raw_comp_type, raw_params)
+        params = self._normalize_parameters_by_metadata(comp_type, params)
 
         logger.debug(f"添加组件: {label} ({comp_type})")
 
@@ -522,6 +525,63 @@ class ModelBuilderSkill(SkillBase):
         return {key: value for key, value in params.items() if key not in keys}
 
     @staticmethod
+    def _coerce_scalar_value(value: Any, expected_type: Optional[str] = None) -> Any:
+        """把占位符替换后的字符串恢复成合适的标量类型。"""
+        if not isinstance(value, str):
+            return value
+
+        stripped = value.strip()
+        if expected_type == "text":
+            return stripped
+        if expected_type == "choice":
+            return stripped
+        if expected_type == "boolean":
+            lower = stripped.lower()
+            if lower in {"true", "1", "yes"}:
+                return True
+            if lower in {"false", "0", "no"}:
+                return False
+            return value
+        if expected_type == "integer":
+            try:
+                return int(float(stripped))
+            except ValueError:
+                return value
+        if expected_type == "real":
+            try:
+                return float(stripped)
+            except ValueError:
+                return value
+
+        if re.fullmatch(r"-?\d+", stripped):
+            return int(stripped)
+        if re.fullmatch(r"-?\d+\.\d*", stripped):
+            return float(stripped)
+        return value
+
+    def _normalize_parameters_by_metadata(self, component_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """把显示名参数映射成真实 key，并按元数据做类型归一化。"""
+        metadata = self._metadata_integration.get_component_metadata(component_type)
+        if not metadata:
+            return {key: self._coerce_scalar_value(value) for key, value in params.items()}
+
+        key_map = {}
+        type_map = {}
+        for param in metadata.get_all_parameters():
+            key_map[param.key] = param.key
+            key_map[param.display_name] = param.key
+            key_map[self._normalize_lookup_value(param.key)] = param.key
+            key_map[self._normalize_lookup_value(param.display_name)] = param.key
+            type_map[param.key] = param.type
+
+        normalized = {}
+        for key, value in params.items():
+            resolved_key = key_map.get(key) or key_map.get(self._normalize_lookup_value(key)) or key
+            normalized[resolved_key] = self._coerce_scalar_value(value, type_map.get(resolved_key))
+
+        return normalized
+
+    @staticmethod
     def _normalize_lookup_value(value: Any) -> str:
         """把用户输入和模型内部名字归一化后再做匹配。"""
         if value is None:
@@ -595,12 +655,15 @@ class ModelBuilderSkill(SkillBase):
             raise ValueError(f"找不到匹配的组件: {selector}")
 
         # 更新参数
+        component = self.model.getComponentByKey(component_key)
+        component_type = getattr(component, "definition", "")
+        normalized_params = self._normalize_parameters_by_metadata(component_type, params)
         try:
-            self.model.updateComponent(component_key, **params)
+            self.model.updateComponent(component_key, args=normalized_params)
             self.modifications_applied.append(f"modify:{component_key}")
         except (AttributeError, TypeError) as e:
             logger.warning(f"SDK修改组件失败，尝试备用方法: {e}")
-            self._modify_component_direct(component_key, params)
+            self._modify_component_direct(component_key, normalized_params)
 
     def _modify_component_direct(self, key: str, params: Dict):
         """直接修改组件参数"""
@@ -687,6 +750,8 @@ class ModelBuilderSkill(SkillBase):
 
     def _batch_generate(self, batch_config: Dict, output_config: Dict) -> List[GeneratedModel]:
         """批量生成模型变体"""
+        from cloudpss import Model
+
         models = []
 
         # 获取参数扫描配置
@@ -700,6 +765,8 @@ class ModelBuilderSkill(SkillBase):
         param_values = [p["values"] for p in sweep_params]
 
         for i, combination in enumerate(itertools.product(*param_values)):
+            self.model = Model(deepcopy(self._base_model_json))
+            self.modifications_applied = []
             # 创建参数映射
             params = dict(zip(param_names, combination))
 
@@ -709,10 +776,20 @@ class ModelBuilderSkill(SkillBase):
 
             # 保存模型
             output = deepcopy(output_config)
-            output["name"] = output_config.get("name", "model") + f"_{i+1}"
-            output["description"] = output_config.get("description", "") + f" (params: {params})"
+            output_name = self._apply_placeholder_template(output_config.get("name", "model"), params) or f"model_{i+1}"
+            output["name"] = output_name
+            output["description"] = (self._apply_placeholder_template(output_config.get("description", ""), params)
+                                     or "") + f" (params: {params})"
 
-            model_info = self._save_model(output)
+            if output.get("save", True):
+                model_info = self._save_model(output)
+            else:
+                model_info = GeneratedModel(
+                    name=output_name,
+                    rid=f"unsaved://{output_name}",
+                    description=output["description"],
+                    modifications_applied=self.modifications_applied.copy()
+                )
             models.append(model_info)
 
             logger.info(f"批量生成 [{i+1}]: {model_info.name}")
@@ -735,7 +812,9 @@ class ModelBuilderSkill(SkillBase):
                         # 替换 {param_name} 格式的占位符
                         for param_name, param_value in params.items():
                             placeholder = f"{{{param_name}}}"
-                            if placeholder in value:
+                            if value == placeholder:
+                                new_mod["parameters"][key] = param_value
+                            elif placeholder in value:
                                 new_mod["parameters"][key] = value.replace(placeholder, str(param_value))
 
             # 替换 label 中的占位符
@@ -761,6 +840,15 @@ class ModelBuilderSkill(SkillBase):
             modifications.append(new_mod)
 
         return modifications
+
+    @staticmethod
+    def _apply_placeholder_template(template: str, params: Dict[str, Any]) -> str:
+        if not isinstance(template, str):
+            return template
+        result = template
+        for param_name, param_value in params.items():
+            result = result.replace(f"{{{param_name}}}", str(param_value))
+        return result
 
     def _save_model(self, output_config: Dict) -> GeneratedModel:
         """保存模型"""
