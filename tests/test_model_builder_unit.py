@@ -40,7 +40,7 @@ class TestModelBuilderUnit:
         assert len(skill.DEFAULT_COMPONENT_TYPES) == 16
         assert "model/CloudPSS/_newBus_3p" in skill.DEFAULT_COMPONENT_TYPES
         assert "model/CloudPSS/PVStation" in skill.DEFAULT_COMPONENT_TYPES
-        assert "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1" in skill.DEFAULT_COMPONENT_TYPES
+        assert "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5" in skill.DEFAULT_COMPONENT_TYPES
         assert "model/open-cloudpss/PVS_01-avm-stdm-v1b5" in skill.DEFAULT_COMPONENT_TYPES
         assert "model/CloudPSS/DistanceRelay" in skill.DEFAULT_COMPONENT_TYPES
         print("✅ 默认组件类型列表正确")
@@ -56,7 +56,7 @@ class TestModelBuilderUnit:
                 {"Pnom": 80.0, "Vpcc": 0.69}
             )
 
-            assert comp_type == "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1"
+            assert comp_type == "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5"
             assert params["P_cmd"] == 80.0
             assert params["pf_P"] == 80.0
             assert params["Vbase"] == 0.69
@@ -215,7 +215,7 @@ class TestModelBuilderUnit:
 
         assert len(result) == 1
         assert result[0]["label"] == "PV_100MW"
-        assert result[0]["parameters"]["额定容量"] == "100"
+        assert result[0]["parameters"]["额定容量"] == 100
         assert result[0]["parameters"]["固定参数"] == "不变"
         print("✅ 简单参数占位符替换正确")
 
@@ -239,7 +239,7 @@ class TestModelBuilderUnit:
         # 验证两个参数都被替换
         assert "BUS10" in result[0]["label"]
         assert "150" in result[0]["label"]
-        assert result[0]["parameters"]["额定容量"] == "150"
+        assert result[0]["parameters"]["额定容量"] == 150
         assert result[0]["parameters"]["位置"] == "BUS10"
         print("✅ 多个参数占位符替换正确")
 
@@ -282,7 +282,7 @@ class TestModelBuilderUnit:
         assert skill._original_modifications[0]["parameters"]["容量"] == "{capacity}"
         # 验证新配置已替换
         assert result[0]["label"] == "PV_100MW"
-        assert result[0]["parameters"]["容量"] == "100"
+        assert result[0]["parameters"]["容量"] == 100
         print("✅ 原始配置未被修改")
 
     def test_get_modifications_multiple_mods(self, skill):
@@ -306,8 +306,20 @@ class TestModelBuilderUnit:
         assert len(result) == 2
         assert result[0]["label"] == "PV_200MW"
         assert result[1]["selector"]["label"] == "Load_5"
-        assert result[1]["parameters"]["有功功率"] == "50"
+        assert result[1]["parameters"]["有功功率"] == 50
         print("✅ 多个修改配置参数替换正确")
+
+    def test_find_component_prefers_direct_key_lookup(self, skill):
+        """测试 selector.key 可直接命中任意组件，而不依赖预设类型池"""
+        skill.model = Mock()
+        target_component = Mock()
+        skill.model.getComponentByKey.return_value = target_component
+
+        result = skill._find_component({"key": "component_vrt_fault_1"})
+
+        assert result == "component_vrt_fault_1"
+        skill.model.getComponentByKey.assert_called_once_with("component_vrt_fault_1")
+        print("✅ 直接key查找可命中任意组件")
 
 
 class TestModelBuilderDataClasses:
@@ -367,7 +379,7 @@ class TestModelBuilderMockIntegration:
         # 创建 Mock 模型
         mock_model = Mock()
         mock_model.name = "TestModel"
-        mock_model.save.return_value = {"rid": "model/holdme/test_branch"}
+        mock_model.save.return_value = {"data": {"createModel": {"rid": "model/holdme/test_branch"}}}
         mock_model_class.fetch.return_value = mock_model
 
         config = {
