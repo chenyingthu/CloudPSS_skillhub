@@ -19,6 +19,7 @@ from enum import Enum
 
 from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult, LogEntry, Artifact
 from cloudpss_skills.core.auth_utils import setup_auth, DEFAULT_TIMEOUT, DEFAULT_POWERFLOW_TOLERANCE
+from cloudpss_skills.core.registry import register
 from cloudpss_skills.metadata.integration import get_metadata_integration
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,7 @@ class ValidationReport:
     warnings: List[str] = field(default_factory=list)
 
 
+@register
 class ModelValidatorSkill(SkillBase):
     """
     模型验证技能

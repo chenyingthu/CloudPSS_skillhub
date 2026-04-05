@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult, Artifact
+from cloudpss_skills.core.registry import register
 from cloudpss_skills.core.utils import get_components_by_type
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,7 @@ class TransformerLoss:
     total_loss_mw: float      # 总损耗(MW)
 
 
+@register
 class LossAnalysisSkill(SkillBase):
     """
     网损分析与优化技能

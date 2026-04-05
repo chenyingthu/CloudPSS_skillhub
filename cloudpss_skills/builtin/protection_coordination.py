@@ -17,6 +17,7 @@ from enum import Enum
 from datetime import datetime
 
 from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult, Artifact
+from cloudpss_skills.core.registry import register
 from cloudpss_skills.core.utils import get_components_by_type, convert_label_to_key
 
 logger = logging.getLogger(__name__)
@@ -86,6 +87,7 @@ class CoordinationResult:
     margin: float                   # 时间裕度
 
 
+@register
 class ProtectionCoordinationSkill(SkillBase):
     """
     保护整定与配合分析技能

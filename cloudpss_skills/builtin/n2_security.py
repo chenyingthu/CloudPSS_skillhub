@@ -19,6 +19,7 @@ from itertools import combinations
 
 from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult
 from cloudpss_skills.core.auth_utils import setup_auth, DEFAULT_TIMEOUT
+from cloudpss_skills.core.registry import register
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ class N2ContingencyResult:
     max_loading_pu: Optional[float]
 
 
+@register
 class N2SecuritySkill(SkillBase):
     """
     N-2安全校核技能

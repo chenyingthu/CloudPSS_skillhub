@@ -18,6 +18,7 @@ from copy import deepcopy
 import itertools
 
 from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult
+from cloudpss_skills.core.registry import register
 from cloudpss_skills.metadata.integration import get_metadata_integration
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,7 @@ class GeneratedModel:
     modifications_applied: List[str]
 
 
+@register
 class ModelBuilderSkill(SkillBase):
     """
     模型构建器技能

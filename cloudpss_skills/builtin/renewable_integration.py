@@ -651,6 +651,8 @@ class RenewableIntegrationSkill(SkillBase):
     def _generate_recommendations(self, analysis_results: Dict) -> List[str]:
         """生成建议"""
         recommendations = []
+        if any(isinstance(result, dict) and not result.get("verified", True) for result in analysis_results.values()):
+            recommendations.append("当前仍包含未完成真实仿真验证的分析项，建议补充短路、谐波和LVRT专项校核")
 
         scr = analysis_results.get("scr", {})
         if not scr.get("passed", True):
