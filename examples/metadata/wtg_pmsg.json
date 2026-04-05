@@ -1,5 +1,5 @@
 {
-  "component_id": "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1",
+  "component_id": "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5",
   "name": "永磁同步风机模型 (PMSG)",
   "description": "永磁同步风力发电机网侧变流器模型，支持潮流计算和电磁暂态仿真。该模型可在 CloudPSS EMTLab 中正确参与潮流计算，支持功率控制和电压控制模式。",
   "version": "2.1.0",
@@ -231,6 +231,45 @@
             "required": false,
             "default": "standard",
             "choices": ["standard", "enhanced", "grid_forming"]
+          }
+        ]
+      },
+      {
+        "group_id": "monitoring",
+        "name": "监测输出",
+        "description": "用于事件日志和LVRT状态观测的虚拟输出标签",
+        "parameters": [
+          {
+            "key": "PMSG_Name",
+            "display_name": "风机风场名称",
+            "type": "text",
+            "description": "用于电压穿越相关事件日志输出的名称",
+            "required": false,
+            "default": ""
+          },
+          {
+            "key": "P_WT",
+            "display_name": "有功功率输出标签",
+            "type": "text",
+            "description": "输出有功功率（MW）的虚拟输出标签",
+            "required": false,
+            "default": ""
+          },
+          {
+            "key": "Q_WT",
+            "display_name": "无功功率输出标签",
+            "type": "text",
+            "description": "输出无功功率（MVar）的虚拟输出标签",
+            "required": false,
+            "default": ""
+          },
+          {
+            "key": "State_PMSG",
+            "display_name": "电压穿越状态标签",
+            "type": "text",
+            "description": "输出LVRT状态（±3/±2/±1/0）的虚拟输出标签",
+            "required": false,
+            "default": ""
           }
         ]
       },

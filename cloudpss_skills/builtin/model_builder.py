@@ -111,7 +111,7 @@ class ModelBuilderSkill(SkillBase):
         "model/CloudPSS/PVStation",  # 光伏电站模型
         "model/CloudPSS/PV_Inverter",  # 旧版光伏逆变器示例别名
         "model/CloudPSS/PVStation_external_ctrl",  # 光伏电站外部控制模型
-        "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1",  # 支持潮流的公开风机封装模型
+        "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5",  # 支持潮流且保留更多LVRT参数的公开风机封装模型
         "model/open-cloudpss/PVS_01-avm-stdm-v1b5",  # 支持潮流的公开光伏封装模型
         # 保护装置
         "model/CloudPSS/DistanceRelay",  # 距离保护
@@ -120,8 +120,8 @@ class ModelBuilderSkill(SkillBase):
 
     COMPONENT_TYPE_ALIASES = {
         # WGSource 已知不适合做潮流算例，自动映射到公开可用的 PMSG 封装模型
-        "model/CloudPSS/WGSource": "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1",
-        "model/CloudPSS/DFIG_WindFarm_Equivalent_Model": "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1",
+        "model/CloudPSS/WGSource": "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5",
+        "model/CloudPSS/DFIG_WindFarm_Equivalent_Model": "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5",
         # 旧文档/示例里的光伏类型统一映射到公开可访问且可参与潮流的封装模型
         "model/CloudPSS/PVStation": "model/open-cloudpss/PVS_01-avm-stdm-v1b5",
         "model/CloudPSS/PV_Inverter": "model/open-cloudpss/PVS_01-avm-stdm-v1b5",
@@ -462,7 +462,7 @@ class ModelBuilderSkill(SkillBase):
         if effective_type != component_type:
             logger.info(f"  组件类型映射: {component_type} -> {effective_type}")
 
-        if effective_type == "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1":
+        if effective_type == "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5":
             effective_params = self._prepare_public_wind_parameters(effective_params)
         elif effective_type == "model/open-cloudpss/PVS_01-avm-stdm-v1b5":
             effective_params = self._prepare_public_pv_parameters(effective_params)
