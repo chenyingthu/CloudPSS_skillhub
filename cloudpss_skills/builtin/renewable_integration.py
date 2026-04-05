@@ -540,6 +540,7 @@ class RenewableIntegrationSkill(SkillBase):
         standard = config.get("analysis", {}).get("lvrt_compliance", {}).get("standard", "gb")
 
         model = Model.fetch(model_rid)
+        capability = self._detect_lvrt_capability(model, config)
 
         # LVRT要求曲线（简化）
         # GB标准：电压跌至20%时，至少维持625ms不脱网
@@ -564,18 +565,83 @@ class RenewableIntegrationSkill(SkillBase):
         }
 
         req = lvrt_requirements.get(standard, lvrt_requirements["gb"])
-
-        # 简化验证：假设模型配置了LVRT能力
-        # 实际应通过EMT仿真验证
-        assumed_compliant = True  # 假设合规
+        if not capability["supported"]:
+            return {
+                "standard": req["name"],
+                "lvrt_curve": req["curve"],
+                "supported": False,
+                "compliant": False,
+                "passed": False,
+                "reason": capability["reason"],
+                "warning": "当前模型未识别到LVRT控制/保护逻辑，不能开展有效LVRT测试",
+                "verified": False,
+            }
 
         return {
             "standard": req["name"],
             "lvrt_curve": req["curve"],
-            "compliant": assumed_compliant,
-            "notes": "基于模型配置验证，建议通过EMT仿真详细验证",
-            "warning": "此结果是基于假设的简化验证，未进行实际EMT仿真，仅供初步评估参考",
+            "supported": True,
+            "supported_components": capability["components"],
+            "compliant": False,
+            "passed": False,
+            "notes": "模型具备LVRT相关控制/保护逻辑，但当前自动化链路尚未完成故障跌落与状态量测的闭环验证",
+            "warning": "当前仅确认模型具备LVRT能力，尚未完成真实故障过程验证，不能宣称已通过LVRT测试",
             "verified": False,
+        }
+
+    def _detect_lvrt_capability(self, model, config: Dict) -> Dict[str, Any]:
+        renewable_type = config.get("renewable", {}).get("type", "pv").lower()
+        renewable_bus = str(config.get("renewable", {}).get("bus", "")).lower()
+        supported_components = []
+
+        lvrt_keywords = {
+            "pv": ["pvs_01-avm-std", "pvstation", "pvs_01"],
+            "wind": ["wtg_pmsg_01-avm-std", "wgsource", "dfig", "vrt_sd"],
+        }
+        lvrt_param_keys = {
+            "Enable_LV", "VLin_LV", "VLout_LV", "TdlyVLin_LV", "TdlyVLout_LV",
+            "TL1_LV", "VL1_LV", "TL2_LV", "VL2_LV", "LVRT_IN_PFLAG", "LVRT_IN_QFLAG",
+            "TLVRT_RECOVER0_LV", "LVRTEnable", "LVRT_Startup", "FRTMode",
+        }
+
+        for key, comp in model.getAllComponents().items():
+            definition = str(getattr(comp, "definition", "") or "").lower()
+            label = str(getattr(comp, "label", "") or "").lower()
+            pins = getattr(comp, "pins", {}) or {}
+            args = getattr(comp, "args", {}) or {}
+
+            if renewable_bus:
+                if isinstance(pins, dict):
+                    pin_iter = pins.values()
+                elif isinstance(pins, list):
+                    pin_iter = pins
+                else:
+                    pin_iter = []
+                pin_values = " ".join(str(v).lower() for v in pin_iter)
+                if renewable_bus not in label and renewable_bus not in pin_values:
+                    continue
+
+            if not any(token in definition for token in lvrt_keywords.get(renewable_type, [])):
+                if not (set(args.keys()) & lvrt_param_keys):
+                    continue
+
+            supported_components.append({
+                "key": key,
+                "label": getattr(comp, "label", ""),
+                "definition": getattr(comp, "definition", ""),
+                "lvrt_param_keys": sorted(set(args.keys()) & lvrt_param_keys),
+            })
+
+        if supported_components:
+            return {
+                "supported": True,
+                "components": supported_components,
+            }
+
+        return {
+            "supported": False,
+            "reason": "模型中未识别到具备LVRT控制/保护参数的新能源或变流器组件",
+            "components": [],
         }
 
     def _assess_stability_impact(self, model_rid: str, config: Dict) -> Dict:
