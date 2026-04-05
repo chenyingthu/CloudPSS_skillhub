@@ -12,10 +12,13 @@
 """
 
 import logging
+import math
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
 from copy import deepcopy
+
+import numpy as np
 
 from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult
 from cloudpss_skills.core.auth_utils import setup_auth, DEFAULT_TIMEOUT
@@ -23,6 +26,10 @@ from cloudpss_skills.core.registry import register
 from cloudpss_skills.core.utils import parse_cloudpss_table
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_bus_name(name: Any) -> str:
+    return "".join(ch for ch in str(name or "").lower() if ch.isalnum())
 
 
 @dataclass
@@ -280,68 +287,24 @@ class RenewableIntegrationSkill(SkillBase):
         2 < SCR < 3: 中等强度电网
         SCR < 2: 弱电网
         """
-        from cloudpss import Model
-        import math
-
         renewable_config = config.get("renewable", {})
         capacity_mw = renewable_config.get("capacity", 100)
         renewable_bus = renewable_config.get("bus", "")
 
-        # 获取模型
-        model = Model.fetch(model_rid)
+        zth_result = self._compute_pcc_zth(model_rid, renewable_bus)
+        if not zth_result.get("verified"):
+            return {
+                "error": zth_result.get("error", "无法计算PCC等值阻抗"),
+                "passed": False,
+                "verified": False,
+            }
 
-        # 获取模型拓扑
-        topology = model.fetchTopology(implementType="powerflow")
-        components = topology.components
-
-        # 查找新能源接入母线
-        bus_nominal_voltage = 220.0  # 默认值 kV
-        bus_short_circuit_capacity = None
-
-        for comp_id, comp in components.items():
-            comp_name = comp.get("label", "")
-            if renewable_bus and renewable_bus in str(comp_name):
-                # 获取母线额定电压
-                args = comp.get("args", {})
-                if "Vnom" in args:
-                    bus_nominal_voltage = float(args["Vnom"]) / 1000.0  # V -> kV
-                break
-
-        # 计算系统总装机容量
-        total_generation = 0
-        for comp_id, comp in components.items():
-            comp_type = comp.get("definition", "")
-            if "generator" in comp_type.lower() or "Gen" in comp_type or "Source" in comp_type:
-                args = comp.get("args", {})
-                if "Pgen" in args:
-                    try:
-                        total_generation += float(args["Pgen"])
-                    except Exception as e:
-                        # 异常已捕获，无需额外处理
-                        logger.debug(f"忽略预期异常: {e}")
-
-        # 估算短路容量: 典型电力系统短路容量为总装机容量的1.5-3倍
-        if total_generation > 0:
-            estimated_sc_capacity = total_generation * 2.0  # 2倍系数
-        else:
-            # IEEE39默认总装机约6000MW
-            estimated_sc_capacity = 10000.0  # MVA
-
-        # 如果指定了接入母线，根据母线位置调整短路容量
-        # 高压母线短路容量更大，低压母线更小
-        if bus_nominal_voltage >= 500:
-            bus_factor = 1.5
-        elif bus_nominal_voltage >= 220:
-            bus_factor = 1.0
-        elif bus_nominal_voltage >= 110:
-            bus_factor = 0.6
-        else:
-            bus_factor = 0.3
-
-        adjusted_sc_capacity = estimated_sc_capacity * bus_factor
-
-        # 计算SCR
-        scr = adjusted_sc_capacity / capacity_mw if capacity_mw > 0 else float('inf')
+        zth_pu = zth_result["z_th_pu"]
+        bus_nominal_voltage = float(zth_result["bus_nominal_voltage_kv"])
+        system_base_mva = float(zth_result["system_base_mva"])
+        zth_mag = float(abs(zth_pu))
+        short_circuit_capacity_mva = system_base_mva / zth_mag if zth_mag > 0 else float("inf")
+        scr = short_circuit_capacity_mva / float(capacity_mw) if capacity_mw > 0 else float("inf")
 
         # 判断电网强度
         if scr >= 3:
@@ -356,15 +319,136 @@ class RenewableIntegrationSkill(SkillBase):
 
         return {
             "scr": round(scr, 2),
-            "short_circuit_capacity_mva": round(adjusted_sc_capacity, 2),
+            "short_circuit_capacity_mva": round(short_circuit_capacity_mva, 2),
             "renewable_capacity_mw": capacity_mw,
             "bus_nominal_voltage_kv": bus_nominal_voltage,
+            "z_th_pu": {
+                "real": round(zth_pu.real, 6),
+                "imag": round(zth_pu.imag, 6),
+                "magnitude": round(abs(zth_pu), 6),
+            },
+            "bus_node": zth_result["bus_node"],
             "grid_strength": strength,
             "recommendation": recommendation,
             "threshold": config.get("analysis", {}).get("scr", {}).get("threshold", 3.0),
-            "passed": scr >= config.get("analysis", {}).get("scr", {}).get("threshold", 3.0),
-            "calculation_method": "基于系统拓扑估算",
-            "verified": False,
+            "passed": bool(scr >= config.get("analysis", {}).get("scr", {}).get("threshold", 3.0)),
+            "calculation_method": "基于拓扑正序网络构造PCC戴维南等值阻抗",
+            "verified": True,
+        }
+
+    def _compute_pcc_zth(self, model_rid: str, renewable_bus: str) -> Dict[str, Any]:
+        from cloudpss import Model
+
+        model = Model.fetch(model_rid)
+        pf_components = model.fetchTopology(implementType="powerflow").toJSON().get("components", {})
+        emt_components = model.fetchTopology(implementType="emtp").toJSON().get("components", {})
+
+        buses = []
+        node_to_index = {}
+        index_to_bus = {}
+        bus_name_target = _normalize_bus_name(renewable_bus)
+
+        target_node = None
+        target_vbase = None
+        for comp in pf_components.values():
+            if not isinstance(comp, dict) or comp.get("definition") != "model/CloudPSS/_newBus_3p":
+                continue
+            node = str((comp.get("pins") or {}).get("0", ""))
+            if not node:
+                continue
+            if node not in node_to_index:
+                idx = len(buses)
+                node_to_index[node] = idx
+                buses.append(node)
+            bus_args = comp.get("args", {}) or {}
+            index_to_bus[node] = {
+                "name": bus_args.get("Name") or comp.get("label"),
+                "vbase": float(bus_args.get("VBase", 0) or 0),
+            }
+            if bus_name_target and _normalize_bus_name(bus_args.get("Name")) == bus_name_target:
+                target_node = node
+                target_vbase = float(bus_args.get("VBase", 0) or 0)
+
+        if target_node is None:
+            return {"verified": False, "error": f"未找到接入母线 {renewable_bus}"}
+
+        size = len(buses)
+        if size == 0:
+            return {"verified": False, "error": "拓扑中未识别到母线节点"}
+
+        ybus = np.zeros((size, size), dtype=complex)
+        system_base_mva = 100.0
+
+        def add_series(node_a: str, node_b: str, z_pu: complex):
+            if abs(z_pu) == 0:
+                return
+            ia = node_to_index.get(str(node_a))
+            ib = node_to_index.get(str(node_b))
+            if ia is None or ib is None:
+                return
+            y = 1 / z_pu
+            ybus[ia, ia] += y
+            ybus[ib, ib] += y
+            ybus[ia, ib] -= y
+            ybus[ib, ia] -= y
+
+        def add_shunt(node: str, z_pu: complex):
+            if abs(z_pu) == 0:
+                return
+            idx = node_to_index.get(str(node))
+            if idx is None:
+                return
+            ybus[idx, idx] += 1 / z_pu
+
+        for comp in pf_components.values():
+            if not isinstance(comp, dict) or comp.get("definition") != "model/CloudPSS/TransmissionLine":
+                continue
+            pins = comp.get("pins") or {}
+            node_a = str(pins.get("0", ""))
+            node_b = str(pins.get("1", ""))
+            args = comp.get("args", {}) or {}
+            r_pu = args.get("R1pu")
+            x_pu = args.get("X1pu")
+            if r_pu is None or x_pu is None:
+                continue
+            add_series(node_a, node_b, complex(float(r_pu), float(x_pu)))
+
+        for comp in emt_components.values():
+            if not isinstance(comp, dict):
+                continue
+            definition = comp.get("definition")
+            pins = comp.get("pins") or {}
+            args = comp.get("args", {}) or {}
+
+            if definition == "model/CloudPSS/_newTransformer_3p2w":
+                node_a = str(pins.get("0", ""))
+                node_b = str(pins.get("1", ""))
+                tmva = float(args.get("Tmva", system_base_mva) or system_base_mva)
+                r_pu = float(args.get("Rn1", 0) or 0) + float(args.get("Rn2", 0) or 0)
+                x_pu = float(args.get("Xl", 0) or 0)
+                z_pu = complex(r_pu, x_pu) * (system_base_mva / tmva)
+                add_series(node_a, node_b, z_pu)
+
+            elif definition == "model/CloudPSS/SyncGeneratorRouter":
+                node = str(pins.get("0", ""))
+                smva = float(args.get("Smva", system_base_mva) or system_base_mva)
+                r_pu = float(args.get("Rs_2", args.get("Rs", 0)) or 0)
+                x_pu = float(args.get("Xdpp_2", args.get("Xdp_2", args.get("Xd", 0))) or 0)
+                z_pu = complex(r_pu, x_pu) * (system_base_mva / smva)
+                add_shunt(node, z_pu)
+
+        try:
+            zbus = np.linalg.inv(ybus)
+        except np.linalg.LinAlgError:
+            return {"verified": False, "error": "Ybus奇异，无法求逆得到Zbus"}
+
+        z_th = zbus[node_to_index[target_node], node_to_index[target_node]]
+        return {
+            "verified": True,
+            "z_th_pu": z_th,
+            "bus_node": target_node,
+            "bus_nominal_voltage_kv": float(target_vbase),
+            "system_base_mva": float(system_base_mva),
         }
 
     def _analyze_voltage_variation(self, model_rid: str, config: Dict) -> Dict:
