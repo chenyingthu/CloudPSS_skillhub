@@ -355,6 +355,38 @@ class TestModelBuilderSkill:
         else:
             print(f"⚠️ type选择器未找到组件: {result.error}")
 
+    @pytest.mark.skipif(not HAS_TOKEN, reason=TOKEN_MSG)
+    def test_integration_modify_open_cloudpss_lvrt_fault_case(self, skill):
+        """测试15: 基于 open-cloudpss 模型修改内部LVRT故障模块并保存可用算例"""
+        config = {
+            "base_model": {"rid": "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5"},
+            "auth": {"token_file": ".cloudpss_token"},
+            "modifications": [
+                {
+                    "action": "modify_component",
+                    "selector": {"key": "component_vrt_fault_1"},
+                    "parameters": {
+                        "Fault_VRT": {"source": "1", "ɵexp": ""}
+                    }
+                }
+            ],
+            "output": {
+                "save": True,
+                "branch": "codex_test_open_cloudpss_lvrt_case",
+                "name": "WTG_PMSG_LVRT_TestCase"
+            }
+        }
+
+        result = skill.run(config)
+        assert result.status == SkillStatus.SUCCESS, result.error
+
+        generated = result.data["generated_models"]
+        assert len(generated) == 1
+        assert generated[0]["rid"].startswith("model/")
+        assert "modify:component_vrt_fault_1" in generated[0]["modifications"]
+
+        print(f"✅ open-cloudpss LVRT专项算例构建通过: {generated[0]['rid']}")
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
