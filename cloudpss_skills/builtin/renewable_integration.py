@@ -179,6 +179,7 @@ class RenewableIntegrationSkill(SkillBase):
     def validate(self, config: Dict) -> ValidationResult:
         """验证配置"""
         errors = []
+        warnings = []
 
         model = config.get("model", {})
         if not model.get("rid"):
@@ -186,9 +187,9 @@ class RenewableIntegrationSkill(SkillBase):
 
         renewable = config.get("renewable", {})
         if not renewable.get("capacity"):
-            errors.append("建议指定 renewable.capacity (额定容量)")
+            warnings.append("建议指定 renewable.capacity (额定容量)；若模型内可识别新能源元件，将优先读取模型实际容量")
 
-        return ValidationResult(valid=len(errors) == 0, errors=errors)
+        return ValidationResult(valid=len(errors) == 0, errors=errors, warnings=warnings)
 
     def run(self, config: Dict) -> SkillResult:
         """执行新能源接入评估"""
@@ -288,13 +289,24 @@ class RenewableIntegrationSkill(SkillBase):
         SCR < 2: 弱电网
         """
         renewable_config = config.get("renewable", {})
-        capacity_mw = renewable_config.get("capacity", 100)
         renewable_bus = renewable_config.get("bus", "")
 
         zth_result = self._compute_pcc_zth(model_rid, renewable_bus)
         if not zth_result.get("verified"):
             return {
                 "error": zth_result.get("error", "无法计算PCC等值阻抗"),
+                "passed": False,
+                "verified": False,
+            }
+
+        model = zth_result["model"]
+        renewable_components = self._find_renewable_components(model, config)
+        inferred_capacity_mw = self._infer_renewable_capacity_mw(model, renewable_components)
+        configured_capacity_mw = renewable_config.get("capacity")
+        capacity_mw = inferred_capacity_mw if inferred_capacity_mw is not None else configured_capacity_mw
+        if capacity_mw is None:
+            return {
+                "error": "未提供 renewable.capacity，且无法从模型中识别新能源额定容量",
                 "passed": False,
                 "verified": False,
             }
@@ -320,7 +332,9 @@ class RenewableIntegrationSkill(SkillBase):
         return {
             "scr": round(scr, 2),
             "short_circuit_capacity_mva": round(short_circuit_capacity_mva, 2),
-            "renewable_capacity_mw": capacity_mw,
+            "renewable_capacity_mw": float(capacity_mw),
+            "configured_capacity_mw": configured_capacity_mw,
+            "inferred_capacity_mw": inferred_capacity_mw,
             "bus_nominal_voltage_kv": bus_nominal_voltage,
             "z_th_pu": {
                 "real": round(zth_pu.real, 6),
@@ -449,7 +463,29 @@ class RenewableIntegrationSkill(SkillBase):
             "bus_node": target_node,
             "bus_nominal_voltage_kv": float(target_vbase),
             "system_base_mva": float(system_base_mva),
+            "model": model,
         }
+
+    def _infer_renewable_capacity_mw(self, model, renewable_components: List[str]) -> Optional[float]:
+        total_capacity = 0.0
+        found = False
+        for component_key in renewable_components:
+            try:
+                comp = model.getComponentByKey(component_key)
+            except Exception:
+                continue
+            args = getattr(comp, "args", {}) or {}
+            for key in ("pf_P", "P_cmd", "Pnom", "Sn", "Smva"):
+                value = args.get(key)
+                if value is None:
+                    continue
+                try:
+                    total_capacity += float(value)
+                    found = True
+                    break
+                except Exception:
+                    continue
+        return total_capacity if found else None
 
     def _analyze_voltage_variation(self, model_rid: str, config: Dict) -> Dict:
         """
