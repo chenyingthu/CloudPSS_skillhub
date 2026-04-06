@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple, Optional
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.utils import parse_cloudpss_table
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +219,8 @@ class VoltageStabilitySkill(SkillBase):
                     # 提取结果
                     result = job.result
                     voltages = self._extract_bus_voltages(result, target_buses)
+                    if target_buses and len(voltages) == 0:
+                        raise RuntimeError("未从潮流结果中提取到任何目标母线电压")
                     min_voltage = min(voltages.values()) if voltages else 1.0
 
                     case_result = {
@@ -462,24 +465,37 @@ class VoltageStabilitySkill(SkillBase):
     def _extract_bus_voltages(self, result, target_buses: List[str]) -> Dict[str, float]:
         """提取母线电压"""
         voltages = {}
-        buses_data = result.getBuses()
+        if not target_buses:
+            return voltages
 
-        if buses_data and isinstance(buses_data, list) and len(buses_data) > 0:
-            bus_table = buses_data[0]
-            if bus_table.get("type") == "table":
-                columns = bus_table.get("data", {}).get("columns", [])
-                col_data = {col["name"]: col.get("data", []) for col in columns}
+        bus_rows = parse_cloudpss_table(result.getBuses())
+        for row in bus_rows:
+            bus_id = str(row.get("Bus", "") or "")
+            bus_name = str(row.get("Node", "") or row.get("name", "") or "")
+            vm = row.get("Vm")
+            if vm is None:
+                vm = row.get("<i>V</i><sub>m</sub> / pu")
 
-                bus_names = col_data.get("Bus", [])
-                vm_data = col_data.get("<i>V</i><sub>m</sub> / pu", [])
+            try:
+                vm_value = float(vm)
+            except (TypeError, ValueError):
+                continue
 
-                for target_bus in target_buses:
-                    for i, bus in enumerate(bus_names):
-                        if target_bus in bus and i < len(vm_data):
-                            voltages[target_bus] = vm_data[i]
-                            break
+            for target_bus in target_buses:
+                if self._matches_bus_identifier(target_bus, bus_id) or self._matches_bus_identifier(target_bus, bus_name):
+                    voltages[target_bus] = vm_value
 
         return voltages
+
+    @staticmethod
+    def _matches_bus_identifier(target: str, candidate: str) -> bool:
+        target_norm = str(target or "").strip().lower()
+        candidate_norm = str(candidate or "").strip().lower()
+        if not target_norm or not candidate_norm:
+            return False
+        if target_norm == candidate_norm:
+            return True
+        return target_norm in candidate_norm or candidate_norm in target_norm
 
     def _generate_pv_curve(self, converged_cases: List, target_buses: List[str]) -> List[Dict]:
         """生成PV曲线数据点"""

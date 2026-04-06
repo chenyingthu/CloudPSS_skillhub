@@ -318,6 +318,10 @@ class CompareVisualizationSkill(SkillBase):
             if len(all_data) < 2:
                 raise RuntimeError("成功获取的任务数不足2个，无法进行对比")
 
+            total_channels = sum(len(task["channels"]) for task in all_data)
+            if total_channels == 0:
+                raise RuntimeError("所有任务都未提取到有效通道，无法生成对比图表")
+
             # 4. 生成图表
             output_path = Path(output_config.get("path", "./results/"))
             output_path.mkdir(parents=True, exist_ok=True)
@@ -610,6 +614,9 @@ class CompareVisualizationSkill(SkillBase):
                     description=f"对比图表: {filepath.name}"
                 ))
 
+            if not generated_files:
+                raise RuntimeError("未生成任何图表，请检查通道筛选和图表配置")
+
             log("INFO", f"对比可视化完成，生成 {len(generated_files)} 张图表")
 
             return SkillResult(
@@ -619,7 +626,7 @@ class CompareVisualizationSkill(SkillBase):
                 end_time=datetime.now(),
                 data={
                     "sources": len(all_data),
-                    "channels": len(all_channel_names) if 'all_channel_names' in dir() else 0,
+                    "channels": total_channels,
                     "charts_generated": len(generated_files),
                     "output_path": str(output_path),
                 },

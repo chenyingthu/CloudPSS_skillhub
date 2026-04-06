@@ -177,6 +177,7 @@ class WaveformExportSkill(SkillBase):
 
             # 导出数据
             exported_data = []
+            exported_channel_count = 0
             for plot_idx in plot_indices:
                 if plot_idx >= len(plots):
                     continue
@@ -223,8 +224,13 @@ class WaveformExportSkill(SkillBase):
                             "x": x_data,
                             "y": y_data,
                         }
+                        exported_channel_count += 1
 
-                exported_data.append(plot_data)
+                if plot_data["channels"]:
+                    exported_data.append(plot_data)
+
+            if exported_channel_count == 0:
+                raise RuntimeError("未找到任何可导出的目标波形通道")
 
             # 写入文件
             if output_format == "json":
@@ -272,6 +278,7 @@ class WaveformExportSkill(SkillBase):
                     "job_id": job_id,
                     "plot_count": len(plots),
                     "exported_plots": len(exported_data),
+                    "exported_channels": exported_channel_count,
                 },
                 artifacts=artifacts,
                 logs=logs,

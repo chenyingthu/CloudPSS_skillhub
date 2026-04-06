@@ -237,6 +237,9 @@ class ResultCompareSkill(SkillBase):
                 except (KeyError, AttributeError) as e:
                     log("ERROR", f"  -> 获取失败: {e}")
 
+            if len(all_results) < 2:
+                raise RuntimeError("成功获取的有效结果少于2个，无法进行对比")
+
             # 3. 生成对比分析
             log("INFO", "生成对比分析...")
 
@@ -257,7 +260,7 @@ class ResultCompareSkill(SkillBase):
                         if val is not None:
                             values[r["label"]] = val
 
-                    if values:
+                    if len(values) >= 2:
                         channel_comparison[metric] = {
                             "values": values,
                             "max": max(values.values()),
@@ -265,11 +268,12 @@ class ResultCompareSkill(SkillBase):
                             "diff": max(values.values()) - min(values.values()),
                         }
 
-                comparison[channel] = channel_comparison
+                if channel_comparison:
+                    comparison[channel] = channel_comparison
 
             # 检查是否有有效对比数据，避免生成空报告
-            if len(all_channels) == 0:
-                raise RuntimeError("没有有效的通道数据进行对比")
+            if len(all_channels) == 0 or len(comparison) == 0:
+                raise RuntimeError("没有可用于跨结果对比的有效通道数据")
 
             # 4. 导出结果
             output_config = config.get("output", {})

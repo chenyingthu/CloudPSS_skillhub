@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.utils import parse_cloudpss_table
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +162,11 @@ class PowerFlowSkill(SkillBase):
             if result is None or not result.getBuses() or not result.getBranches():
                 raise RuntimeError("潮流结果为空或缺少母线/支路表")
 
+            bus_rows = parse_cloudpss_table(result.getBuses())
+            branch_rows = parse_cloudpss_table(result.getBranches())
+            if not bus_rows or not branch_rows:
+                raise RuntimeError("潮流结果表为空，不能判定为有效收敛")
+
             # 6. 导出
             output_config = config.get("output", {})
             output_path = Path(output_config.get("path", "./results/"))
@@ -182,6 +188,8 @@ class PowerFlowSkill(SkillBase):
                 "model_rid": model.rid,
                 "job_id": job.id,
                 "converged": True,
+                "bus_count": len(bus_rows),
+                "branch_count": len(branch_rows),
                 "timestamp": datetime.now().isoformat(),
             }
 

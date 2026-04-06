@@ -186,6 +186,10 @@ class VisualizeSkill(SkillBase):
                 # 从第一个plot提取
                 channel_names = result.getPlotChannelNames(0)
                 target_channels = plot_config.get("channels") or channel_names
+                missing_requested_channels = [
+                    channel for channel in target_channels
+                    if channel not in channel_names
+                ] if plot_config.get("channels") else []
 
                 data = {"time": []}
                 for channel in target_channels:
@@ -195,6 +199,12 @@ class VisualizeSkill(SkillBase):
                             if not data["time"]:
                                 data["time"] = channel_data.get("x", [])
                             data[channel] = channel_data.get("y", [])
+
+                if plot_config.get("channels") and len(data) == 1:
+                    raise RuntimeError(
+                        "未找到任何可绘制的目标通道"
+                        + (f": {', '.join(missing_requested_channels)}" if missing_requested_channels else "")
+                    )
 
             elif source_config.get("data_file"):
                 # 从本地文件读取
@@ -253,9 +263,16 @@ class VisualizeSkill(SkillBase):
                 # 如果没有指定，绘制所有非time通道
                 channels_to_plot = [k for k in data.keys() if k != "time"]
 
+            plotted_channels = []
+
             for channel in channels_to_plot:
                 if channel in data:
                     ax.plot(time_data, data[channel], label=channel, linewidth=1.5)
+                    plotted_channels.append(channel)
+
+            if not plotted_channels:
+                plt.close(fig)
+                raise RuntimeError("未找到任何可绘制的目标通道")
 
             ax.set_title(plot_config.get("title", "Waveform"))
             ax.set_xlabel(plot_config.get("xlabel", "Time (s)"))
@@ -293,7 +310,8 @@ class VisualizeSkill(SkillBase):
                 start_time=start_time,
                 end_time=datetime.now(),
                 data={
-                    "channels": len(channels_to_plot),
+                    "channels": len(plotted_channels),
+                    "plotted_channels": plotted_channels,
                     "data_points": len(time_data),
                     "output": str(filepath),
                 },

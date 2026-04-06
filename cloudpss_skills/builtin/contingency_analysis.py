@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.utils import parse_cloudpss_table
 
 logger = logging.getLogger(__name__)
 
@@ -258,6 +259,7 @@ class ContingencyAnalysisSkill(SkillBase):
 
                     result = self._evaluate_contingency(
                         model_rid, model_source, contingency,
+                        analysis_config,
                         voltage_limit, thermal_limit,
                         base_buses, base_branches,
                         log
@@ -467,7 +469,7 @@ class ContingencyAnalysisSkill(SkillBase):
         return "other"
 
     def _evaluate_contingency(self, model_rid: str, model_source: str, contingency: Dict,
-                              voltage_limit: Dict, thermal_limit: float,
+                              analysis_config: Dict, voltage_limit: Dict, thermal_limit: float,
                               base_buses: List, base_branches: List,
                               log_func) -> Dict:
         """评估单个故障场景"""
@@ -479,6 +481,8 @@ class ContingencyAnalysisSkill(SkillBase):
             "status": "PASS",
             "violations": [],
         }
+        check_voltage = analysis_config.get("check_voltage", True)
+        check_thermal = analysis_config.get("check_thermal", True)
 
         # 重新加载原始模型（每次重新加载以确保干净状态）
         if model_source == "local":
@@ -539,91 +543,75 @@ class ContingencyAnalysisSkill(SkillBase):
         min_voltage = float('inf')
         max_voltage = float('-inf')
 
-        # Find voltage column name (handles HTML encoding)
-        voltage_col = None
-        if buses and len(buses) > 0:
-            for key in buses[0].keys():
-                if 'm' in key.lower() and 'pu' in key.lower():
-                    voltage_col = key
-                    break
+        if check_voltage:
+            voltage_col = None
+            if buses and len(buses) > 0:
+                for key in buses[0].keys():
+                    lowered = key.lower()
+                    if ("vm" in lowered or "v" in lowered) and "pu" in lowered:
+                        voltage_col = key
+                        break
 
-        for bus in buses:
-            # Get voltage magnitude from Vm / pu column (handles HTML encoding)
-            if voltage_col:
-                v = abs(bus.get(voltage_col, 1.0))
-            else:
-                v = 1.0
-            bus_name = bus.get("Bus", bus.get("name", "Unknown"))
-            min_voltage = min(min_voltage, v)
-            max_voltage = max(max_voltage, v)
+            for bus in buses:
+                if voltage_col:
+                    v = abs(bus.get(voltage_col, 1.0))
+                else:
+                    v = 1.0
+                bus_name = bus.get("Bus", bus.get("name", "Unknown"))
+                min_voltage = min(min_voltage, v)
+                max_voltage = max(max_voltage, v)
 
-            if v < voltage_limit["min"]:
-                voltage_violations.append({
-                    "bus": bus_name,
-                    "voltage": round(v, 4),
-                    "limit": f"<{voltage_limit['min']}",
-                })
-            elif v > voltage_limit["max"]:
-                voltage_violations.append({
-                    "bus": bus_name,
-                    "voltage": round(v, 4),
-                    "limit": f">{voltage_limit['max']}",
-                })
+                if v < voltage_limit["min"]:
+                    voltage_violations.append({
+                        "bus": bus_name,
+                        "voltage": round(v, 4),
+                        "limit": f"<{voltage_limit['min']}",
+                    })
+                elif v > voltage_limit["max"]:
+                    voltage_violations.append({
+                        "bus": bus_name,
+                        "voltage": round(v, 4),
+                        "limit": f">{voltage_limit['max']}",
+                    })
 
-        result["min_voltage"] = round(min_voltage, 4) if min_voltage != float('inf') else 1.0
-        result["max_voltage"] = round(max_voltage, 4) if max_voltage != float('-inf') else 1.0
+            result["min_voltage"] = round(min_voltage, 4) if min_voltage != float('inf') else 1.0
+            result["max_voltage"] = round(max_voltage, 4) if max_voltage != float('-inf') else 1.0
 
-        if voltage_violations:
-            result["status"] = "VIOLATION"
-            result["violations"].extend([
-                {"type": "VOLTAGE", "details": v} for v in voltage_violations[:5]
-            ])
+            if voltage_violations:
+                result["status"] = "VIOLATION"
+                result["violations"].extend([
+                    {"type": "VOLTAGE", "details": v} for v in voltage_violations[:5]
+                ])
 
         # 热稳定检查
         thermal_violations = []
         max_loading = 0.0
+        thermal_supported = not check_thermal
 
-        # Find power column names (handles HTML encoding)
-        p_col = None
-        q_col = None
-        rate_a_col = None
-        if branches and len(branches) > 0:
-            for key in branches[0].keys():
-                if 'p' in key.lower() and 'mw' in key.lower():
-                    p_col = key
-                if 'q' in key.lower() and 'mvar' in key.lower():
-                    q_col = key
-                if 'rate' in key.lower() or 'rating' in key.lower():
-                    rate_a_col = key
+        if check_thermal:
+            thermal_result = self._evaluate_thermal_loading(working_model, branches, thermal_limit)
+            thermal_supported = thermal_result["supported"]
+            max_loading = thermal_result["max_loading_pu"] or 0.0
+            result["max_loading"] = round(max_loading * 100, 2)
 
-        for branch in branches:
-            # Get loading - either from loading column or calculate from P/Q
-            loading = branch.get("loading", 0.0)
-            if loading == 0.0 and p_col and q_col:
-                # Calculate from P and Q
-                p = branch.get(p_col, 0.0)
-                q = branch.get(q_col, 0.0)
-                s = (p**2 + q**2)**0.5
-                # Assume 100 MVA base if no rating available
-                base_mva = 100.0
-                loading = s / base_mva if base_mva > 0 else 0.0
-            branch_name = branch.get("Branch", branch.get("name", "Unknown"))
-            max_loading = max(max_loading, loading)
+            if thermal_result["violation"]:
+                thermal_violations.append(thermal_result["violation"])
 
-            if loading > thermal_limit:
-                thermal_violations.append({
-                    "branch": branch_name,
-                    "loading": round(loading * 100, 2),
-                    "limit": f"{thermal_limit * 100}%",
+            if thermal_violations:
+                result["status"] = "VIOLATION"
+                result["violations"].extend([
+                    {"type": "THERMAL", "details": t} for t in thermal_violations[:5]
+                ])
+            elif not thermal_supported:
+                result["status"] = "ERROR"
+                result["violations"].append({
+                    "type": "THERMAL_UNSUPPORTED",
+                    "details": {
+                        "message": "热稳定校核未完成：支路缺少额定容量/电流参数",
+                    },
                 })
-
-        result["max_loading"] = round(max_loading * 100, 2)
-
-        if thermal_violations:
-            result["status"] = "VIOLATION"
-            result["violations"].extend([
-                {"type": "THERMAL", "details": t} for t in thermal_violations[:5]
-            ])
+        else:
+            result["max_loading"] = None
 
         return result
 
@@ -640,28 +628,73 @@ class ContingencyAnalysisSkill(SkillBase):
         Returns:
             List of dicts with column names as keys
         """
-        if not table_data or len(table_data) == 0:
-            return []
+        return parse_cloudpss_table(table_data)
 
-        table = table_data[0]
-        if table.get('type') != 'table':
-            # Already in expected format (list of dicts)
-            return table_data
+    @staticmethod
+    def _read_numeric_arg(args: Dict[str, Any], key: str) -> Optional[float]:
+        value = args.get(key)
+        if isinstance(value, dict):
+            value = value.get("source")
+        if value in (None, ""):
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
-        columns = table['data']['columns']
-        if not columns:
-            return []
+    def _evaluate_thermal_loading(self, model: Any, branch_rows: List[Dict[str, Any]], thermal_limit: float) -> Dict[str, Any]:
+        max_loading = None
+        unsupported_count = 0
 
-        # Convert column-oriented data to row-oriented dicts
-        num_rows = len(columns[0]['data']) if columns else 0
-        rows = []
-        for i in range(num_rows):
-            row = {}
-            for col in columns:
-                row[col['name']] = col['data'][i]
-            rows.append(row)
+        for row in branch_rows:
+            branch_id = row.get("Branch")
+            if not branch_id:
+                continue
 
-        return rows
+            component = model.getComponentByKey(branch_id)
+            args = getattr(component, "args", {}) or {}
+            definition = str(getattr(component, "definition", "") or "")
+            branch_name = getattr(component, "label", None) or branch_id
+
+            p_ij = self._read_numeric_arg(row, "Pij") or 0.0
+            q_ij = self._read_numeric_arg(row, "Qij") or 0.0
+            p_ji = self._read_numeric_arg(row, "Pji") or 0.0
+            q_ji = self._read_numeric_arg(row, "Qji") or 0.0
+            apparent_mva = max((p_ij ** 2 + q_ij ** 2) ** 0.5, (p_ji ** 2 + q_ji ** 2) ** 0.5)
+
+            rating_mva = None
+            if "Transformer" in definition:
+                rating_mva = self._read_numeric_arg(args, "Tmva")
+            elif "TransmissionLine" in definition or definition.endswith("/line") or definition.endswith("/3pline"):
+                i_rated = self._read_numeric_arg(args, "Irated")
+                v_base = self._read_numeric_arg(args, "Vbase")
+                if i_rated and i_rated > 0 and v_base and v_base > 0:
+                    rating_mva = 1.7320508075688772 * v_base * i_rated
+
+            if not rating_mva or rating_mva <= 0:
+                unsupported_count += 1
+                continue
+
+            loading = apparent_mva / rating_mva
+            max_loading = loading if max_loading is None else max(max_loading, loading)
+            if loading > thermal_limit:
+                return {
+                    "supported": True,
+                    "max_loading_pu": loading,
+                    "violation": {
+                        "branch": branch_name,
+                        "loading": round(loading * 100, 2),
+                        "limit": f"{thermal_limit * 100}%",
+                    },
+                    "unsupported_count": unsupported_count,
+                }
+
+        return {
+            "supported": max_loading is not None,
+            "max_loading_pu": max_loading,
+            "violation": None,
+            "unsupported_count": unsupported_count,
+        }
 
     def _calculate_severity(self, result: Dict, voltage_limit: Dict, thermal_limit: float) -> float:
         """计算故障严重度 (0-1)"""
