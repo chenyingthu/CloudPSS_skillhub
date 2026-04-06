@@ -352,14 +352,20 @@ class PowerQualityAnalysisSkill(SkillBase):
                 self._generate_report(result_data, report_path)
                 artifacts.append(Artifact(type="markdown", path=str(report_path), size=report_path.stat().st_size, description="电能质量分析报告"))
 
+            final_status = SkillStatus.FAILED if summary.get("overall_status") == "FAIL" else SkillStatus.SUCCESS
+            error = None
+            if final_status == SkillStatus.FAILED:
+                error = "未提取到任何有效的电能质量分析结果"
+
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.SUCCESS,
+                status=final_status,
                 start_time=start_time,
                 end_time=datetime.now(),
                 data=result_data,
                 artifacts=artifacts,
                 logs=logs,
+                error=error,
             )
 
         except (KeyError, AttributeError, RuntimeError, TypeError, ValueError) as e:
@@ -386,30 +392,20 @@ class PowerQualityAnalysisSkill(SkillBase):
             for i, plot in enumerate(plots):
                 title = plot.get('data', {}).get('title', '').lower()
                 channels = result.getPlotChannelNames(i)
+                if len(channels) < 3:
+                    continue
 
-                # 检测策略1: 查找电压相关的plot且通道数>=3
-                if any(keyword in title for keyword in ['电压', 'voltage', 'v']):
-                    if len(channels) >= 3:
-                        three_phase_groups.append({
-                            "name": plot.get('data', {}).get('title', f'三相组{i}'),
-                            "plot_index": i,
-                            "a": channels[0],
-                            "b": channels[1],
-                            "c": channels[2],
-                        })
-                    elif len(channels) == 1:
-                        # 单通道电压（如直流电压）作为单相分析
-                        pass  # 单通道无需分组
+                inferred_triplets = self._infer_three_phase_triplets(channels)
 
-                # 检测策略2: 查找电流相关的三相plot
-                elif any(keyword in title for keyword in ['电流', 'current', 'i']):
-                    if len(channels) >= 3:
+                if inferred_triplets:
+                    for index, triplet in enumerate(inferred_triplets, 1):
                         three_phase_groups.append({
-                            "name": plot.get('data', {}).get('title', f'三相电流组{i}'),
+                            "name": plot.get('data', {}).get('title', f'三相组{i}') if len(inferred_triplets) == 1
+                            else f"{plot.get('data', {}).get('title', f'三相组{i}')}_{index}",
                             "plot_index": i,
-                            "a": channels[0],
-                            "b": channels[1],
-                            "c": channels[2],
+                            "a": triplet["a"],
+                            "b": triplet["b"],
+                            "c": triplet["c"],
                         })
 
         except (KeyError, AttributeError) as e:
@@ -439,6 +435,35 @@ class PowerQualityAnalysisSkill(SkillBase):
             logger.warning(f"检测单相通道失败: {e}")
 
         return single_channels
+
+    @staticmethod
+    def _infer_three_phase_triplets(channels: List[str]) -> List[Dict[str, str]]:
+        """根据通道命名推断 a/b/c 三相组，避免仅凭标题中的单字母误判。"""
+        grouped: Dict[str, Dict[str, str]] = {}
+        for channel in channels:
+            lowered = str(channel).lower()
+            suffix = None
+            stem = None
+            for marker in ['_a', '_b', '_c', '.a', '.b', '.c', ':a', ':b', ':c', ' a', ' b', ' c']:
+                if lowered.endswith(marker):
+                    suffix = marker[-1]
+                    stem = channel[:-2] if marker[0] in {'_', '.', ':'} else channel[:-2]
+                    break
+
+            if suffix is None and lowered.endswith(('va', 'vb', 'vc', 'ia', 'ib', 'ic')):
+                suffix = lowered[-1]
+                stem = channel[:-1]
+
+            if suffix is None or stem is None:
+                continue
+
+            grouped.setdefault(stem, {})[suffix] = channel
+
+        triplets = []
+        for stem, phases in grouped.items():
+            if {'a', 'b', 'c'} <= set(phases.keys()):
+                triplets.append({"a": phases["a"], "b": phases["b"], "c": phases["c"]})
+        return triplets
 
     def _find_plot_index_for_channel(self, result, channel: str) -> int:
         """查找包含指定通道的plot索引"""
@@ -694,12 +719,18 @@ class PowerQualityAnalysisSkill(SkillBase):
         }
 
         # 检查是否分析了任何通道
+        valid_harmonic = self._valid_indicator_results(pq_results.get("harmonic", {}))
+        valid_unbalance = self._valid_indicator_results(pq_results.get("unbalance", {}))
+        valid_voltage_dip = self._valid_indicator_results(pq_results.get("voltage_dip", {}))
+        valid_flicker = self._valid_indicator_results(pq_results.get("flicker", {}))
+        valid_dc_offset = self._valid_indicator_results(pq_results.get("dc_offset", {}))
+
         total_analyzed = (
-            len(pq_results.get("harmonic", {})) +
-            len(pq_results.get("unbalance", {})) +
-            len(pq_results.get("voltage_dip", {})) +
-            len(pq_results.get("flicker", {})) +
-            len(pq_results.get("dc_offset", {}))
+            len(valid_harmonic) +
+            len(valid_unbalance) +
+            len(valid_voltage_dip) +
+            len(valid_flicker) +
+            len(valid_dc_offset)
         )
 
         if total_analyzed == 0:
@@ -712,7 +743,7 @@ class PowerQualityAnalysisSkill(SkillBase):
             return summary
 
         # 谐波检查
-        for ch, data in pq_results.get("harmonic", {}).items():
+        for ch, data in valid_harmonic.items():
             thd = data.get("thd", 0)
             if thd > limits.get("thd", 5.0):
                 summary["violations"].append({
@@ -723,7 +754,7 @@ class PowerQualityAnalysisSkill(SkillBase):
                 })
 
         # 不平衡检查
-        for name, data in pq_results.get("unbalance", {}).items():
+        for name, data in valid_unbalance.items():
             unb = data.get("unbalance_percent", 0)
             if unb > limits.get("unbalance", 2.0):
                 summary["violations"].append({
@@ -734,7 +765,7 @@ class PowerQualityAnalysisSkill(SkillBase):
                 })
 
         # 暂降检查
-        for ch, data in pq_results.get("voltage_dip", {}).items():
+        for ch, data in valid_voltage_dip.items():
             dip = data.get("dip_percent", 0)
             if dip > limits.get("voltage_dip", 10.0):
                 summary["violations"].append({
@@ -750,6 +781,15 @@ class PowerQualityAnalysisSkill(SkillBase):
         summary["violation_count"] = len(summary["violations"])
 
         return summary
+
+    @staticmethod
+    def _valid_indicator_results(results: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+        """过滤掉仅包含 error 的占位结果，避免空分析被误判为 PASS。"""
+        return {
+            key: value
+            for key, value in results.items()
+            if isinstance(value, dict) and value and "error" not in value
+        }
 
     def _export_csv(self, pq_results: Dict, path: Path, limits: Dict):
         """导出CSV"""

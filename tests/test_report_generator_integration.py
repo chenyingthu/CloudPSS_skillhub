@@ -119,6 +119,26 @@ class TestReportGeneratorSkill:
 
         print(f"✅ 报告内容验证通过 ({len(sections)}个章节)")
 
+    def test_report_generation_fails_without_real_skill_results(self, skill):
+        """测试6b: 没有真实 skill_results 时不能生成正式报告"""
+        config = {
+            "report": {
+                "title": "占位报告",
+                "skills": ["power_flow", "n1_security"],
+            },
+            "output": {
+                "format": "markdown",
+                "path": "/tmp/test_reports/",
+                "filename": "placeholder_report.md"
+            }
+        }
+
+        result = skill.run(config)
+
+        assert result.status == SkillStatus.FAILED
+        assert "不能基于占位结果生成正式报告" in result.error
+        print("✅ 缺失真实结果时会拒绝生成正式报告")
+
     def test_report_section_dataclass(self):
         """测试7: ReportSection数据类"""
         section = ReportSection(

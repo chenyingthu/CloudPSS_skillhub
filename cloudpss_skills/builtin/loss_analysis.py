@@ -39,9 +39,11 @@ class TransformerLoss:
     transformer_id: str
     hv_bus: str
     lv_bus: str
-    core_loss_mw: float       # 铁芯损耗(MW)
-    copper_loss_mw: float     # 铜损(MW)
+    core_loss_mw: Optional[float]       # 铁芯损耗(MW)
+    copper_loss_mw: Optional[float]     # 铜损(MW)
     total_loss_mw: float      # 总损耗(MW)
+    reactive_loss_mvar: float = 0.0
+    breakdown_verified: bool = False
 
 
 @register
@@ -156,6 +158,8 @@ class LossAnalysisSkill(SkillBase):
         """执行网损分析"""
         start_time = datetime.now()
         try:
+            self.branch_losses = []
+            self.transformer_losses = []
             self._setup_auth(config)
 
             # 获取模型
@@ -337,81 +341,60 @@ class LossAnalysisSkill(SkillBase):
     def _calculate_transformer_losses(self, power_flow_result):
         """计算变压器损耗 - 从真实潮流结果中提取"""
         try:
-            transformers_found = 0
+            from cloudpss_skills.core.utils import parse_cloudpss_table
 
-            # 使用duck typing检查是否有getBranches方法
-            if hasattr(power_flow_result, 'getBranches'):
-                # 尝试从结果中获取变压器信息
-                branches = power_flow_result.getBranches()
-                for branch in branches:
-                    branch_name = branch.get('name', '').lower()
-                    # 通过名称识别变压器支路
-                    if any(keyword in branch_name for keyword in ['变压器', 'transformer', 'tfr', '主变']):
-                        p_from = branch.get('P_from', 0)
-                        p_to = branch.get('P_to', 0)
-                        p_loss = abs(p_from - p_to) if p_from and p_to else 0
+            branch_tables = power_flow_result.getBranches() if hasattr(power_flow_result, "getBranches") else None
+            if not branch_tables:
+                raise RuntimeError("潮流结果中缺少支路表，无法提取变压器损耗")
 
-                        if p_loss > 0.01:
-                            # 估算铁芯损耗和铜损
-                            core_loss = p_loss * 0.15  # 约15%
-                            copper_loss = p_loss * 0.85  # 约85%
+            branch_rows = parse_cloudpss_table(branch_tables)
+            transformer_component_count = 0
+            for transformer_rid in ["model/CloudPSS/_newTransformer_3p2w", "model/CloudPSS/_newTransformer_3p"]:
+                try:
+                    transformer_component_count += len(get_components_by_type(self.model, transformer_rid))
+                except Exception as exc:
+                    logger.debug(f"获取变压器组件 {transformer_rid} 失败: {exc}")
 
-                            loss = TransformerLoss(
-                                transformer_id=branch.get('name', f'TFR_{transformers_found}'),
-                                hv_bus=branch.get('from_bus', ''),
-                                lv_bus=branch.get('to_bus', ''),
-                                core_loss_mw=core_loss,
-                                copper_loss_mw=copper_loss,
-                                total_loss_mw=p_loss
-                            )
-                            self.transformer_losses.append(loss)
-                            transformers_found += 1
+            for row in branch_rows:
+                branch_id = row.get("Branch")
+                if not branch_id:
+                    continue
 
-            # 如果没有找到变压器，使用模型中的变压器组件
-            if transformers_found == 0:
-                transformers = get_components_by_type(self.model, "model/CloudPSS/_newTransformer_3p")
+                try:
+                    component = self.model.getComponentByKey(branch_id)
+                except Exception as exc:
+                    logger.debug(f"读取支路组件 {branch_id} 失败: {exc}")
+                    continue
 
-                for tfr_key, tfr_data in list(transformers.items())[:10]:
-                    try:
-                        tfr_label = tfr_data.get('label', tfr_key)
+                definition = str(getattr(component, "definition", "") or "")
+                if "Transformer" not in definition:
+                    continue
 
-                        # 获取变压器参数
-                        params = tfr_data.get('args', {})
-                        rating = params.get('额定容量', 100)  # MVA
+                p_loss = self._as_float(row.get("Ploss"), default=0.0)
+                q_loss = self._as_float(row.get("Qloss"), default=0.0)
+                label = getattr(component, "label", None) or branch_id
 
-                        # 典型损耗比例
-                        core_loss = rating * 0.002  # 空载损耗约0.2%
-                        copper_loss = rating * 0.01  # 负载损耗约1%
+                self.transformer_losses.append(
+                    TransformerLoss(
+                        transformer_id=label,
+                        hv_bus=str(row.get("From bus", "") or ""),
+                        lv_bus=str(row.get("To bus", "") or ""),
+                        core_loss_mw=None,
+                        copper_loss_mw=None,
+                        total_loss_mw=abs(p_loss),
+                        reactive_loss_mvar=abs(q_loss),
+                        breakdown_verified=False,
+                    )
+                )
 
-                        loss = TransformerLoss(
-                            transformer_id=tfr_label,
-                            hv_bus='',
-                            lv_bus='',
-                            core_loss_mw=core_loss,
-                            copper_loss_mw=copper_loss,
-                            total_loss_mw=core_loss + copper_loss
-                        )
-                        self.transformer_losses.append(loss)
-                    except (KeyError, AttributeError) as e:
-                        logger.warning(f"计算变压器损耗失败: {e}")
+            if transformer_component_count > 0 and not self.transformer_losses:
+                raise RuntimeError("模型包含变压器，但未能从真实潮流支路结果提取任何变压器损耗")
 
-            logger.info(f"计算了{len(self.transformer_losses)}台变压器的损耗")
+            logger.info(f"从潮流结果提取了{len(self.transformer_losses)}台变压器的损耗")
 
-        except (KeyError, AttributeError) as e:
+        except (KeyError, AttributeError, RuntimeError, TypeError, ValueError) as e:
             logger.error(f"计算变压器损耗失败: {e}")
-
-    def _extract_branch_data(self, power_flow_result, branch_key: str) -> Optional[Dict]:
-        """从潮流结果中提取支路数据"""
-        # 简化实现，返回模拟数据
-        import random
-        return {
-            'from_bus': f'Bus_{branch_key}',
-            'to_bus': f'Bus_{branch_key}_to',
-            'p_loss': random.uniform(0.1, 5.0),
-            'q_loss': random.uniform(0.5, 10.0),
-            'current': random.uniform(0.5, 2.0),
-            'loading': random.uniform(30, 80)
-        }
+            raise RuntimeError("从潮流结果提取变压器损耗失败") from e
 
     def _calculate_loss_sensitivity(self, power_flow_result) -> Dict:
         """计算网损灵敏度"""
@@ -491,10 +474,22 @@ class LossAnalysisSkill(SkillBase):
             "transformer_id": tl.transformer_id,
             "hv_bus": tl.hv_bus,
             "lv_bus": tl.lv_bus,
-            "core_loss_mw": round(tl.core_loss_mw, 4),
-            "copper_loss_mw": round(tl.copper_loss_mw, 4),
-            "total_loss_mw": round(tl.total_loss_mw, 4)
+            "core_loss_mw": round(tl.core_loss_mw, 4) if tl.core_loss_mw is not None else None,
+            "copper_loss_mw": round(tl.copper_loss_mw, 4) if tl.copper_loss_mw is not None else None,
+            "total_loss_mw": round(tl.total_loss_mw, 4),
+            "reactive_loss_mvar": round(tl.reactive_loss_mvar, 4),
+            "breakdown_verified": tl.breakdown_verified,
         }
+
+    @staticmethod
+    def _as_float(value: Any, default: float = 0.0) -> float:
+        """尽量把潮流表中的数值列稳定转换为 float。"""
+        try:
+            if value is None or value == "":
+                return default
+            return float(value)
+        except (TypeError, ValueError):
+            return default
 
     def _setup_auth(self, config: Dict):
         """设置认证"""

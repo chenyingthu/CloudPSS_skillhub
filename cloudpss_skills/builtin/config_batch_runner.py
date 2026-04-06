@@ -351,7 +351,7 @@ class ConfigBatchRunnerSkill(SkillBase):
                     results.append(result)
                     runner_ids.append((runner_id, current_time, cfg_name, model.rid, model.name))
 
-                except (KeyError, AttributeError, ValueError, RuntimeError, TimeoutError, TypeError, FileNotFoundError, ConnectionError) as e:
+                except (KeyError, AttributeError, ValueError, RuntimeError, TimeoutError, TypeError, FileNotFoundError, ConnectionError, Exception) as e:
                     error_msg = str(e)
                     log("ERROR", f"  -> 运行失败: {error_msg}")
                     result = ConfigRunResult(
@@ -429,7 +429,7 @@ class ConfigBatchRunnerSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, ValueError, RuntimeError, TimeoutError, TypeError, FileNotFoundError, ConnectionError) as e:
+        except (KeyError, AttributeError, ValueError, RuntimeError, TimeoutError, TypeError, FileNotFoundError, ConnectionError, Exception) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
