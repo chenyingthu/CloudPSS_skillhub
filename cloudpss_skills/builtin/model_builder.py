@@ -133,8 +133,27 @@ class ModelBuilderSkill(SkillBase):
 
     config_schema = {
         "type": "object",
-        "required": ["base_model"],
         "properties": {
+            "workflow": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "enum": ["open_cloudpss_wind_lvrt_case"]
+                    },
+                    "base_model_rid": {"type": "string"},
+                    "fault_component_key": {"type": "string", "default": "component_vrt_fault_1"},
+                    "fault_mode": {
+                        "description": "open-cloudpss VRT_Fault 模块的 Fault_VRT 模式，推荐 1",
+                        "oneOf": [
+                            {"type": "integer"},
+                            {"type": "string"}
+                        ],
+                        "default": 1
+                    }
+                }
+            },
             "base_model": {
                 "type": "object",
                 "required": ["rid"],
@@ -228,6 +247,10 @@ class ModelBuilderSkill(SkillBase):
     def validate(self, config: Dict) -> ValidationResult:
         """验证配置"""
         errors = []
+        try:
+            config = self._resolve_workflow_config(config)
+        except ValueError as e:
+            return ValidationResult(valid=False, errors=[str(e)])
 
         if not config.get("base_model", {}).get("rid"):
             errors.append("必须指定基础模型RID")
@@ -252,6 +275,7 @@ class ModelBuilderSkill(SkillBase):
         """执行模型构建"""
         start_time = datetime.now()
         try:
+            config = self._resolve_workflow_config(config)
             self._setup_auth(config)
 
             # 获取基础模型
@@ -299,6 +323,7 @@ class ModelBuilderSkill(SkillBase):
                 "base_model": base_rid,
                 "modifications_count": len(modifications),
                 "modifications_applied": self.modifications_applied,
+                "workflow": config.get("workflow", {}).get("name"),
                 "generated_models": [
                     {
                         "name": m.name,
@@ -329,6 +354,68 @@ class ModelBuilderSkill(SkillBase):
                 end_time=datetime.now(),
                 error=str(e)
             )
+
+    def _resolve_workflow_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """把高级工作流配置展开成基础模型和具体修改操作。"""
+        resolved = deepcopy(config)
+        workflow = resolved.get("workflow")
+        if not workflow:
+            return resolved
+
+        workflow_name = workflow.get("name")
+        if workflow_name == "open_cloudpss_wind_lvrt_case":
+            return self._resolve_open_cloudpss_wind_lvrt_case(resolved, workflow)
+
+        raise ValueError(f"不支持的workflow: {workflow_name}")
+
+    def _resolve_open_cloudpss_wind_lvrt_case(
+        self,
+        resolved: Dict[str, Any],
+        workflow: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """展开基于 open-cloudpss 公开风机模板的 LVRT 测试算例构建流程。"""
+        base_model = resolved.setdefault("base_model", {})
+        base_model.setdefault(
+            "rid",
+            workflow.get("base_model_rid", "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5")
+        )
+
+        preset_modification = {
+            "action": "modify_component",
+            "selector": {
+                "key": workflow.get("fault_component_key", "component_vrt_fault_1")
+            },
+            "parameters": {
+                "Fault_VRT": self._normalize_fault_vrt_value(workflow.get("fault_mode", 1))
+            }
+        }
+        resolved["modifications"] = [preset_modification] + deepcopy(resolved.get("modifications", []))
+
+        output = resolved.setdefault("output", {})
+        output.setdefault("name", "WTG_PMSG_LVRT_TestCase")
+        output.setdefault(
+            "description",
+            "基于 open-cloudpss WTG_PMSG_01-avm-stdm-v2b5 的 LVRT 专项测试算例"
+        )
+        return resolved
+
+    @staticmethod
+    def _normalize_fault_vrt_value(value: Any) -> Dict[str, str]:
+        """把用户输入的故障模式归一化为 VRT_Fault 组件可接受的表达式对象。"""
+        if isinstance(value, dict):
+            if "source" not in value:
+                raise ValueError("workflow.fault_mode 传入对象时必须包含 source 字段")
+            normalized = deepcopy(value)
+            normalized.setdefault("ɵexp", "")
+            source = str(normalized["source"]).strip()
+        else:
+            source = str(value).strip()
+            normalized = {"source": source, "ɵexp": ""}
+
+        if source not in {"0", "1", "2", "3"}:
+            raise ValueError("workflow.fault_mode 仅支持 0/1/2/3")
+        normalized["source"] = source
+        return normalized
 
     def _apply_modification(self, mod_config: Dict):
         """应用单个修改操作"""

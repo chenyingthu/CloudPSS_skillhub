@@ -143,6 +143,16 @@ class TestModelBuilderUnit:
         assert "必须指定基础模型RID" in result.errors
         print("✅ 缺少RID检测正确")
 
+    def test_validate_workflow_without_base_model(self, skill):
+        """测试 workflow 可以提供默认 base_model，因此无需手工填写 RID"""
+        config = {
+            "workflow": {"name": "open_cloudpss_wind_lvrt_case"},
+            "output": {"save": False}
+        }
+        result = skill.validate(config)
+        assert result.valid is True
+        print("✅ workflow 默认基础模型验证通过")
+
     def test_validate_add_component_missing_fields(self, skill):
         """测试添加组件缺少必需字段"""
         config = {
@@ -321,6 +331,27 @@ class TestModelBuilderUnit:
         skill.model.getComponentByKey.assert_called_once_with("component_vrt_fault_1")
         print("✅ 直接key查找可命中任意组件")
 
+    def test_resolve_open_cloudpss_wind_lvrt_workflow(self, skill):
+        """测试 open-cloudpss 风机 LVRT workflow 会展开为真实修改操作"""
+        resolved = skill._resolve_workflow_config(
+            {
+                "workflow": {"name": "open_cloudpss_wind_lvrt_case", "fault_mode": 1},
+                "output": {"save": False},
+            }
+        )
+
+        assert resolved["base_model"]["rid"] == "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5"
+        assert resolved["modifications"][0]["selector"]["key"] == "component_vrt_fault_1"
+        assert resolved["modifications"][0]["parameters"]["Fault_VRT"] == {"source": "1", "ɵexp": ""}
+        assert resolved["output"]["name"] == "WTG_PMSG_LVRT_TestCase"
+        print("✅ open-cloudpss LVRT workflow 展开正确")
+
+    def test_normalize_fault_vrt_value_rejects_invalid_mode(self, skill):
+        """测试 workflow.fault_mode 超出已验证范围时直接失败"""
+        with pytest.raises(ValueError, match="仅支持 0/1/2/3"):
+            skill._normalize_fault_vrt_value(5)
+        print("✅ 非法 Fault_VRT 模式会被拒绝")
+
 
 class TestModelBuilderDataClasses:
     """测试数据类"""
@@ -425,6 +456,40 @@ class TestModelBuilderMockIntegration:
         assert len(result.data["generated_models"]) == 0
         mock_model.save.assert_not_called()
         print("✅ 不保存模式测试通过")
+
+    @patch('cloudpss.setToken')
+    @patch('cloudpss.Model')
+    def test_run_open_cloudpss_wind_lvrt_workflow(self, mock_model_class, mock_set_token, skill):
+        """测试 workflow 会自动展开并修改 open-cloudpss 风机内部故障模块"""
+        mock_model = Mock()
+        mock_model.name = "WTG_PMSG_01"
+        mock_model.toJSON.return_value = {"dummy": True}
+        mock_component = Mock()
+        mock_component.definition = "model/open-cloudpss/VRT_Fault-stdm-v1b1"
+        mock_model.getComponentByKey.return_value = mock_component
+        mock_model.save.return_value = {"data": {"createModel": {"rid": "model/holdme/wtg_pmsg_lvrt_test"}}}
+        mock_model_class.fetch.return_value = mock_model
+
+        config = {
+            "workflow": {"name": "open_cloudpss_wind_lvrt_case", "fault_mode": 1},
+            "auth": {"token": "test_token"},
+            "output": {
+                "save": True,
+                "branch": "wtg_pmsg_lvrt_test",
+            }
+        }
+
+        result = skill.run(config)
+
+        assert result.status == SkillStatus.SUCCESS, result.error
+        assert result.data["base_model"] == "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5"
+        assert result.data["workflow"] == "open_cloudpss_wind_lvrt_case"
+        mock_model.updateComponent.assert_called_once_with(
+            "component_vrt_fault_1",
+            args={"Fault_VRT": {"source": "1", "ɵexp": ""}},
+        )
+        mock_model.save.assert_called_once_with("wtg_pmsg_lvrt_test")
+        print("✅ workflow 运行流程测试通过")
 
 
 if __name__ == "__main__":

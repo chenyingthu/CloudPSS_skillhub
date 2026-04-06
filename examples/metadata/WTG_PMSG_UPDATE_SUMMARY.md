@@ -11,7 +11,7 @@
 
 ## 解决方案
 
-改用 `model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1` 组件（永磁同步风机），该组件**完全支持潮流计算**。
+改用 `model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5` 组件（永磁同步风机），该组件**完全支持潮流计算**，且保留更完整的 LVRT 参数与观测量。
 
 ## 完成的工作
 
@@ -47,7 +47,7 @@
 
 **风电配置**:
 ```python
-component_type = 'model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1'
+component_type = 'model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5'
 user_params = {
     'Vbase': 0.69,
     'Sbase': 2.5,

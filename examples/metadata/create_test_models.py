@@ -60,7 +60,7 @@ def create_wind_model():
     mi.initialize('examples/metadata')
 
     # 使用 WTG_PMSG_01 组件（支持潮流计算的正确组件类型）
-    component_type = 'model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1'
+    component_type = 'model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5'
 
     # 获取 WTG_PMSG_01 的自动补全参数
     # 关键参数说明：
@@ -178,7 +178,7 @@ def create_hybrid_model():
     mi.initialize('examples/metadata')
 
     # 使用 WTG_PMSG_01 组件（支持潮流计算）
-    wind_component_type = 'model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1'
+    wind_component_type = 'model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5'
     wind_params = mi.auto_complete_parameters(
         wind_component_type,
         {

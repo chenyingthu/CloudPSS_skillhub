@@ -11,6 +11,7 @@
 - ✅ **自动保存**: 直接保存到 CloudPSS 平台，生成可访问的 RID
 - ✅ **Duck Typing**: 使用 `getattr()` 安全访问组件属性，兼容不同 SDK 版本
 - ✅ **新能源兼容映射**: 旧配置中的 `WGSource` / `PVStation` / `PV_Inverter` 会自动映射到公开且支持潮流的组件
+- ✅ **工作流预设**: 支持直接展开经过真实 API 验证的 open-cloudpss 风机 LVRT 测试算例构建流程
 
 ## 当前推荐的新能源接入路径
 
@@ -18,15 +19,51 @@
 
 | 类别 | 推荐组件 | 说明 |
 |-----|---------|-----|
-| **风电** | `model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1` | 支持潮流，适合作为风电场等值接入 |
+| **风电** | `model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5` | 支持潮流，且保留更完整的 LVRT 参数与观测量，适合作为风电场等值接入和 LVRT 研究起点 |
 | **光伏** | `model/open-cloudpss/PVS_01-avm-stdm-v1b5` | 支持潮流，适合作为光伏电站接入 |
 
 兼容说明：
-- 旧配置中的 `model/CloudPSS/WGSource` 会自动映射到 `WTG_PMSG_01-avm-stdm-v2b1`
-- 旧配置中的 `model/CloudPSS/DFIG_WindFarm_Equivalent_Model` 也会自动映射到 `WTG_PMSG_01-avm-stdm-v2b1`
+- 旧配置中的 `model/CloudPSS/WGSource` 会自动映射到 `WTG_PMSG_01-avm-stdm-v2b5`
+- 旧配置中的 `model/CloudPSS/DFIG_WindFarm_Equivalent_Model` 也会自动映射到 `WTG_PMSG_01-avm-stdm-v2b5`
 - 旧配置中的 `model/CloudPSS/PVStation` 和 `model/CloudPSS/PV_Inverter` 会自动映射到 `PVS_01-avm-stdm-v1b5`
 - `pin_connection.target_bus` 可以写成 `Bus14` / `bus14` / 母线组件 key，技能会自动解析到真实可连接信号
 - `WGSource_Bus30` 这类旧设计已退役，不再作为推荐测试算例保留
+
+## 已验证的专项工作流
+
+### open-cloudpss 风机 LVRT 算例工作流
+
+当目标是构建可直接用于 `renewable_integration` 低电压穿越校核的测试算例时，推荐直接使用内置工作流，而不是手工记忆风机模板 RID、内部故障块 key 和 `Fault_VRT` 参数格式。
+
+```yaml
+skill: model_builder
+
+workflow:
+  name: open_cloudpss_wind_lvrt_case
+  fault_mode: 1
+
+auth:
+  token_file: .cloudpss_token
+
+output:
+  save: true
+  branch: codex_test_open_cloudpss_lvrt_workflow
+  name: WTG_PMSG_LVRT_Workflow
+```
+
+该工作流会自动展开为：
+- 基础模型：`model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5`
+- 关键修改：把 `component_vrt_fault_1` 的 `Fault_VRT` 设置为指定故障模式
+- 默认输出名：`WTG_PMSG_LVRT_TestCase`
+
+当前回归中已验证的参考算例：
+- 可用于 LVRT 真实校核的专项算例：`model/holdme/codex_lvrt_case_fix_20260405_114928`
+- 可用于并网潮流/SCR 对比的接入算例：`model/holdme/codex_mb_connected_20260405_080831`
+
+说明：
+- `fault_mode=1` 是当前已实测打通的主线配置
+- 该工作流只负责构建带内部故障触发块的风机专项算例，不等同于 IEEE39 接入对比算例
+- 如果需要并网强度评估，建议在构建完成后配合 `thevenin_equivalent` 或 `renewable_integration` 使用
 
 ## 配置说明
 
@@ -150,7 +187,7 @@ modifications:
 | 组件名称 | RID | 说明 |
 |---------|-----|-----|
 | 光伏电站（推荐） | `model/open-cloudpss/PVS_01-avm-stdm-v1b5` | 公开可访问，支持潮流的光伏封装模型 |
-| 风电场（推荐） | `model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1` | 公开可访问，支持潮流的 PMSG 风机封装模型 |
+| 风电场（推荐） | `model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5` | 公开可访问，支持潮流且保留更完整 LVRT 元数据的 PMSG 风机封装模型 |
 | DFIG风电场 | `model/CloudPSS/DFIG_WindFarm_Equivalent_Model` | 旧写法，运行时会自动映射到公开 PMSG 风机模型 |
 
 ### 保护组件
@@ -229,7 +266,25 @@ output:
   name: "IEEE39_with_PV_{capacity}MW"
 ```
 
-### 示例3: 创建保护配置模型
+### 示例3: 直接构建 open-cloudpss 风机 LVRT 专项算例
+
+```yaml
+skill: model_builder
+
+workflow:
+  name: open_cloudpss_wind_lvrt_case
+  fault_mode: 1
+
+auth:
+  token_file: .cloudpss_token
+
+output:
+  save: true
+  branch: test_wtg_pmsg_lvrt
+  name: WTG_PMSG_LVRT_TestCase
+```
+
+### 示例4: 创建保护配置模型
 
 ```yaml
 skill: model_builder
@@ -284,26 +339,13 @@ args = getattr(comp, 'args', {})
 ### 批量参数替换
 
 ```python
-def _get_modifications_with_params(
-    self,
-    modifications: List[Dict],
-    params: Dict
-) -> List[Dict]:
-    """应用参数替换"""
-    result = []
-    for mod in modifications:
-        new_mod = copy.deepcopy(mod)
-        # 替换 label 中的占位符
-        if 'label' in new_mod:
-            new_mod['label'] = new_mod['label'].format(**params)
-        # 替换 parameters 中的占位符
-        if 'parameters' in new_mod:
-            for k, v in new_mod['parameters'].items():
-                if isinstance(v, str) and '{' in v:
-                    new_mod['parameters'][k] = v.format(**params)
-        result.append(new_mod)
-    return result
+if value == "{capacity}":
+    new_mod["parameters"][key] = param_value
+elif "{capacity}" in value:
+    new_mod["parameters"][key] = value.replace("{capacity}", str(param_value))
 ```
+
+当整个字段就是占位符时，技能会保留数值类型，不会把 `100` 误写成 `"100"`。
 
 ## 注意事项
 
@@ -320,6 +362,7 @@ def _get_modifications_with_params(
 | 保存失败 | 权限不足 | 确认 token 有写权限 |
 | 参数无效 | 参数名错误 | 参考组件文档确认参数名 |
 | 批量生成失败 | 占位符格式错误 | 使用 `{param_name}` 格式 |
+| LVRT workflow 失败 | 基础模型不包含 `component_vrt_fault_1` 或 `Fault_VRT` 参数非法 | 优先使用默认 `v2b5` 模板，并把 `fault_mode` 限制在 `0/1/2/3` |
 
 ## 配套技能
 

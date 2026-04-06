@@ -80,6 +80,14 @@ working_model = Model.load("working-copy.yaml")
 - 可以保留每轮试算的中间状态
 - 后续更方便比较不同参数和拓扑方案
 
+如果研究对象是新能源封装模型，尤其是要继续做 LVRT、SCR 或故障穿越校核，研究起点还应再收紧一层：
+
+- 并网接入/SCR/潮流对比：优先从已验证的系统级接入算例出发，例如 `model/holdme/codex_mb_connected_20260405_080831`
+- 风机 LVRT 专项：优先从 `model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5` 或其保存分支出发
+- 已验证的 LVRT 专项参考算例：`model/holdme/codex_lvrt_case_fix_20260405_114928`
+
+原因不是“版本越新越好”，而是 `v2b5` 已经实测保留了 `LVRTEnable`、`FRTMode`、`Fault_VRT`、`State`、`Vrms_HV [p.u.]` 等 LVRT 自动化分析真正需要的参数和观测链路。
+
 如果后续研究需要给某个 `_newBus_3p` 母线补挂新的 EMT 电压量测链，也应先在这一步导出本地工作副本，再继续修改。当前仓库已经 live 验证过一条受限配方，但它依赖底层 `diagram-edge` 注入，不应直接当作通用高层 SDK 建模能力使用。对应说明见：
 
 - `docs/guides/emt-voltage-meter-chain-guide.md`
@@ -187,12 +195,14 @@ working_model.save("study-case-v2")
 1. 进入潮流工作流，检查模型是否可算并获得稳态初值
 2. 在已有可信初值基础上，进入 EMT 工作流
 3. 如果目标是补挂 `_newBus_3p` 母线电压量测链，则进入受限的 EMT 前置准备指南
+4. 如果目标是新能源并网强度评估，可直接进入 `thevenin_equivalent` / `renewable_integration` 工作流
 
 对应指南：
 
 - `docs/guides/powerflow-study-workflow.md`
 - `docs/guides/emt-study-workflow.md`
 - `docs/guides/emt-voltage-meter-chain-guide.md`
+- `docs/skills/model_builder.md`
 
 ## 对应示例与文档
 

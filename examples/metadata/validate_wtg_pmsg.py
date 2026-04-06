@@ -33,7 +33,7 @@ def validate_metadata():
         print(f"  - {comp_id}")
 
     # 检查 WTG_PMSG_01 是否注册
-    component_type = 'model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1'
+    component_type = 'model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5'
     metadata = mi.get_component_metadata(component_type)
 
     if metadata:
@@ -105,7 +105,7 @@ def compare_components():
     # 旧组件
     old_type = 'model/CloudPSS/WGSource'
     # 新组件
-    new_type = 'model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1'
+    new_type = 'model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5'
 
     old_metadata = mi.get_component_metadata(old_type)
     new_metadata = mi.get_component_metadata(new_type)

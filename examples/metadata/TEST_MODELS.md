@@ -5,7 +5,7 @@
 本目录包含用于技能开发和测试的正式新能源算例。这些算例使用固定的分支名，可重复使用。
 
 **重要更新**:
-- 风电模型主线使用 `model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1`
+- 风电模型主线使用 `model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5`
 - 光伏模型主线使用 `model/open-cloudpss/PVS_01-avm-stdm-v1b5`
 - `WGSource_Bus30` 旧案例已退役，不再作为正式测试算例
 
@@ -14,7 +14,7 @@
 ### 1. IEEE39 + 风电场 (PMSG)
 - **模型ID**: `model/holdme/test_ieee39_wind`
 - **分支名**: `test_ieee39_wind`
-- **新能源组件**: `model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1` (永磁同步风机)
+- **新能源组件**: `model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5` (永磁同步风机)
 - **连接母线**: Bus10
 - **总容量**: 100 MW (40台 × 2.5 MW)
 - **关键参数**:
@@ -56,7 +56,7 @@
 
 | 特性 | WGSource (旧) | WTG_PMSG_01 (新) |
 |------|---------------|------------------|
-| **组件ID** | `model/CloudPSS/WGSource` | `model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1` |
+| **组件ID** | `model/CloudPSS/WGSource` | `model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5` |
 | **潮流计算** | ❌ 不支持 | ✅ 完全支持 |
 | **关键参数** | Vbase, Pnom, WindSpeed | Sbase, Pctrl_mode, P_cmd, pf_P |
 | **控制模式** | 无 | PV/PQ/平衡节点 |

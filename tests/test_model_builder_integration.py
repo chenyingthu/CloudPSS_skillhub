@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from cloudpss_skills.builtin.model_builder import ModelBuilderSkill
 from cloudpss_skills.core.base import SkillStatus
+from cloudpss_skills.core.registry import get_skill
 
 
 HAS_TOKEN = os.path.exists(".cloudpss_token")
@@ -66,6 +67,7 @@ class TestModelBuilderSkill:
         """测试2: 配置Schema验证"""
         assert skill.config_schema is not None
         assert "properties" in skill.config_schema
+        assert "workflow" in skill.config_schema["properties"]
         assert "base_model" in skill.config_schema["properties"]
         assert "modifications" in skill.config_schema["properties"]
         print("✅ 配置Schema验证通过")
@@ -82,6 +84,16 @@ class TestModelBuilderSkill:
         result = skill.validate(invalid_config)
         assert result.valid is False
         print("✅ 缺失RID检测正确")
+
+    def test_validation_with_workflow_defaults(self, skill):
+        """测试4b: workflow 可自动补齐基础模型与内部修改"""
+        config = {
+            "workflow": {"name": "open_cloudpss_wind_lvrt_case"},
+            "output": {"save": False}
+        }
+        result = skill.validate(config)
+        assert result.valid is True
+        print("✅ workflow 默认配置验证正确")
 
     def test_validation_with_invalid_action(self, skill):
         """测试5: 无效action检测"""
@@ -386,6 +398,76 @@ class TestModelBuilderSkill:
         assert "modify:component_vrt_fault_1" in generated[0]["modifications"]
 
         print(f"✅ open-cloudpss LVRT专项算例构建通过: {generated[0]['rid']}")
+
+    @pytest.mark.skipif(not HAS_TOKEN, reason=TOKEN_MSG)
+    def test_integration_open_cloudpss_wind_lvrt_workflow(self, skill):
+        """测试16: workflow 方式直接构建 open-cloudpss 风机 LVRT 算例"""
+        config = {
+            "workflow": {"name": "open_cloudpss_wind_lvrt_case", "fault_mode": 1},
+            "auth": {"token_file": ".cloudpss_token"},
+            "output": {
+                "save": True,
+                "branch": "codex_test_open_cloudpss_lvrt_workflow",
+                "name": "WTG_PMSG_LVRT_Workflow"
+            }
+        }
+
+        result = skill.run(config)
+        assert result.status == SkillStatus.SUCCESS, result.error
+        assert result.data["workflow"] == "open_cloudpss_wind_lvrt_case"
+
+        generated = result.data["generated_models"]
+        assert len(generated) == 1
+        assert generated[0]["rid"].startswith("model/")
+        assert "modify:component_vrt_fault_1" in generated[0]["modifications"]
+
+        print(f"✅ workflow 构建 open-cloudpss LVRT算例通过: {generated[0]['rid']}")
+
+    @pytest.mark.skipif(not HAS_TOKEN, reason=TOKEN_MSG)
+    def test_integration_open_cloudpss_wind_lvrt_workflow_is_usable_by_renewable_integration(self, skill):
+        """测试17: workflow 生成的算例可被 renewable_integration 真实跑通 LVRT 校核"""
+        config = {
+            "workflow": {"name": "open_cloudpss_wind_lvrt_case", "fault_mode": 1},
+            "auth": {"token_file": ".cloudpss_token"},
+            "output": {
+                "save": True,
+                "branch": "codex_test_open_cloudpss_lvrt_workflow_e2e",
+                "name": "WTG_PMSG_LVRT_Workflow_E2E"
+            }
+        }
+
+        build_result = skill.run(config)
+        assert build_result.status == SkillStatus.SUCCESS, build_result.error
+        rid = build_result.data["generated_models"][0]["rid"]
+
+        renewable_skill = get_skill("renewable_integration")
+        renewable_result = renewable_skill.run(
+            {
+                "model": {"rid": rid},
+                "auth": {"token_file": ".cloudpss_token"},
+                "renewable_unit_rating_mva": 50.0,
+                "analysis": {
+                    "scr": {"enabled": False},
+                    "voltage_variation": {"enabled": False},
+                    "harmonic_injection": {"enabled": False},
+                    "lvrt_compliance": {"enabled": True, "standard": "gb", "fault_mode": "1"},
+                    "stability_impact": {"enabled": False},
+                },
+                "output": {"save_report": False},
+            }
+        )
+
+        assert renewable_result.status == SkillStatus.SUCCESS, renewable_result.error
+        lvrt = renewable_result.data["analysis_results"]["lvrt_compliance"]
+        assert lvrt["supported"] is True
+        assert lvrt["verified"] is True
+        assert lvrt["passed"] is True
+        assert lvrt["compliant"] is True
+        assert lvrt["state_summary"]["entered_lvrt"] is True
+        assert lvrt["state_summary"]["tripped"] is False
+        assert lvrt["state_summary"]["recovered"] is True
+
+        print(f"✅ workflow 生成算例已被 renewable_integration 验证通过: {rid}")
 
 
 if __name__ == "__main__":

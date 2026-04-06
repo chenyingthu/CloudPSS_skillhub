@@ -123,7 +123,7 @@ class TestModelValidatorUnit:
         components = {
             "canvas_0_45": bus_component(label="Bus10", signal="bus10"),
             "comp_wind": renewable_component(
-                "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1",
+                "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5",
                 label="WindFarm_Bus10",
                 pins={"0": "bus10"},
                 args={"pf_P": 80.0, "P_cmd": 80.0},
@@ -147,7 +147,7 @@ class TestModelValidatorUnit:
         components = {
             "canvas_0_45": bus_component(label="Bus10", signal="bus10"),
             "comp_wind": renewable_component(
-                "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1",
+                "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5",
                 label="WindFarm_Bus10",
                 pins={"0": "bus10"},
                 args={"pf_P": 80.0, "P_cmd": 80.0},
@@ -171,7 +171,7 @@ class TestModelValidatorUnit:
         components = {
             "canvas_0_45": bus_component(label="newBus_3p-21", signal="bus10"),
             "comp_wind": renewable_component(
-                "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1",
+                "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5",
                 label="WindFarm_Bus10",
                 pins={"0": "Bus10"},
                 args={"pf_P": 80.0, "P_cmd": 80.0},

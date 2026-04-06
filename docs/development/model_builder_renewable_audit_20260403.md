@@ -69,7 +69,7 @@
 ## 额外说明
 
 - 对 `WGSource`、`DFIG_WindFarm_Equivalent_Model`、`PVStation` 这类旧组件写法，`model_builder` 已经加入自动修复映射：
-  - `WGSource` / `DFIG_WindFarm_Equivalent_Model` -> `model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1`
+  - `WGSource` / `DFIG_WindFarm_Equivalent_Model` -> `model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5`
   - `PVStation` / `PV_Inverter` -> `model/open-cloudpss/PVS_01-avm-stdm-v1b5`
 - 对 `pin_connection.target_bus`，现在可自动把 `Bus10` / `Bus14` 映射到真实可连接的 `bus10` / `bus14`
 - `WGSource_Bus30` 这条旧设计仍然不稳定。即便改成公开 PMSG 封装模型并修正为 `bus30`，当前 live 结果依然出现空结果表。该支路建议直接退役，不再作为正式测试算例沿用。

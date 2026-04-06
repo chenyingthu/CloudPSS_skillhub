@@ -25,7 +25,7 @@ def test_wind_config():
     registry.clear()
     mi.initialize('examples/metadata')
 
-    component_type = 'model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1'
+    component_type = 'model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5'
 
     # 模拟 create_wind_model 中的配置
     user_params = {
@@ -89,7 +89,7 @@ def test_hybrid_config():
     mi.initialize('examples/metadata')
 
     # 风电参数
-    wind_component_type = 'model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b1'
+    wind_component_type = 'model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5'
     wind_params = mi.auto_complete_parameters(
         wind_component_type,
         {
