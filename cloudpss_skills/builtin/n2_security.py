@@ -20,6 +20,7 @@ from itertools import combinations
 from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult
 from cloudpss_skills.core.auth_utils import setup_auth, DEFAULT_TIMEOUT
 from cloudpss_skills.core.registry import register
+from cloudpss_skills.core.utils import parse_cloudpss_table
 
 logger = logging.getLogger(__name__)
 
@@ -252,7 +253,7 @@ class N2SecuritySkill(SkillBase):
             if any(bt in definition for bt in branch_types):
                 branches.append({
                     "id": comp_id,
-                    "name": getattr(comp, "name", comp_id),
+                    "name": self._get_branch_display_name(comp, comp_id),
                     "type": definition.split("/")[-1],
                 })
 
@@ -375,6 +376,7 @@ class N2SecuritySkill(SkillBase):
                 max_v = None
                 min_v = None
                 max_load = None
+                thermal_supported = not check_thermal
 
                 # 电压检查
                 if check_voltage:
@@ -424,16 +426,31 @@ class N2SecuritySkill(SkillBase):
                     except (KeyError, AttributeError) as e:
                         logger.warning(f"电压检查失败: {e}")
 
-                # 热稳定检查（简化）
+                # 热稳定检查
                 if check_thermal and not violation:
-                    # 简化处理：假设需要检查支路负载
-                    # 实际实现需要从潮流结果中获取支路功率
-                    pass  # TODO: 实现热稳定检查
+                    try:
+                        thermal_result = self._evaluate_thermal_loading(
+                            working_model,
+                            pf_result,
+                            thermal_limit,
+                        )
+                        thermal_supported = thermal_result["supported"]
+                        max_load = thermal_result["max_loading_pu"]
+
+                        if thermal_result["violation"]:
+                            violation = thermal_result["violation"]
+                    except (KeyError, AttributeError, RuntimeError, TypeError, ValueError) as e:
+                        logger.warning(f"热稳定检查失败: {e}")
+                        violation = f"热稳定校核失败: {e}"
 
                 # 确定状态
                 if violation:
                     status = "failed"
                     logger.error(f"  -> N-2失败: {violation}")
+                elif check_thermal and not thermal_supported:
+                    status = "error"
+                    violation = "热稳定校核未完成：支路缺少额定容量/电流参数，不能宣称N-2通过"
+                    logger.error(f"  -> N-2不完整: {violation}")
                 else:
                     status = "passed"
                     logger.info(f"  -> N-2通过")
@@ -467,6 +484,96 @@ class N2SecuritySkill(SkillBase):
                 ))
 
         return results
+
+    @staticmethod
+    def _get_branch_display_name(component: Any, fallback_id: str) -> str:
+        """优先使用标签/业务名，避免报告里只剩 canvas key。"""
+        label = getattr(component, "label", None)
+        if label:
+            return label
+
+        name = getattr(component, "name", None)
+        if name:
+            return name
+
+        args = getattr(component, "args", {}) or {}
+        for key in ("Name", "name"):
+            value = args.get(key)
+            if value:
+                return str(value)
+
+        return fallback_id
+
+    @staticmethod
+    def _read_numeric_arg(args: Dict[str, Any], key: str) -> Optional[float]:
+        value = args.get(key)
+        if isinstance(value, dict):
+            value = value.get("source")
+        if value in (None, ""):
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _evaluate_thermal_loading(self, model: Any, pf_result: Any, thermal_limit: float) -> Dict[str, Any]:
+        """基于真实潮流支路表和元件额定值计算负载率。"""
+        branch_tables = pf_result.getBranches() if hasattr(pf_result, "getBranches") else None
+        if not branch_tables:
+            raise RuntimeError("潮流结果缺少支路表")
+
+        branch_rows = parse_cloudpss_table(branch_tables)
+        max_loading = None
+        unsupported_count = 0
+
+        for row in branch_rows:
+            branch_id = row.get("Branch")
+            if not branch_id:
+                continue
+
+            component = model.getComponentByKey(branch_id)
+            args = getattr(component, "args", {}) or {}
+            definition = str(getattr(component, "definition", "") or "")
+
+            p_ij = self._read_numeric_arg(row, "Pij") if isinstance(row, dict) else None
+            q_ij = self._read_numeric_arg(row, "Qij") if isinstance(row, dict) else None
+            p_ji = self._read_numeric_arg(row, "Pji") if isinstance(row, dict) else None
+            q_ji = self._read_numeric_arg(row, "Qji") if isinstance(row, dict) else None
+
+            s_ij = ((p_ij or 0.0) ** 2 + (q_ij or 0.0) ** 2) ** 0.5
+            s_ji = ((p_ji or 0.0) ** 2 + (q_ji or 0.0) ** 2) ** 0.5
+            apparent_mva = max(s_ij, s_ji)
+
+            rating_mva = None
+            if "Transformer" in definition:
+                rating_mva = self._read_numeric_arg(args, "Tmva")
+            elif "TransmissionLine" in definition or definition.endswith("/line") or definition.endswith("/3pline"):
+                i_rated = self._read_numeric_arg(args, "Irated")
+                v_base = self._read_numeric_arg(args, "Vbase")
+                if i_rated and i_rated > 0 and v_base and v_base > 0:
+                    rating_mva = 1.7320508075688772 * v_base * i_rated
+
+            if not rating_mva or rating_mva <= 0:
+                unsupported_count += 1
+                continue
+
+            loading = apparent_mva / rating_mva
+            max_loading = loading if max_loading is None else max(max_loading, loading)
+
+            if loading > thermal_limit:
+                return {
+                    "supported": True,
+                    "max_loading_pu": loading,
+                    "violation": f"热稳定越限: {loading:.3f} pu",
+                    "unsupported_count": unsupported_count,
+                }
+
+        return {
+            "supported": max_loading is not None,
+            "max_loading_pu": max_loading,
+            "violation": None,
+            "unsupported_count": unsupported_count,
+        }
 
     def _generate_report(self, model, scenarios: List[Tuple[Dict, Dict]],
                         results: List[N2ContingencyResult], analysis_config: Dict) -> Dict:

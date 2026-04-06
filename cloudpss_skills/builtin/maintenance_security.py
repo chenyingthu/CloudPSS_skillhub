@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.utils import parse_cloudpss_table
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +173,7 @@ class MaintenanceSecuritySkill(SkillBase):
                 "branch_id": maintenance_id,
                 "description": maintenance_desc,
                 "min_vm": min(b.get("Vm", 1.0) for b in maint_buses) if maint_buses else 1.0,
-                "max_branch_loading": max(b.get("loading", 0) for b in maint_branches) if maint_branches else 0,
+                "max_branch_loading": self._max_branch_loading(working_model, maint_branches),
             }
             maintenance_case["severity"] = self._classify_severity(maintenance_case)
             log("INFO", f"检修态: severity={maintenance_case['severity']}")
@@ -198,7 +199,7 @@ class MaintenanceSecuritySkill(SkillBase):
                     n1_case = {
                         "branch_id": branch_id,
                         "min_vm": min(b.get("Vm", 1.0) for b in n1_buses) if n1_buses else 1.0,
-                        "max_loading": max(b.get("loading", 0) for b in n1_branches) if n1_branches else 0,
+                        "max_loading": self._max_branch_loading(n1_model, n1_branches),
                     }
                     n1_case["severity"] = self._classify_severity(n1_case)
                     n1_results.append(n1_case)
@@ -296,19 +297,18 @@ class MaintenanceSecuritySkill(SkillBase):
         """将CloudPSS表结构转换为行字典列表"""
         if not table:
             return []
-        # 如果是列表，已经是行格式
+        # CloudPSS 常返回 [table_dict]，需要先做列转行
         if isinstance(table, list):
-            return table
+            return parse_cloudpss_table(table)
         # 如果是字典（列格式），转换为行
         if isinstance(table, dict):
+            if table.get("type") == "table":
+                return parse_cloudpss_table([table])
             rows = []
-            # 获取所有列名
             columns = list(table.keys())
             if not columns:
                 return []
-            # 获取行数
             num_rows = len(table[columns[0]])
-            # 转换为行字典
             for i in range(num_rows):
                 row = {col: table[col][i] for col in columns}
                 rows.append(row)
@@ -379,3 +379,52 @@ class MaintenanceSecuritySkill(SkillBase):
                 lines.append(f"- {r['branch_id']}: min_vm={r['min_vm']:.4f}")
             lines.append("")
         path.write_text("\n".join(lines), encoding="utf-8")
+
+    @staticmethod
+    def _read_numeric_arg(args: Dict[str, Any], key: str):
+        value = args.get(key)
+        if isinstance(value, dict):
+            value = value.get("source")
+        if value in (None, ""):
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _branch_loading(self, model, row: Dict[str, Any]) -> float:
+        branch_id = row.get("Branch")
+        if not branch_id:
+            return 0.0
+
+        component = model.getComponentByKey(branch_id)
+        args = getattr(component, "args", {}) or {}
+        definition = str(getattr(component, "definition", "") or "")
+
+        p_ij = self._read_numeric_arg(row, "Pij") or 0.0
+        q_ij = self._read_numeric_arg(row, "Qij") or 0.0
+        p_ji = self._read_numeric_arg(row, "Pji") or 0.0
+        q_ji = self._read_numeric_arg(row, "Qji") or 0.0
+        apparent_mva = max((p_ij ** 2 + q_ij ** 2) ** 0.5, (p_ji ** 2 + q_ji ** 2) ** 0.5)
+
+        rating_mva = None
+        if "Transformer" in definition:
+            rating_mva = self._read_numeric_arg(args, "Tmva")
+        elif "TransmissionLine" in definition:
+            i_rated = self._read_numeric_arg(args, "Irated")
+            v_base = self._read_numeric_arg(args, "Vbase")
+            if i_rated and i_rated > 0 and v_base and v_base > 0:
+                rating_mva = 1.7320508075688772 * v_base * i_rated
+
+        if not rating_mva or rating_mva <= 0:
+            return 0.0
+        return apparent_mva / rating_mva
+
+    def _max_branch_loading(self, model, branch_rows: List[Dict[str, Any]]) -> float:
+        max_loading = 0.0
+        for row in branch_rows:
+            try:
+                max_loading = max(max_loading, self._branch_loading(model, row))
+            except Exception as exc:
+                logger.debug(f"计算支路负载率失败: {exc}")
+        return max_loading

@@ -421,6 +421,12 @@ class OrthogonalSensitivitySkill(SkillBase):
                             # 尝试从参数名解析组件
                             components = self._find_components_by_param(working_model, param_name, param.get("component_type"))
 
+                        if not components:
+                            raise RuntimeError(
+                                f"参数 {param_name} 未解析到任何目标组件。"
+                                "请显式指定 component_rid，或使用 组件名.参数名 的精确写法。"
+                            )
+
                         for comp_key, comp in components.items():
                             if hasattr(comp, 'args'):
                                 # 假设参数名对应args中的key
@@ -451,7 +457,7 @@ class OrthogonalSensitivitySkill(SkillBase):
                         run.error = "仿真超时"
                         log("WARN", f"     超时")
 
-                except (KeyError, AttributeError) as e:
+                except (KeyError, AttributeError, RuntimeError, ValueError, TypeError) as e:
                     run.status = "failed"
                     run.error = str(e)
                     log("ERROR", f"     失败: {e}")
@@ -490,6 +496,10 @@ class OrthogonalSensitivitySkill(SkillBase):
 
             # 根据成功率确定状态
             final_status = SkillStatus.SUCCESS if success_count == len(runs) else SkillStatus.FAILED
+            first_error = next((r.error for r in runs if r.error), None)
+            final_error = None if final_status == SkillStatus.SUCCESS else (
+                first_error or "存在未完成或失败的正交运行"
+            )
 
             return SkillResult(
                 skill_name=self.name,
@@ -509,6 +519,7 @@ class OrthogonalSensitivitySkill(SkillBase):
                 },
                 artifacts=artifacts,
                 logs=logs,
+                error=final_error,
             )
 
         except (KeyError, AttributeError, ValueError, RuntimeError, TimeoutError, TypeError, FileNotFoundError) as e:
@@ -544,7 +555,13 @@ class OrthogonalSensitivitySkill(SkillBase):
                 label = getattr(comp, "label", "") or ""
                 name = getattr(comp, "name", "") or ""
                 comp_key = str(key)
-                if component_name == label or component_name == name or component_name in comp_key:
+                arg_name = str(comp.args.get("Name", "")) if hasattr(comp, "args") else ""
+                if (
+                    component_name == label or
+                    component_name == name or
+                    component_name == arg_name or
+                    component_name == comp_key
+                ):
                     matches[key] = comp
         except Exception:
             return {}
