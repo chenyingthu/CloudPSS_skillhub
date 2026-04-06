@@ -197,7 +197,7 @@ class TransientStabilityMarginSkill(SkillBase):
                 error=error,
             )
 
-        except (KeyError, AttributeError) as e:
+        except (KeyError, AttributeError, ConnectionError, RuntimeError, TimeoutError, FileNotFoundError, ValueError, TypeError, Exception) as e:
             logger.error(f"暂态稳定裕度评估失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,

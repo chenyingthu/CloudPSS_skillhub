@@ -288,12 +288,17 @@ class AutoChannelSetupSkill(SkillBase):
             # 7. 添加频率量测
             freq_config = measurements.get("frequency", {})
             if freq_config.get("enabled", False):
-                log("INFO", "配置频率量测...")
-                channels = self._add_frequency_measurements(
-                    model, freq_config, dry_run
-                )
-                added_channels.extend(channels)
-                log("INFO", f"  -> 添加 {len(channels)} 个频率量测通道")
+                try:
+                    log("INFO", "配置频率量测...")
+                    channels = self._add_frequency_measurements(
+                        model, freq_config, dry_run
+                    )
+                    added_channels.extend(channels)
+                    log("INFO", f"  -> 添加 {len(channels)} 个频率量测通道")
+                except (AttributeError, TypeError, ValueError, RuntimeError) as e:
+                    log("ERROR", f"配置频率量测失败: {e}")
+                    if not dry_run:
+                        raise
 
             # 8. 保存模型（如果需要）
             if save_model and not dry_run:
@@ -337,7 +342,7 @@ class AutoChannelSetupSkill(SkillBase):
                 logs=logs,
             )
 
-        except (AttributeError, FileNotFoundError, TypeError, ValueError, RuntimeError, KeyError, ConnectionError) as e:
+        except (AttributeError, FileNotFoundError, TypeError, ValueError, RuntimeError, KeyError, ConnectionError, Exception) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
