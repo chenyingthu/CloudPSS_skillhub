@@ -47,7 +47,7 @@ class DUDVCurveSkill(SkillBase):
     def config_schema(self) -> Dict[str, Any]:
         return {
             "type": "object",
-            "required": ["model", "buses"],
+            "required": ["buses"],
             "properties": {
                 "auth": {
                     "type": "object",
@@ -61,6 +61,12 @@ class DUDVCurveSkill(SkillBase):
                     "properties": {
                         "rid": {"type": "string", "description": "模型RID"},
                         "source": {"type": "string", "enum": ["cloud", "local"], "default": "cloud"}
+                    }
+                },
+                "input": {
+                    "type": "object",
+                    "properties": {
+                        "result_file": {"type": "string", "description": "disturbance_severity 结果JSON文件"},
                     }
                 },
                 "buses": {
@@ -113,11 +119,6 @@ class DUDVCurveSkill(SkillBase):
         """验证配置"""
         errors = []
 
-        if "model" not in config:
-            errors.append("必须指定model配置")
-        elif "rid" not in config.get("model", {}):
-            errors.append("model必须指定rid")
-
         if "buses" not in config or not config["buses"]:
             errors.append("必须指定至少一个分析母线")
 
@@ -139,71 +140,24 @@ class DUDVCurveSkill(SkillBase):
         artifacts = []
 
         try:
-            model_rid = config["model"]["rid"]
             bus_labels = config["buses"]
-            sim_config = config.get("simulation", {})
+            input_config = config.get("input", {})
             dudv_config = config.get("dudv", {})
             output_config = config.get("output", {})
 
-            logger.info(f"DUDV曲线分析开始 - 模型: {model_rid}, 母线数: {len(bus_labels)}")
-            logs.append(LogEntry(level="INFO", message=f"DUDV分析开始，母线: {bus_labels}"))
+            result_file = input_config.get("result_file")
+            if not result_file:
+                raise RuntimeError(
+                    "当前仅支持基于 disturbance_severity 真实结果文件生成 DUDV 曲线，"
+                    "请提供 input.result_file。"
+                )
 
-            # 获取模型
-            model = Model.fetch(model_rid)
+            logger.info(f"DUDV曲线分析开始 - 结果文件: {result_file}, 母线数: {len(bus_labels)}")
+            logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"DUDV分析开始，母线: {bus_labels}"))
 
-            # 获取母线key
-            bus_keys = []
-            for label in bus_labels:
-                key = convert_label_to_key(model, label)
-                if key:
-                    bus_keys.append((label, key))
-                else:
-                    logger.warning(f"找不到母线: {label}")
-
-            if not bus_keys:
-                raise ValueError("未找到有效的母线")
-
-            # 配置仿真参数
-            end_time = sim_config.get("end_time", 15.0)
-            fault_time = sim_config.get("fault_time", 4.0)
-            fault_duration = sim_config.get("fault_duration", 0.1)
-
-            # DUDV扫描参数
-            v_range = dudv_config.get("voltage_range", [0.8, 1.2])
-            num_points = dudv_config.get("num_points", 20)
-
-            # 计算DUDV数据
-            dudv_results = {}
-
-            for bus_label, bus_key in bus_keys:
-                logger.info(f"计算母线 {bus_label} 的DUDV数据...")
-
-                # 通过不同无功注入水平获取电压响应
-                voltage_points = []
-                dv_points = []
-
-                # 扫描电压范围
-                v_nominal = 1.0  # 假设标幺值基准
-
-                for i in range(num_points):
-                    v_target = v_range[0] + (v_range[1] - v_range[0]) * i / (num_points - 1)
-
-                    # 计算需要的无功注入
-                    # 简化模型: dV ≈ dQ * VSI
-                    # 这里我们使用仿真结果来计算实际的DV
-
-                    # 为当前母线添加无功注入源并运行EMT
-                    # 实际实现需要修改模型并运行EMT仿真
-                    # 这里使用模拟数据演示
-
-                    dv = v_target - v_nominal
-                    voltage_points.append(v_target)
-                    dv_points.append(dv)
-
-                dudv_results[bus_label] = {
-                    "voltage": voltage_points,
-                    "dv": dv_points
-                }
+            dudv_results = self.from_disturbance_severity_result(result_file, bus_labels)
+            if not dudv_results:
+                raise RuntimeError("未从 disturbance_severity 结果文件中提取到任何 DUDV 数据")
 
             # 生成图表
             fig, axes = self._create_dudv_plots(dudv_results, bus_labels, output_config)
@@ -238,32 +192,39 @@ class DUDVCurveSkill(SkillBase):
             ))
 
             duration = (datetime.now() - start_time).total_seconds()
-            logs.append(LogEntry(level="INFO", message=f"DUDV分析完成，耗时: {duration:.2f}s"))
+            logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"DUDV分析完成，耗时: {duration:.2f}s"))
 
             return SkillResult(
+                skill_name=self.name,
+                start_time=start_time,
+                end_time=datetime.now(),
                 status=SkillStatus.SUCCESS,
                 data={
                     "buses": bus_labels,
+                    "source_file": result_file,
                     "dudv_data": dudv_results,
-                    "voltage_range": v_range,
-                    "num_points": num_points
+                    "num_points": max(len(item.get("voltage", [])) for item in dudv_results.values()) if dudv_results else 0,
                 },
                 artifacts=artifacts,
                 logs=logs,
                 metrics={
                     "duration": duration,
                     "bus_count": len(bus_labels),
-                    "num_points": num_points
+                    "num_points": max(len(item.get("voltage", [])) for item in dudv_results.values()) if dudv_results else 0,
                 }
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError) as e:
+        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError, TypeError, Exception) as e:
             logger.error(f"DUDV分析失败: {e}", exc_info=True)
             return SkillResult(
+                skill_name=self.name,
                 status=SkillStatus.FAILED,
+                start_time=start_time,
+                end_time=datetime.now(),
                 data={},
                 artifacts=artifacts,
-                logs=logs + [LogEntry(level="ERROR", message=f"分析失败: {str(e)}")],
+                logs=logs + [LogEntry(timestamp=datetime.now(), level="ERROR", message=f"分析失败: {str(e)}")],
+                error=str(e),
                 metrics={"duration": (datetime.now() - start_time).total_seconds()}
             )
 
@@ -349,14 +310,20 @@ class DUDVCurveSkill(SkillBase):
 
         dudv_data = {}
 
-        for bus_result in data.get("bus_results", []):
-            label = bus_result.get("bus_label")
+        channel_results = data.get("channel_results")
+        if channel_results is None:
+            # 兼容旧格式
+            channel_results = data.get("bus_results", [])
+
+        for bus_result in channel_results:
+            label = bus_result.get("name") or bus_result.get("bus_label")
             if bus_labels and label not in bus_labels:
                 continue
 
-            v_steady = bus_result.get("v_steady")
-            dv_up = bus_result.get("dv_up")
-            dv_down = bus_result.get("dv_down")
+            dv_section = bus_result.get("dv", {})
+            v_steady = dv_section.get("v_steady", bus_result.get("v_steady"))
+            dv_up = dv_section.get("dv_up", bus_result.get("dv_up"))
+            dv_down = dv_section.get("dv_down", bus_result.get("dv_down"))
 
             if v_steady is not None:
                 # 构建简单的DUDV数据点

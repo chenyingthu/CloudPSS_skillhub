@@ -241,7 +241,7 @@ class ComponentCatalogSkill(SkillBase):
                 artifacts=artifacts
             )
 
-        except (KeyError, AttributeError, ConnectionError, FileNotFoundError, ValueError, TypeError) as e:
+        except (KeyError, AttributeError, ConnectionError, FileNotFoundError, ValueError, TypeError, RuntimeError, Exception) as e:
             logger.error(f"组件目录获取失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,

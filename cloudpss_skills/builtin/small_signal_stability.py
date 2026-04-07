@@ -184,6 +184,10 @@ class SmallSignalStabilitySkill(SkillBase):
                 "oscillation_modes": eigen_results["modes"],
                 "participation_factors": participation_factors,
                 "stability_assessment": eigen_results["assessment"],
+                "verified": False,
+                "limitations": [
+                    "当前结果基于近似状态矩阵和简化机组等值参数，不能替代真实小信号线性化分析或模态工具结果"
+                ],
             }
 
             # 导出结果
@@ -224,12 +228,13 @@ class SmallSignalStabilitySkill(SkillBase):
 
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.SUCCESS,
+                status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
                 data=result_data,
                 artifacts=artifacts,
                 logs=logs,
+                error="当前小信号稳定性结果仍基于近似状态矩阵，不能作为正式小信号稳定结论",
             )
 
         except (KeyError, AttributeError, ZeroDivisionError, ValueError, np.linalg.LinAlgError) as e:

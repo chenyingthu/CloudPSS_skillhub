@@ -24,6 +24,7 @@ from cloudpss_skills.core.utils import (
     calculate_dv_metrics,
     calculate_si_metric,
     extract_voltage_from_result,
+    fetch_job_with_result,
     get_time_index,
     calculate_voltage_average
 )
@@ -125,11 +126,15 @@ class DisturbanceSeveritySkill(SkillBase):
         logs = []
         artifacts = []
 
+        def log(level: str, message: str):
+            logs.append(LogEntry(timestamp=datetime.now(), level=level, message=message))
+            getattr(logger, level.lower(), logger.info)(message)
+
         try:
+            self._setup_auth(config)
             # 1. 获取模型
             model_rid = config["model"]["rid"]
-            logger.info(f"扰动严重度分析开始 - 模型: {model_rid}")
-            logs.append(LogEntry(level="INFO", message=f"加载模型: {model_rid}"))
+            log("INFO", f"加载模型: {model_rid}")
 
             model = Model.fetch(model_rid)
 
@@ -140,11 +145,11 @@ class DisturbanceSeveritySkill(SkillBase):
                     status=SkillStatus.FAILED,
                     data={},
                     artifacts=artifacts,
-                    logs=logs + [LogEntry(level="ERROR", message="获取EMT结果失败")],
+                    logs=logs + [LogEntry(timestamp=datetime.now(), level="ERROR", message="获取EMT结果失败")],
                     metrics={"duration": (datetime.now() - start_time).total_seconds()}
                 )
 
-            logs.append(LogEntry(level="INFO", message="成功获取EMT仿真结果"))
+            log("INFO", "成功获取EMT仿真结果")
 
             # 3. 提取电压数据
             voltage_plot_idx = config.get("analysis", {}).get("voltage_measure_plot", 0)
@@ -155,12 +160,11 @@ class DisturbanceSeveritySkill(SkillBase):
                     status=SkillStatus.FAILED,
                     data={},
                     artifacts=artifacts,
-                    logs=logs + [LogEntry(level="ERROR", message="未能从结果中提取电压数据")],
+                    logs=logs + [LogEntry(timestamp=datetime.now(), level="ERROR", message="未能从结果中提取电压数据")],
                     metrics={"duration": (datetime.now() - start_time).total_seconds()}
                 )
 
-            logger.info(f"提取到 {len(voltage_channels)} 个电压通道")
-            logs.append(LogEntry(level="INFO", message=f"提取到 {len(voltage_channels)} 个电压通道"))
+            log("INFO", f"提取到 {len(voltage_channels)} 个电压通道")
 
             # 4. 执行分析
             analysis_config = config.get("analysis", {})
@@ -227,23 +231,30 @@ class DisturbanceSeveritySkill(SkillBase):
             ))
 
             duration = (datetime.now() - start_time).total_seconds()
-            logs.append(LogEntry(level="INFO", message=f"扰动严重度分析完成，耗时 {duration:.2f}s"))
+            log("INFO", f"扰动严重度分析完成，耗时 {duration:.2f}s")
 
             return SkillResult(
+                skill_name=self.name,
                 status=SkillStatus.SUCCESS,
+                start_time=start_time,
+                end_time=datetime.now(),
                 data=result_data,
                 artifacts=artifacts,
                 logs=logs,
                 metrics={"duration": duration, "channel_count": len(voltage_channels)}
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError) as e:
+        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError, TypeError, ConnectionError, Exception) as e:
             logger.error(f"扰动严重度分析失败: {e}", exc_info=True)
             return SkillResult(
+                skill_name=self.name,
                 status=SkillStatus.FAILED,
+                start_time=start_time,
+                end_time=datetime.now(),
                 data={},
                 artifacts=artifacts,
-                logs=logs + [LogEntry(level="ERROR", message=f"分析失败: {str(e)}")],
+                logs=logs + [LogEntry(timestamp=datetime.now(), level="ERROR", message=f"分析失败: {str(e)}")],
+                error=str(e),
                 metrics={"duration": (datetime.now() - start_time).total_seconds()}
             )
 
@@ -255,14 +266,32 @@ class DisturbanceSeveritySkill(SkillBase):
         if "emt_result" in sim_config and sim_config["emt_result"]:
             result_id = sim_config["emt_result"]
             logger.info(f"使用已有EMT结果: {result_id}")
-            # 这里需要通过job ID获取结果，具体实现取决于CloudPSS SDK
-            # 暂时返回None，需要用户先运行EMT仿真
-            return None
+            job, result = fetch_job_with_result(result_id)
+            if job.status() != 1:
+                raise RuntimeError(f"EMT任务未完成或失败，状态: {job.status()}")
+            if result is None:
+                raise RuntimeError("EMT任务结果为空")
+            return result
 
-        # 否则需要配置并运行新的EMT仿真
-        # 注意：这里需要配置故障，但当前实现假设用户已经运行了带故障的EMT仿真
-        logger.info("需要运行新的EMT仿真（带故障配置）")
-        return None
+        raise RuntimeError("当前仅支持基于已有 EMT 任务结果进行扰动严重度分析，请提供 simulation.emt_result")
+
+    def _setup_auth(self, config: Dict[str, Any]):
+        """设置认证"""
+        from cloudpss import setToken
+
+        auth = config.get("auth", {})
+        token = auth.get("token")
+
+        if not token:
+            token_file = auth.get("token_file", ".cloudpss_token")
+            token_path = Path(token_file)
+            if token_path.exists():
+                token = token_path.read_text().strip()
+
+        if not token:
+            raise ValueError("未找到CloudPSS token")
+
+        setToken(token)
 
     def _analyze_all_channels(
         self,

@@ -41,11 +41,13 @@ def _matches_bus_identifier(candidate: str, target: str) -> bool:
         return False
     if candidate_norm == target_norm:
         return True
-    if target_norm in candidate_norm or candidate_norm in target_norm:
+    compact_candidate = "".join(ch for ch in candidate_norm if ch.isalnum())
+    compact_target = "".join(ch for ch in target_norm if ch.isalnum())
+    if compact_candidate and compact_candidate == compact_target:
         return True
     candidate_digits = "".join(ch for ch in candidate_norm if ch.isdigit())
     target_digits = "".join(ch for ch in target_norm if ch.isdigit())
-    return bool(candidate_digits and candidate_digits == target_digits)
+    return bool(candidate_digits and target_digits and candidate_digits == target_digits)
 
 
 @register
@@ -292,6 +294,12 @@ class VSIWeakBusSkill(SkillBase):
 
             logger.info(f"VSI计算完成 - 母线数: {len(vsi_results['vsi_i'])}")
             logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"VSI计算完成 - 母线数: {len(vsi_results['vsi_i'])}"))
+            if not vsi_results.get("vsi_i"):
+                unsupported = vsi_results.get("unsupported_buses", [])
+                raise RuntimeError(
+                    "未能形成任何有效VSI结果；当前模型缺少可验证的电压/无功量测链路。"
+                    + (f" 未支持母线: {', '.join(unsupported[:5])}" if unsupported else "")
+                )
 
             # 8. 识别弱母线
             analysis_config = config.get("analysis", {})
@@ -312,6 +320,7 @@ class VSIWeakBusSkill(SkillBase):
                 "test_bus_count": len(test_buses),
                 "vsi_results": vsi_results,
                 "weak_buses": weak_buses,
+                "unsupported_buses": vsi_results.get("unsupported_buses", []),
                 "summary": {
                     "total_buses": len(test_buses),
                     "weak_bus_count": len(weak_buses),
@@ -627,6 +636,7 @@ class VSIWeakBusSkill(SkillBase):
 
             vsi_i = {}  # 每个母线的平均VSI
             vsi_ij = {}  # VSI矩阵
+            unsupported_buses = []
 
             # 对每个测试母线
             for n, bus in enumerate(test_buses):
@@ -658,16 +668,20 @@ class VSIWeakBusSkill(SkillBase):
                     v_after = calculate_voltage_average(vy, ms_inject, me_inject)
 
                     # 获取注入的无功量
+                    q_injected = None
                     if n < len(q_traces):
                         q_trace = q_traces[n]
                         qx = q_trace.get("x", [])
                         qy = q_trace.get("y", [])
-                        if qy:
-                            q_injected = abs(qy[-1]) if qy[-1] != 0 else 100
-                        else:
-                            q_injected = 100
-                    else:
-                        q_injected = 100
+                        if qx and qy:
+                            ms_q = get_time_index(qx, ts_inject)
+                            me_q = get_time_index(qx, te_inject)
+                            q_segment = qy[ms_q:me_q] if me_q > ms_q else qy[ms_q:ms_q + 1]
+                            if q_segment:
+                                q_injected = abs(sum(q_segment) / len(q_segment))
+
+                    if q_injected is None or q_injected == 0:
+                        continue
 
                     # 计算VSI
                     delta_v = abs(v_before - v_after)
@@ -681,13 +695,16 @@ class VSIWeakBusSkill(SkillBase):
                     vsi_ij[bus_label][obs_name] = vsi
 
                 # 计算平均VSI
-                vsi_i[bus_label] = sum(vsi_values) / len(vsi_values) if vsi_values else 0
+                if vsi_values:
+                    vsi_i[bus_label] = sum(vsi_values) / len(vsi_values)
+                else:
+                    unsupported_buses.append(bus_label)
 
-            return {"vsi_i": vsi_i, "vsi_ij": vsi_ij}
+            return {"vsi_i": vsi_i, "vsi_ij": vsi_ij, "unsupported_buses": unsupported_buses}
 
         except (KeyError, AttributeError, ZeroDivisionError) as e:
             logger.error(f"计算VSI失败: {e}")
-            return {"vsi_i": {}, "vsi_ij": {}}
+            return {"vsi_i": {}, "vsi_ij": {}, "unsupported_buses": [b["label"] for b in test_buses]}
 
     def _identify_weak_buses(
         self,

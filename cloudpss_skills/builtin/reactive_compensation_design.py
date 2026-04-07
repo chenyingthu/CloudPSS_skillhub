@@ -41,11 +41,13 @@ def _matches_bus_identifier(candidate: str, target: str) -> bool:
         return False
     if candidate_norm == target_norm:
         return True
-    if target_norm in candidate_norm or candidate_norm in target_norm:
+    compact_candidate = "".join(ch for ch in candidate_norm if ch.isalnum())
+    compact_target = "".join(ch for ch in target_norm if ch.isalnum())
+    if compact_candidate and compact_candidate == compact_target:
         return True
     candidate_digits = "".join(ch for ch in candidate_norm if ch.isdigit())
     target_digits = "".join(ch for ch in target_norm if ch.isdigit())
-    return bool(candidate_digits and candidate_digits == target_digits)
+    return bool(candidate_digits and target_digits and candidate_digits == target_digits)
 
 
 @register
@@ -366,6 +368,9 @@ class ReactiveCompensationDesignSkill(SkillBase):
             logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"无功补偿设计完成，耗时 {duration:.2f}s"))
 
             overall_status = SkillStatus.SUCCESS if iteration_result.get("converged", False) else SkillStatus.FAILED
+            final_error = None if overall_status == SkillStatus.SUCCESS else (
+                "无功补偿设计未收敛或未形成有效DV量测结果，当前不能作为已验证的补偿方案"
+            )
             return SkillResult(
                 skill_name=self.name,
                 status=overall_status,
@@ -374,6 +379,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
                 data=result_data,
                 artifacts=artifacts,
                 logs=logs,
+                error=final_error,
                 metrics={
                     "duration": duration,
                     "bus_count": len(target_buses),
@@ -850,6 +856,8 @@ class ReactiveCompensationDesignSkill(SkillBase):
 
                 dv_up_list = dv_result.get("dv_up", [])
                 dv_down_list = dv_result.get("dv_down", [])
+                if not dv_up_list and not dv_down_list:
+                    raise RuntimeError("未从EMT结果中提取到有效的DV电压量测，无法判断补偿方案是否收敛")
 
                 # 检查收敛
                 upper_violations = sum(1 for v in dv_up_list if v < 0)
@@ -909,7 +917,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
                     capacities[i] = max(comp_config.get("min_capacity", 10),
                                       min(comp_config.get("max_capacity", 800), capacities[i]))
 
-            except (KeyError, AttributeError) as e:
+            except (KeyError, AttributeError, RuntimeError, ValueError, TypeError) as e:
                 logger.error(f"计算DV失败: {e}")
                 break
 

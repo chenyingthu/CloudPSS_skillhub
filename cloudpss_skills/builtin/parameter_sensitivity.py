@@ -186,18 +186,33 @@ class ParameterSensitivitySkill(SkillBase):
 
             # 参数扫描
             results = []
+            failed_points = []
             for i, val in enumerate(values):
                 log("INFO", f"[{i+1}/{len(values)}] 参数值={val}")
                 working_model = Model(deepcopy(base_model.toJSON()))
 
                 # 修改参数
                 if not self._apply_parameter(working_model, target_info, val):
-                    log("WARNING", f"  参数应用失败: {target}={val}")
+                    msg = f"参数应用失败: {target}={val}"
+                    log("WARNING", f"  {msg}")
+                    failed_points.append({"parameter_value": val, "error": msg})
                     continue
 
                 # 运行仿真
-                result = self._run_simulation(working_model, sim_type)
-                metrics = self._extract_metrics(result, metrics_config, sim_type)
+                try:
+                    result = self._run_simulation(working_model, sim_type)
+                    metrics = self._extract_metrics(result, metrics_config, sim_type)
+                except (RuntimeError, ValueError, TypeError, AttributeError, ConnectionError) as e:
+                    msg = str(e)
+                    log("WARNING", f"  仿真/指标提取失败: {msg}")
+                    failed_points.append({"parameter_value": val, "error": msg})
+                    continue
+
+                if not metrics:
+                    msg = "未提取到任何有效指标"
+                    log("WARNING", f"  {msg}")
+                    failed_points.append({"parameter_value": val, "error": msg})
+                    continue
 
                 # 计算相对变化
                 relative_changes = {}
@@ -220,6 +235,9 @@ class ParameterSensitivitySkill(SkillBase):
             sensitivities = self._calculate_sensitivities(results, target, reference)
             log("INFO", f"灵敏度分析完成: {len(sensitivities)}个指标")
 
+            if not results:
+                raise RuntimeError("所有扫描点都失败，未形成任何有效参数灵敏度结果")
+
             # 导出结果
             output_path = Path(output_config.get("path", "./results/"))
             output_path.mkdir(parents=True, exist_ok=True)
@@ -233,6 +251,7 @@ class ParameterSensitivitySkill(SkillBase):
                 "simulation_type": sim_type,
                 "sensitivities": sensitivities,
                 "results": results,
+                "failed_points": failed_points,
             }
 
             # JSON输出
@@ -261,17 +280,23 @@ class ParameterSensitivitySkill(SkillBase):
                 self._generate_report(result_data, report_path)
                 artifacts.append(Artifact(type="markdown", path=str(report_path), size=report_path.stat().st_size, description="灵敏度分析报告"))
 
+            final_status = SkillStatus.SUCCESS if not failed_points else SkillStatus.FAILED
+            final_error = None if final_status == SkillStatus.SUCCESS else (
+                f"共有 {len(failed_points)} 个扫描点失败，参数灵敏度结果不完整"
+            )
+
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.SUCCESS,
+                status=final_status,
                 start_time=start_time,
                 end_time=datetime.now(),
                 data=result_data,
                 artifacts=artifacts,
                 logs=logs,
+                error=final_error,
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError) as e:
+        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError, TypeError, ConnectionError, Exception) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
@@ -308,20 +333,9 @@ class ParameterSensitivitySkill(SkillBase):
         for key, comp in components.items():
             if not hasattr(comp, 'args'):
                 continue  # Skip edges/shapes
-            comp_label = getattr(comp, "label", "")
-            if comp_label == comp_id or comp_id in key:
+            if self._component_matches(comp, key, comp_id):
                 target_comp_key = key
                 break
-
-        if target_comp_key is None:
-            # 尝试模糊匹配
-            for key, comp in components.items():
-                if not hasattr(comp, 'args'):
-                    continue
-                comp_label = getattr(comp, "label", "")
-                if comp_id.lower() in key.lower() or comp_id.lower() in comp_label.lower():
-                    target_comp_key = key
-                    break
 
         if target_comp_key is None:
             return False
@@ -336,6 +350,23 @@ class ParameterSensitivitySkill(SkillBase):
             model.updateComponent(target_comp_key, args={"value": {"source": str(value), "ɵexp": ""}})
 
         return True
+
+    @staticmethod
+    def _normalize_component_identifier(value: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+    def _component_matches(self, comp: Any, key: str, target: str) -> bool:
+        target_norm = self._normalize_component_identifier(target)
+        candidates = [
+            key,
+            getattr(comp, "label", ""),
+            getattr(comp, "name", ""),
+            getattr(comp, "args", {}).get("Name", "") if hasattr(comp, "args") and comp.args else "",
+        ]
+        for candidate in candidates:
+            if self._normalize_component_identifier(candidate) == target_norm:
+                return True
+        return False
 
     def _run_simulation(self, model, sim_type: str):
         """运行仿真"""

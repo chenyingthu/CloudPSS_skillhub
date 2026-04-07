@@ -316,7 +316,7 @@ class AutoLoopBreakerSkill(SkillBase):
                 logs=logs,
             )
 
-        except (AttributeError, ZeroDivisionError, json.JSONDecodeError, RuntimeError, ValueError, TypeError) as e:
+        except (AttributeError, ZeroDivisionError, json.JSONDecodeError, RuntimeError, ValueError, TypeError, KeyError, FileNotFoundError, ConnectionError, Exception) as e:
             log("ERROR", f"执行失败: {e}")
             import traceback
             log("DEBUG", traceback.format_exc())
@@ -346,6 +346,7 @@ class AutoLoopBreakerSkill(SkillBase):
         try:
             # 获取元件定义信息
             dict_pin = {}
+            definition_fetch_failures = []
             for comp_key, comp in model.getAllComponents().items():
                 if 'diagram-component' not in getattr(comp, 'shape', ''):
                     continue
@@ -356,9 +357,17 @@ class AutoLoopBreakerSkill(SkillBase):
                     defn = model.__class__.fetch(comp.definition)
                     r = defn.revision
                     dict_pin[comp.definition] = {r.pins[k]['key']: r.pins[k] for k in range(len(r.pins))}
-                except (KeyError, AttributeError) as e:
+                except (KeyError, AttributeError, Exception) as e:
+                    definition_fetch_failures.append((comp.definition, str(e)))
                     logger.debug(f"获取元件定义失败 {comp.definition}: {e}")
                     continue
+
+            if not dict_pin:
+                sample = definition_fetch_failures[0] if definition_fetch_failures else ("unknown", "unknown")
+                raise RuntimeError(
+                    "无法读取组件定义，auto_loop_breaker 需要访问组件 definition/revision 才能识别信号方向。"
+                    f" 当前示例失败: {sample[0]} -> {sample[1]}"
+                )
 
             # 构建图
             g = nx.DiGraph()

@@ -211,6 +211,11 @@ class HarmonicAnalysisSkill(SkillBase):
                 analysis_window, fundamental, max_harmonic, thd_limit, log
             )
 
+            analyzed_voltage = len(harmonic_results.get("voltage", {}))
+            analyzed_current = len(harmonic_results.get("current", {}))
+            if analyzed_voltage + analyzed_current == 0:
+                raise RuntimeError("未从EMT结果中提取到任何有效的谐波分析通道")
+
             # 汇总结果
             result_data = {
                 "model": base_model.name,
@@ -262,7 +267,7 @@ class HarmonicAnalysisSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError) as e:
+        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError, TypeError, ConnectionError, Exception) as e:
             log("ERROR", f"执行失败: {e}")
             import traceback
             log("DEBUG", traceback.format_exc())

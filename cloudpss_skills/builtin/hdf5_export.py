@@ -143,19 +143,15 @@ class HDF5ExportSkill(SkillBase):
 
             hdf5_path = output_path / filename
 
-            # 根据源类型加载数据
-            if source_type == "emt_result":
-                data = self._load_emt_result(source_config)
-            elif source_type == "powerflow_result":
-                data = self._load_powerflow_result(source_config)
-            elif source_type == "vsi_result":
-                data = self._load_vsi_result(source_config)
-            elif source_type == "disturbance_result":
-                data = self._load_disturbance_result(source_config)
-            elif source_type == "file":
+            # 当前仅对真实文件输入路径宣称支持。
+            # 其他 source_type 过去是占位数据，不能再伪装成真实导出。
+            if source_type == "file":
                 data = self._load_from_file(source_config)
             else:
-                raise ValueError(f"不支持的源类型: {source_type}")
+                raise RuntimeError(
+                    f"source.type={source_type} 当前未打通真实结果加载链路。"
+                    "请先提供真实结果文件并使用 source.type=file。"
+                )
 
             # 导出到HDF5
             compression = output_config.get("compression", "gzip")
@@ -211,7 +207,7 @@ class HDF5ExportSkill(SkillBase):
                 }
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError) as e:
+        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError, TypeError, Exception) as e:
             logger.error(f"HDF5导出失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,
@@ -221,62 +217,9 @@ class HDF5ExportSkill(SkillBase):
                 data={},
                 artifacts=artifacts,
                 logs=logs + [LogEntry(timestamp=datetime.now(), level="ERROR", message=f"导出失败: {str(e)}")],
+                error=str(e),
                 metrics={"duration": (datetime.now() - start_time).total_seconds()}
             )
-
-    def _load_emt_result(self, source_config: Dict) -> Dict[str, Any]:
-        """加载EMT仿真结果"""
-        # 从CloudPSS加载EMT结果
-        # 这里简化处理，实际实现需要调用CloudPSS API
-        return {
-            "type": "emt",
-            "time": np.linspace(0, 10, 1000),
-            "waveforms": {
-                "Bus_16_V": np.sin(np.linspace(0, 10, 1000)),
-                "Bus_15_V": np.cos(np.linspace(0, 10, 1000))
-            },
-            "metadata": {
-                "simulation_time": 10.0,
-                "step_size": 0.0001
-            }
-        }
-
-    def _load_powerflow_result(self, source_config: Dict) -> Dict[str, Any]:
-        """加载潮流计算结果"""
-        return {
-            "type": "powerflow",
-            "buses": {
-                "Bus_16": {"v": 1.02, "angle": 0.05},
-                "Bus_15": {"v": 0.98, "angle": -0.02}
-            },
-            "branches": {
-                "Line_1": {"p_from": 100.5, "q_from": 25.3}
-            }
-        }
-
-    def _load_vsi_result(self, source_config: Dict) -> Dict[str, Any]:
-        """加载VSI分析结果"""
-        return {
-            "type": "vsi",
-            "weak_buses": [
-                {"label": "Bus_16", "vsi": 0.0152},
-                {"label": "Bus_15", "vsi": 0.0128}
-            ],
-            "vsi_matrix": np.random.rand(10, 10)
-        }
-
-    def _load_disturbance_result(self, source_config: Dict) -> Dict[str, Any]:
-        """加载扰动严重度分析结果"""
-        return {
-            "type": "disturbance",
-            "dv_results": [
-                {"bus": "Bus_16", "dv_up": 0.05, "dv_down": 0.08},
-                {"bus": "Bus_15", "dv_up": 0.03, "dv_down": 0.06}
-            ],
-            "si_results": [
-                {"bus": "Bus_16", "si": 0.15}
-            ]
-        }
 
     def _load_from_file(self, source_config: Dict) -> Dict[str, Any]:
         """从JSON文件加载结果"""
