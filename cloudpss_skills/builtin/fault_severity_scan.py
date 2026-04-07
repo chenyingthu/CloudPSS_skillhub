@@ -14,10 +14,9 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.emt_fault_core import apply_fault_parameters, clone_model, run_emt_and_wait, find_trace, trace_rms
 
 logger = logging.getLogger(__name__)
-
-FAULT_DEFINITION = "model/CloudPSS/_newFaultResistor_3p"
 
 
 @register
@@ -165,33 +164,10 @@ class FaultSeverityScanSkill(SkillBase):
             results = []
             for i, chg in enumerate(chg_values):
                 log("INFO", f"[{i+1}/{len(chg_values)}] chg={chg}")
-                working_model = Model(deepcopy(base_model.toJSON()))
+                working_model = clone_model(base_model)
+                apply_fault_parameters(working_model, fs, fe, chg)
 
-                components = working_model.getAllComponents()
-                fault = None
-                for comp in components.values():
-                    if getattr(comp, "definition", None) == FAULT_DEFINITION:
-                        fault = comp
-                        break
-
-                if fault:
-                    working_model.updateComponent(
-                        fault.id,
-                        args={
-                            "fs": {"source": str(fs), "ɵexp": ""},
-                            "fe": {"source": str(fe), "ɵexp": ""},
-                            "chg": {"source": str(chg), "ɵexp": ""},
-                        },
-                    )
-
-                job = working_model.runEMT()
-                while True:
-                    status = job.status()
-                    if status == 1:
-                        break
-                    if status == 2:
-                        raise RuntimeError("EMT仿真失败")
-                    time.sleep(3)
+                job = run_emt_and_wait(working_model, timeout=300)
 
                 result = job.result
                 metrics = self._extract_metrics(result, trace_name, time_windows)
@@ -275,7 +251,7 @@ class FaultSeverityScanSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError) as e:
+        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError, TypeError, ConnectionError, Exception) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
@@ -289,19 +265,12 @@ class FaultSeverityScanSkill(SkillBase):
             )
 
     def _trace_rms(self, trace, start, end):
-        samples = [v for t, v in zip(trace["x"], trace["y"]) if start <= t <= end]
-        if not samples:
-            return 0.0
-        return math.sqrt(sum(v * v for v in samples) / len(samples))
+        return trace_rms(trace, start, end)
 
     def _extract_metrics(self, result, trace_name, time_windows):
-        for i, _ in enumerate(result.getPlots()):
-            channel_names = result.getPlotChannelNames(i)
-            if trace_name in channel_names:
-                trace = result.getPlotChannelData(i, trace_name)
-                return {
-                    "prefault_rms": self._trace_rms(trace, *time_windows["prefault"]),
-                    "fault_rms": self._trace_rms(trace, *time_windows["fault"]),
-                    "postfault_rms": self._trace_rms(trace, *time_windows["postfault"]),
-                }
-        return {"prefault_rms": 0, "fault_rms": 0, "postfault_rms": 0}
+        _, trace = find_trace(result, trace_name)
+        return {
+            "prefault_rms": self._trace_rms(trace, *time_windows["prefault"]),
+            "fault_rms": self._trace_rms(trace, *time_windows["fault"]),
+            "postfault_rms": self._trace_rms(trace, *time_windows["postfault"]),
+        }

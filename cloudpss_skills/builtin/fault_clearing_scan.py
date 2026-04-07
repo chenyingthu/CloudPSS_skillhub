@@ -14,10 +14,15 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.emt_fault_core import (
+    apply_fault_parameters,
+    clone_model,
+    run_emt_and_wait,
+    find_trace,
+    trace_value_at_time,
+)
 
 logger = logging.getLogger(__name__)
-
-FAULT_DEFINITION = "model/CloudPSS/_newFaultResistor_3p"
 DEFAULT_WINDOWS = {
     "prefault": (2.42, 2.44),
     "fault": (2.56, 2.58),
@@ -160,35 +165,11 @@ class FaultClearingScanSkill(SkillBase):
             results = []
             for i, fe in enumerate(fe_values):
                 log("INFO", f"[{i+1}/{len(fe_values)}] fe={fe}")
-                working_model = Model(deepcopy(base_model.toJSON()))
-
-                # 配置故障
-                components = working_model.getAllComponents()
-                fault = None
-                for comp in components.values():
-                    if getattr(comp, "definition", None) == FAULT_DEFINITION:
-                        fault = comp
-                        break
-
-                if fault:
-                    working_model.updateComponent(
-                        fault.id,
-                        args={
-                            "fs": {"source": str(fs), "ɵexp": ""},
-                            "fe": {"source": str(fe), "ɵexp": ""},
-                            "chg": {"source": str(chg), "ɵexp": ""},
-                        },
-                    )
+                working_model = clone_model(base_model)
+                apply_fault_parameters(working_model, fs, fe, chg)
 
                 # 运行EMT
-                job = working_model.runEMT()
-                while True:
-                    status = job.status()
-                    if status == 1:
-                        break
-                    if status == 2:
-                        raise RuntimeError("EMT仿真失败")
-                    time.sleep(3)
+                job = run_emt_and_wait(working_model, timeout=300)
 
                 # 提取结果
                 result = job.result
@@ -263,7 +244,7 @@ class FaultClearingScanSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError) as e:
+        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError, TypeError, ConnectionError, Exception) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
@@ -277,11 +258,5 @@ class FaultClearingScanSkill(SkillBase):
             )
 
     def _extract_voltage_at_time(self, result, trace_name, study_time):
-        for i, _ in enumerate(result.getPlots()):
-            channel_names = result.getPlotChannelNames(i)
-            if trace_name in channel_names:
-                trace = result.getPlotChannelData(i, trace_name)
-                for t, v in zip(trace["x"], trace["y"]):
-                    if abs(t - study_time) < 0.001:
-                        return v
-        return 0.0
+        _, trace = find_trace(result, trace_name)
+        return trace_value_at_time(trace, study_time)

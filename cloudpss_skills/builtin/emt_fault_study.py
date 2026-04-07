@@ -14,13 +14,16 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.emt_fault_core import (
+    configure_channel_sampling,
+    run_emt_and_wait,
+    clone_model,
+    apply_fault_parameters,
+    find_trace,
+    trace_rms,
+)
 
 logger = logging.getLogger(__name__)
-
-# 常量定义
-FAULT_DEFINITION = "model/CloudPSS/_newFaultResistor_3p"
-CHANNEL_DEFINITION = "model/CloudPSS/_newChannel"
-EMT_JOB_RID = "function/CloudPSS/emtps"
 VOLTAGE_CHANNEL_NAME = "vac"
 VOLTAGE_TRACE_NAME = "vac:0"
 
@@ -279,11 +282,8 @@ class EmtFaultStudySkill(SkillBase):
                 )
 
                 # 运行EMT
-                job = working_model.runEMT()
+                job = run_emt_and_wait(working_model, timeout=300, log_func=log)
                 log("INFO", f"  Job ID: {job.id}")
-
-                # 等待完成
-                self._wait_for_completion(job, timeout=300, log_func=log)
 
                 # 提取结果
                 result = job.result
@@ -413,102 +413,14 @@ class EmtFaultStudySkill(SkillBase):
 
     def _prepare_model(self, base_model, scenario: Dict, sampling_freq: int, voltage_channel_name: str, log_func) -> Any:
         """准备工况模型"""
-        from cloudpss import Model
-
-        working_model = Model(deepcopy(base_model.toJSON()))
-        components = working_model.getAllComponents()
-
-        # 查找故障元件
-        fault = None
-        voltage_channel = None
-        for comp in components.values():
-            if getattr(comp, "definition", None) == FAULT_DEFINITION:
-                fault = comp
-            if getattr(comp, "definition", None) == CHANNEL_DEFINITION:
-                if comp.args.get("Name") == voltage_channel_name:
-                    voltage_channel = comp
-
-        if not fault:
-            raise ValueError("未找到故障元件")
-        if not voltage_channel:
-            raise ValueError("未找到电压量测通道")
-
-        # 查找EMT任务和输出分组
-        emt_job = next((job for job in working_model.jobs if job["rid"] == EMT_JOB_RID), None)
-        if not emt_job:
-            raise ValueError("未找到EMT任务")
-
-        output_group_index = None
-        output_group = None
-        for index, group in enumerate(emt_job["args"]["output_channels"]):
-            if voltage_channel.id in group.get("4", []):
-                output_group_index = index
-                output_group = group
-                break
-
-        if output_group is None:
-            raise ValueError(f"未找到包含通道 {voltage_channel.id} 的EMT输出分组")
-
-        # 更新故障参数
-        working_model.updateComponent(
-            fault.id,
-            args={
-                "fs": {"source": scenario["fs"], "ɵexp": ""},
-                "fe": {"source": scenario["fe"], "ɵexp": ""},
-                "chg": {"source": scenario["chg"], "ɵexp": ""},
-            },
-        )
-
-        # 更新采样频率
-        working_model.updateComponent(
-            voltage_channel.id,
-            args={**voltage_channel.args, "Freq": {"source": str(sampling_freq), "ɵexp": ""}},
-        )
-        output_group["1"] = int(sampling_freq)
-
+        working_model = clone_model(base_model)
+        apply_fault_parameters(working_model, scenario["fs"], scenario["fe"], scenario["chg"])
+        configure_channel_sampling(working_model, voltage_channel_name, sampling_freq)
         return working_model
-
-    def _wait_for_completion(self, job, timeout: int, log_func):
-        """等待仿真完成"""
-        import time
-
-        start_time = time.time()
-        while True:
-            status = job.status()
-            if status == 1:
-                log_func("INFO", "  仿真完成")
-                return
-            if status == 2:
-                raise RuntimeError("EMT仿真失败")
-            if time.time() - start_time > timeout:
-                raise TimeoutError("EMT仿真超时")
-            time.sleep(3)
-
-    def _trace_window_rms(self, trace: Dict, start_time: float, end_time: float) -> float:
-        """计算时间窗口内的RMS"""
-        samples = [
-            value
-            for time_value, value in zip(trace["x"], trace["y"])
-            if start_time <= time_value <= end_time
-        ]
-        if not samples:
-            raise ValueError(f"时间窗口 {start_time}..{end_time} 内无数据")
-        return math.sqrt(sum(v * v for v in samples) / len(samples))
 
     def _extract_metrics(self, result, trace_name: str, time_windows: Dict, log_func) -> Dict:
         """提取指标"""
-        # 查找目标通道
-        plot_index = None
-        for candidate_index, _ in enumerate(result.getPlots()):
-            candidate_names = result.getPlotChannelNames(candidate_index)
-            if trace_name in candidate_names:
-                plot_index = candidate_index
-                break
-
-        if plot_index is None:
-            raise KeyError(f"未找到目标通道 {trace_name}")
-
-        trace = result.getPlotChannelData(plot_index, trace_name)
+        plot_index, trace = find_trace(result, trace_name)
         time_step = trace["x"][1] - trace["x"][0] if len(trace["x"]) > 1 else None
 
         return {
@@ -517,10 +429,10 @@ class EmtFaultStudySkill(SkillBase):
             "trace": trace,
             "point_count": len(trace["x"]),
             "time_step": time_step,
-            "prefault_rms": self._trace_window_rms(trace, *time_windows["prefault"]),
-            "fault_rms": self._trace_window_rms(trace, *time_windows["fault"]),
-            "postfault_rms": self._trace_window_rms(trace, *time_windows["postfault"]),
-            "late_recovery_rms": self._trace_window_rms(trace, *time_windows["late_recovery"]),
+            "prefault_rms": trace_rms(trace, *time_windows["prefault"]),
+            "fault_rms": trace_rms(trace, *time_windows["fault"]),
+            "postfault_rms": trace_rms(trace, *time_windows["postfault"]),
+            "late_recovery_rms": trace_rms(trace, *time_windows["late_recovery"]),
         }
 
     def _build_summary_rows(self, study_results: List[Dict]) -> List[Dict]:
