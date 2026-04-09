@@ -42,6 +42,7 @@ def example_with_config_file():
     # 显示配置
     logger.info(f"测试母线筛选: {config.get('vsi_setup', {}).get('bus_filter', {})}")
     logger.info(f"无功注入配置: {config.get('vsi_setup', {}).get('injection', {})}")
+    logger.info("  提示: 若测试IEEE3/IEEE39这类高压母线模型，请把 bus_filter.v_max 调到 500kV 以上")
 
     logger.info("\n注意: VSI分析需要运行EMT仿真，此示例仅展示配置方式")
     logger.info("实际运行请确保:")
@@ -77,6 +78,10 @@ VSI是电压稳定指数，用于识别电压稳定性薄弱的母线。
 物理意义:
     - VSI越大，表示该母线对无功变化越敏感
     - VSI大的母线电压稳定性差，是无功补偿的优先位置
+
+使用注意:
+    - v_max 不是装饰项。若模型含500kV等级母线，保留300会直接把目标母线筛掉
+    - 实际结果依赖量测通道是否真实建立，当前实现已用真实EMT量测验证
 
 测试流程:
     1. 为每个母线添加动态无功注入源（shuntLC + 断路器）
@@ -136,6 +141,7 @@ def example_results_interpretation():
     1. VSI > 0.01: 高优先级，建议安装调相机或SVG
     2. VSI 0.005-0.01: 中优先级，根据经济分析决定
     3. VSI < 0.005: 电压稳定性良好
+    4. 若结果为空，先检查母线筛选范围，尤其是 bus_filter.v_max
     """)
 
     return True

@@ -43,12 +43,15 @@ def example_with_config_file():
     logger.info(f"VSI输入配置: {config.get('vsi_input', {})}")
     logger.info(f"补偿设备配置: {config.get('compensation', {})}")
     logger.info(f"迭代配置: {config.get('iteration', {})}")
+    logger.info(f"故障配置: {config.get('simulation', {})}")
 
     logger.info("\n注意: 此示例仅展示配置方式")
     logger.info("实际运行需要:")
     logger.info("  1. 有可用的CloudPSS API Token")
     logger.info("  2. 模型可访问且有写入权限")
     logger.info("  3. 有足够的仿真时间")
+    logger.info("  4. simulation.fault_time/fault_duration 要与模型内故障元件一致或由技能重配置")
+    logger.info("  5. dv_judge_criteria 会直接影响 SUCCESS/FAILED 判定")
 
     return True
 
@@ -70,7 +73,7 @@ def example_workflow():
 步骤2: 无功补偿设计
   └── 读取VSI结果
   └── 识别需要补偿的母线
-  └── 批量添加同步调相机
+  └── 优先复用模型内已有同步机控制模板克隆调相机链
   └── 配置故障场景
   └── 迭代优化容量
   └── 输出最终方案
@@ -89,6 +92,11 @@ def example_workflow():
   - 电压下限违规(DV_down < 0): 增加容量
   - 电压上限违规(DV_up < 0): 减少容量
   - 调整量 = DV * 当前容量 * 加速比
+
+调试经验:
+  - 若只加同步机本体和简化AVR，可能出现“作业成功但无波形”的伪成功
+  - 当前实现已改为优先克隆模型内现有同步机控制模板
+  - fault_time 不应只改后处理；需要真实作用到模型故障元件
 """)
 
     return True

@@ -55,6 +55,12 @@
 - **设备参数模板**: 提供标准设备参数模板，支持自定义配置
 - **方案对比分析**: 支持不同设备类型和容量的方案对比
 
+## 当前实现说明
+
+- 调相机路径已改为优先复用模型内已有同步机控制模板，而不是继续使用“同步机本体 + 单引脚 AVR”的错误简化接法。
+- `simulation.fault_time` / `fault_duration` 当前会真正回写到模型故障元件，而不只是影响后处理。
+- `iteration.dv_judge_criteria` 当前会真实参与分时间窗 DV 判定。
+
 ## 快速开始
 
 ### 3.1 CLI方式（推荐）
@@ -159,7 +165,7 @@ compensation:
 simulation:
   fault_bus: Bus_16              # 故障母线
   fault_type: three_phase        # 三相短路
-  fault_time: 4.0                # 故障时刻(s)
+  fault_time: 4.0                # 故障时刻(s)，应与模型内故障元件时序一致
 
 iteration:
   max_iterations: 20             # 最大迭代次数
@@ -281,11 +287,17 @@ output:                               # 输出配置
 | `compensation.control_mode` | enum | 否 | voltage_control | 控制模式 |
 | `simulation.fault_bus` | string | 否 | - | 故障母线标签 |
 | `simulation.fault_type` | enum | 否 | three_phase | 故障类型 |
-| `simulation.fault_time` | number | 否 | 4.0 | 故障时刻(s) |
+| `simulation.fault_time` | number | 否 | 4.0 | 故障时刻(s)。应与模型内故障元件时序一致 |
 | `simulation.duration` | number | 否 | 0.1 | 故障持续时间(s) |
 | `iteration.max_iterations` | integer | 否 | 20 | 最大迭代次数(仅调相机) |
 | `iteration.convergence_threshold` | number | 否 | 0.5 | 收敛阈值(MVar) |
 | `iteration.speed_ratio` | number | 否 | 0.2 | 迭代加速比 |
+
+### DV判据说明
+
+- `iteration.dv_judge_criteria` 采用 `[窗口起点, 窗口终点, 电压下限倍率, 电压上限倍率]` 格式。
+- 当前实现会先从三相瞬时波形合成 RMS，再按各时间窗执行判据。
+- 因此该参数会直接影响技能最终返回 `SUCCESS` 还是 `FAILED`。
 | `output.format` | enum | 否 | json | 输出格式 |
 | `output.path` | string | 否 | ./results/ | 输出目录路径 |
 | `output.prefix` | string | 否 | reactive_compensation | 文件名前缀 |
