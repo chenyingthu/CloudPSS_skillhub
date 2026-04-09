@@ -10,7 +10,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_emt, run_powerflow
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +67,12 @@ class ParamScanSkill(SkillBase):
                         "values": {
                             "type": "array",
                             "items": {"type": "number"},
-                            "description": "参数值列表"
+                            "description": "参数值列表",
                         },
-                        "simulation_type": {"enum": ["emt", "power_flow"], "default": "power_flow"},
+                        "simulation_type": {
+                            "enum": ["emt", "power_flow"],
+                            "default": "power_flow",
+                        },
                     },
                 },
                 "output": {
@@ -108,7 +120,9 @@ class ParamScanSkill(SkillBase):
 
         if not scan.get("parameter"):
             result.add_error("必须指定scan.parameter（参数名）")
-            result.add_error("  示例: 'P' (有功功率), 'Q' (无功功率), 'Vset' (电压设定值)")
+            result.add_error(
+                "  示例: 'P' (有功功率), 'Q' (无功功率), 'Vset' (电压设定值)"
+            )
 
         if not scan.get("values"):
             result.add_error("必须指定scan.values（参数值列表）")
@@ -126,11 +140,9 @@ class ParamScanSkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(
-                timestamp=datetime.now(),
-                level=level,
-                message=message
-            ))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
@@ -168,13 +180,10 @@ class ParamScanSkill(SkillBase):
             # 4. 执行扫描
             results = []
             for i, value in enumerate(values):
-                log("INFO", f"[{i+1}/{len(values)}] {param_name} = {value}")
+                log("INFO", f"[{i + 1}/{len(values)}] {param_name} = {value}")
 
                 # 重新加载模型
-                if model_config.get("source") == "local":
-                    model = Model.load(model_rid)
-                else:
-                    model = Model.fetch(model_rid)
+                model = load_or_fetch_model(model_config, config)
 
                 # 查找并更新元件参数
                 try:
@@ -197,28 +206,31 @@ class ParamScanSkill(SkillBase):
                     # 更新参数
                     model.updateComponent(
                         target_comp.id,
-                        args={param_name: {"source": str(value), "ɵexp": ""}}
+                        args={param_name: {"source": str(value), "ɵexp": ""}},
                     )
                     log("INFO", f"  -> 已设置 {param_name} = {value}")
 
                 except (AttributeError, TypeError, ValueError) as e:
                     log("ERROR", f"  -> 参数设置失败: {e}")
-                    results.append({
-                        "value": value,
-                        "status": "error",
-                        "error": str(e),
-                    })
+                    results.append(
+                        {
+                            "value": value,
+                            "status": "error",
+                            "error": str(e),
+                        }
+                    )
                     continue
 
                 # 运行仿真
                 try:
                     if sim_type == "emt":
-                        job = model.runEMT()
+                        job = run_emt(model, config)
                     else:
-                        job = model.runPowerFlow()
+                        job = run_powerflow(model, config)
 
                     # 等待仿真完成
                     import time
+
                     max_wait = 120
                     waited = 0
                     status = 0
@@ -250,13 +262,21 @@ class ParamScanSkill(SkillBase):
 
                     results.append(result_data)
 
-                except (AttributeError, ConnectionError, RuntimeError, FileNotFoundError, ValueError) as e:
+                except (
+                    AttributeError,
+                    ConnectionError,
+                    RuntimeError,
+                    FileNotFoundError,
+                    ValueError,
+                ) as e:
                     log("ERROR", f"  -> 仿真异常: {e}")
-                    results.append({
-                        "value": value,
-                        "status": "error",
-                        "error": str(e),
-                    })
+                    results.append(
+                        {
+                            "value": value,
+                            "status": "error",
+                            "error": str(e),
+                        }
+                    )
 
             # 5. 导出结果
             log("INFO", "=" * 50)
@@ -288,15 +308,17 @@ class ParamScanSkill(SkillBase):
                 "results": results,
             }
 
-            with open(filepath, 'w', encoding='utf-8') as f:
+            with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(scan_result, f, indent=2, ensure_ascii=False)
 
-            artifacts.append(Artifact(
-                type="json",
-                path=str(filepath),
-                size=filepath.stat().st_size,
-                description="参数扫描结果"
-            ))
+            artifacts.append(
+                Artifact(
+                    type="json",
+                    path=str(filepath),
+                    size=filepath.stat().st_size,
+                    description="参数扫描结果",
+                )
+            )
 
             log("INFO", f"结果已保存: {filepath}")
 
@@ -318,7 +340,15 @@ class ParamScanSkill(SkillBase):
                 },
             )
 
-        except (AttributeError, ConnectionError, RuntimeError, FileNotFoundError, ValueError, TimeoutError, TypeError) as e:
+        except (
+            AttributeError,
+            ConnectionError,
+            RuntimeError,
+            FileNotFoundError,
+            ValueError,
+            TimeoutError,
+            TypeError,
+        ) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

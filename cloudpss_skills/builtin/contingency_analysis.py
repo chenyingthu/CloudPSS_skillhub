@@ -12,7 +12,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_powerflow
 from cloudpss_skills.core.utils import parse_cloudpss_table
 
 logger = logging.getLogger(__name__)
@@ -58,24 +67,30 @@ class ContingencyAnalysisSkill(SkillBase):
                         "level": {
                             "enum": ["N-1", "N-2", "N-K"],
                             "default": "N-1",
-                            "description": "故障级别"
+                            "description": "故障级别",
                         },
-                        "k": {"type": "integer", "default": 1, "description": "N-K中的K值"},
+                        "k": {
+                            "type": "integer",
+                            "default": 1,
+                            "description": "N-K中的K值",
+                        },
                         "components": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "待故障元件列表，空表示全部"
+                            "description": "待故障元件列表，空表示全部",
                         },
                         "component_types": {
                             "type": "array",
-                            "items": {"enum": ["branch", "generator", "load", "transformer"]},
+                            "items": {
+                                "enum": ["branch", "generator", "load", "transformer"]
+                            },
                             "default": ["branch"],
-                            "description": "故障元件类型"
+                            "description": "故障元件类型",
                         },
                         "max_combinations": {
                             "type": "integer",
                             "default": 100,
-                            "description": "最大故障组合数"
+                            "description": "最大故障组合数",
                         },
                     },
                 },
@@ -96,7 +111,7 @@ class ContingencyAnalysisSkill(SkillBase):
                         "severity_threshold": {
                             "type": "number",
                             "default": 0.8,
-                            "description": "严重度阈值(0-1)"
+                            "description": "严重度阈值(0-1)",
                         },
                     },
                 },
@@ -105,7 +120,7 @@ class ContingencyAnalysisSkill(SkillBase):
                     "properties": {
                         "method": {
                             "enum": ["severity", "overload", "violation_count"],
-                            "default": "severity"
+                            "default": "severity",
                         },
                         "top_n": {"type": "integer", "default": 10},
                     },
@@ -165,7 +180,9 @@ class ContingencyAnalysisSkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(timestamp=datetime.now(), level=level, message=message))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
@@ -184,10 +201,7 @@ class ContingencyAnalysisSkill(SkillBase):
             model_config = config["model"]
             model_rid = model_config["rid"]
             model_source = model_config.get("source", "cloud")
-            if model_source == "local":
-                base_model = Model.load(model_rid)
-            else:
-                base_model = Model.fetch(model_rid)
+            base_model = load_or_fetch_model(model_config, config)
             log("INFO", f"模型: {base_model.name}")
 
             # 获取配置参数
@@ -201,7 +215,9 @@ class ContingencyAnalysisSkill(SkillBase):
             component_types = contingency_config.get("component_types", ["branch"])
             max_combinations = contingency_config.get("max_combinations", 100)
 
-            voltage_limit = analysis_config.get("voltage_limit", {"min": 0.95, "max": 1.05})
+            voltage_limit = analysis_config.get(
+                "voltage_limit", {"min": 0.95, "max": 1.05}
+            )
             thermal_limit = analysis_config.get("thermal_limit", 1.0)
             severity_threshold = analysis_config.get("severity_threshold", 0.8)
 
@@ -210,13 +226,17 @@ class ContingencyAnalysisSkill(SkillBase):
 
             log("INFO", f"预想事故分析: {level}")
             log("INFO", f"故障元件类型: {', '.join(component_types)}")
-            log("INFO", f"电压限值: {voltage_limit['min']:.3f} - {voltage_limit['max']:.3f} pu")
+            log(
+                "INFO",
+                f"电压限值: {voltage_limit['min']:.3f} - {voltage_limit['max']:.3f} pu",
+            )
             log("INFO", f"热稳定限值: {thermal_limit:.3f} pu")
 
             # 获取基态潮流结果
             log("INFO", "计算基态潮流...")
-            base_job = base_model.runPowerFlow()
+            base_job = run_powerflow(base_model, config)
             import time
+
             while True:
                 status = base_job.status()
                 if status == 1:
@@ -238,9 +258,12 @@ class ContingencyAnalysisSkill(SkillBase):
             # 生成故障组合
             log("INFO", "生成故障组合...")
             contingencies = self._generate_contingencies(
-                base_model, component_types, level, k,
+                base_model,
+                component_types,
+                level,
+                k,
                 contingency_config.get("components", []),
-                max_combinations
+                max_combinations,
             )
             log("INFO", f"共 {len(contingencies)} 个故障场景")
 
@@ -258,11 +281,16 @@ class ContingencyAnalysisSkill(SkillBase):
                     log("INFO", f"[{i}/{len(contingencies)}] {contingency['name']}")
 
                     result = self._evaluate_contingency(
-                        model_rid, model_source, contingency,
+                        model_rid,
+                        model_source,
+                        contingency,
                         analysis_config,
-                        voltage_limit, thermal_limit,
-                        base_buses, base_branches,
-                        log
+                        voltage_limit,
+                        thermal_limit,
+                        base_buses,
+                        base_branches,
+                        log,
+                        config,
                     )
 
                     results.append(result)
@@ -274,18 +302,22 @@ class ContingencyAnalysisSkill(SkillBase):
 
                 except (KeyError, AttributeError) as e:
                     log("WARNING", f"故障评估失败 {contingency['name']}: {e}")
-                    results.append({
-                        "name": contingency['name'],
-                        "components": contingency['components'],
-                        "status": "ERROR",
-                        "error": str(e),
-                    })
+                    results.append(
+                        {
+                            "name": contingency["name"],
+                            "components": contingency["components"],
+                            "status": "ERROR",
+                            "error": str(e),
+                        }
+                    )
 
             # 计算严重度并排序
             log("INFO", "计算严重度并排序...")
             for result in results:
                 if result.get("status") not in ["ERROR"]:
-                    result["severity"] = self._calculate_severity(result, voltage_limit, thermal_limit)
+                    result["severity"] = self._calculate_severity(
+                        result, voltage_limit, thermal_limit
+                    )
 
             # 排序
             valid_results = [r for r in results if "severity" in r]
@@ -297,14 +329,24 @@ class ContingencyAnalysisSkill(SkillBase):
                 "passed": passed,
                 "failed": failed,
                 "errors": len(contingencies) - passed - failed,
-                "pass_rate": round(passed / len(contingencies) * 100, 2) if contingencies else 0,
-                "severe_cases": len([r for r in valid_results if r.get("severity", 0) >= severity_threshold]),
+                "pass_rate": round(passed / len(contingencies) * 100, 2)
+                if contingencies
+                else 0,
+                "severe_cases": len(
+                    [
+                        r
+                        for r in valid_results
+                        if r.get("severity", 0) >= severity_threshold
+                    ]
+                ),
             }
 
             # 脆弱环节识别
             weak_points = self._identify_weak_points(valid_results, top_n)
 
-            log("INFO", f"通过: {passed}/{len(contingencies)} ({summary['pass_rate']}%)")
+            log(
+                "INFO", f"通过: {passed}/{len(contingencies)} ({summary['pass_rate']}%)"
+            )
             log("INFO", f"严重故障: {summary['severe_cases']} 个")
 
             # 准备输出数据
@@ -314,7 +356,9 @@ class ContingencyAnalysisSkill(SkillBase):
                 "summary": summary,
                 "weak_points": weak_points,
                 "top_severe_cases": valid_results[:top_n],
-                "all_results": results if output_config.get("export_all_cases", False) else None,
+                "all_results": results
+                if output_config.get("export_all_cases", False)
+                else None,
             }
 
             # 导出结果
@@ -325,20 +369,43 @@ class ContingencyAnalysisSkill(SkillBase):
 
             # JSON输出
             json_path = output_path / f"{prefix}_{timestamp}.json"
-            with open(json_path, 'w') as f:
+            with open(json_path, "w") as f:
                 json.dump(result_data, f, indent=2)
-            artifacts.append(Artifact(type="json", path=str(json_path), size=json_path.stat().st_size, description="预想事故分析结果"))
+            artifacts.append(
+                Artifact(
+                    type="json",
+                    path=str(json_path),
+                    size=json_path.stat().st_size,
+                    description="预想事故分析结果",
+                )
+            )
 
             # CSV输出
             csv_path = output_path / f"{prefix}_{timestamp}.csv"
             self._export_csv(valid_results, csv_path)
-            artifacts.append(Artifact(type="csv", path=str(csv_path), size=csv_path.stat().st_size, description="故障案例汇总"))
+            artifacts.append(
+                Artifact(
+                    type="csv",
+                    path=str(csv_path),
+                    size=csv_path.stat().st_size,
+                    description="故障案例汇总",
+                )
+            )
 
             # 生成报告
             if output_config.get("generate_report", True):
                 report_path = output_path / f"{prefix}_report_{timestamp}.md"
-                self._generate_report(result_data, report_path, voltage_limit, thermal_limit)
-                artifacts.append(Artifact(type="markdown", path=str(report_path), size=report_path.stat().st_size, description="预想事故分析报告"))
+                self._generate_report(
+                    result_data, report_path, voltage_limit, thermal_limit
+                )
+                artifacts.append(
+                    Artifact(
+                        type="markdown",
+                        path=str(report_path),
+                        size=report_path.stat().st_size,
+                        description="预想事故分析报告",
+                    )
+                )
 
             # 根据结果确定状态
             has_failures = failed > 0 or summary.get("errors", 0) > 0
@@ -353,9 +420,19 @@ class ContingencyAnalysisSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, RuntimeError, TimeoutError, TypeError, FileNotFoundError, ValueError, ConnectionError) as e:
+        except (
+            KeyError,
+            AttributeError,
+            RuntimeError,
+            TimeoutError,
+            TypeError,
+            FileNotFoundError,
+            ValueError,
+            ConnectionError,
+        ) as e:
             log("ERROR", f"执行失败: {e}")
             import traceback
+
             log("DEBUG", traceback.format_exc())
             return SkillResult(
                 skill_name=self.name,
@@ -368,10 +445,15 @@ class ContingencyAnalysisSkill(SkillBase):
                 error=str(e),
             )
 
-    def _generate_contingencies(self, model, component_types: List[str],
-                                level: str, k: int,
-                                specified_components: List[str],
-                                max_combinations: int) -> List[Dict]:
+    def _generate_contingencies(
+        self,
+        model,
+        component_types: List[str],
+        level: str,
+        k: int,
+        specified_components: List[str],
+        max_combinations: int,
+    ) -> List[Dict]:
         """生成故障组合"""
         from itertools import combinations
 
@@ -390,18 +472,28 @@ class ContingencyAnalysisSkill(SkillBase):
 
         # 收集可用元件
         available = []
-        for comp_key, comp in components.items() if isinstance(components, dict) else [(c.get('key', ''), c) for c in components]:
+        for comp_key, comp in (
+            components.items()
+            if isinstance(components, dict)
+            else [(c.get("key", ""), c) for c in components]
+        ):
             if isinstance(comp, dict):
                 comp_type = self._get_component_type(comp)
                 if comp_type in component_types:
                     key = comp.get("key", comp_key if isinstance(comp_key, str) else "")
                     name = comp.get("name", comp.get("label", key))
-                    if not specified_components or key in specified_components or name in specified_components:
-                        available.append({
-                            "key": key,
-                            "name": name,
-                            "type": comp_type,
-                        })
+                    if (
+                        not specified_components
+                        or key in specified_components
+                        or name in specified_components
+                    ):
+                        available.append(
+                            {
+                                "key": key,
+                                "name": name,
+                                "type": comp_type,
+                            }
+                        )
 
         if not available:
             return []
@@ -418,10 +510,12 @@ class ContingencyAnalysisSkill(SkillBase):
         for combo in combinations(available, k):
             keys = [c["key"] for c in combo]
             names = [c["name"] for c in combo]
-            contingencies.append({
-                "name": " + ".join(names),
-                "components": keys,
-            })
+            contingencies.append(
+                {
+                    "name": " + ".join(names),
+                    "components": keys,
+                }
+            )
 
             if len(contingencies) >= max_combinations:
                 break
@@ -460,20 +554,34 @@ class ContingencyAnalysisSkill(SkillBase):
             return "branch"
         elif key.startswith("Gen") or key.startswith("gen") or key.startswith("/gen"):
             return "generator"
-        elif key.startswith("Load") or key.startswith("load") or key.startswith("/load"):
+        elif (
+            key.startswith("Load") or key.startswith("load") or key.startswith("/load")
+        ):
             return "load"
-        elif key.startswith("Transformer") or key.startswith("transformer") or key.startswith("/transformer"):
+        elif (
+            key.startswith("Transformer")
+            or key.startswith("transformer")
+            or key.startswith("/transformer")
+        ):
             return "transformer"
 
         # 默认为其他类型
         return "other"
 
-    def _evaluate_contingency(self, model_rid: str, model_source: str, contingency: Dict,
-                              analysis_config: Dict, voltage_limit: Dict, thermal_limit: float,
-                              base_buses: List, base_branches: List,
-                              log_func) -> Dict:
+    def _evaluate_contingency(
+        self,
+        model_rid: str,
+        model_source: str,
+        contingency: Dict,
+        analysis_config: Dict,
+        voltage_limit: Dict,
+        thermal_limit: float,
+        base_buses: List,
+        base_branches: List,
+        log_func,
+        config: Optional[Dict] = None,
+    ) -> Dict:
         """评估单个故障场景"""
-        from cloudpss import Model
 
         result = {
             "name": contingency["name"],
@@ -485,15 +593,13 @@ class ContingencyAnalysisSkill(SkillBase):
         check_thermal = analysis_config.get("check_thermal", True)
 
         # 重新加载原始模型（每次重新加载以确保干净状态）
-        if model_source == "local":
-            working_model = Model.load(model_rid)
-        else:
-            working_model = Model.fetch(model_rid)
+        model_config = {"rid": model_rid, "source": model_source}
+        working_model = load_or_fetch_model(model_config, config)
 
         for comp_key in contingency["components"]:
             try:
                 # Remove leading '/' if present (fetchTopology adds it, but removeComponent doesn't need it)
-                clean_key = comp_key.lstrip('/')
+                clean_key = comp_key.lstrip("/")
                 working_model.removeComponent(clean_key)
             except (KeyError, AttributeError) as e:
                 log_func("WARNING", f"无法移除元件 {comp_key}: {e}")
@@ -506,9 +612,10 @@ class ContingencyAnalysisSkill(SkillBase):
             log_func("WARNING", f"Could not get component count: {e}")
 
         # 运行潮流计算
-        job = working_model.runPowerFlow()
+        job = run_powerflow(working_model, config)
 
         import time
+
         max_wait = 30
         waited = 0
         while waited < max_wait:
@@ -517,10 +624,12 @@ class ContingencyAnalysisSkill(SkillBase):
                 break
             if status == 2:
                 result["status"] = "FAIL"
-                result["violations"].append({
-                    "type": "CONVERGENCE",
-                    "description": "潮流计算不收敛",
-                })
+                result["violations"].append(
+                    {
+                        "type": "CONVERGENCE",
+                        "description": "潮流计算不收敛",
+                    }
+                )
                 return result
             time.sleep(1)
             waited += 1
@@ -540,8 +649,8 @@ class ContingencyAnalysisSkill(SkillBase):
 
         # 电压检查
         voltage_violations = []
-        min_voltage = float('inf')
-        max_voltage = float('-inf')
+        min_voltage = float("inf")
+        max_voltage = float("-inf")
 
         if check_voltage:
             voltage_col = None
@@ -562,26 +671,34 @@ class ContingencyAnalysisSkill(SkillBase):
                 max_voltage = max(max_voltage, v)
 
                 if v < voltage_limit["min"]:
-                    voltage_violations.append({
-                        "bus": bus_name,
-                        "voltage": round(v, 4),
-                        "limit": f"<{voltage_limit['min']}",
-                    })
+                    voltage_violations.append(
+                        {
+                            "bus": bus_name,
+                            "voltage": round(v, 4),
+                            "limit": f"<{voltage_limit['min']}",
+                        }
+                    )
                 elif v > voltage_limit["max"]:
-                    voltage_violations.append({
-                        "bus": bus_name,
-                        "voltage": round(v, 4),
-                        "limit": f">{voltage_limit['max']}",
-                    })
+                    voltage_violations.append(
+                        {
+                            "bus": bus_name,
+                            "voltage": round(v, 4),
+                            "limit": f">{voltage_limit['max']}",
+                        }
+                    )
 
-            result["min_voltage"] = round(min_voltage, 4) if min_voltage != float('inf') else 1.0
-            result["max_voltage"] = round(max_voltage, 4) if max_voltage != float('-inf') else 1.0
+            result["min_voltage"] = (
+                round(min_voltage, 4) if min_voltage != float("inf") else 1.0
+            )
+            result["max_voltage"] = (
+                round(max_voltage, 4) if max_voltage != float("-inf") else 1.0
+            )
 
             if voltage_violations:
                 result["status"] = "VIOLATION"
-                result["violations"].extend([
-                    {"type": "VOLTAGE", "details": v} for v in voltage_violations[:5]
-                ])
+                result["violations"].extend(
+                    [{"type": "VOLTAGE", "details": v} for v in voltage_violations[:5]]
+                )
 
         # 热稳定检查
         thermal_violations = []
@@ -589,7 +706,9 @@ class ContingencyAnalysisSkill(SkillBase):
         thermal_supported = not check_thermal
 
         if check_thermal:
-            thermal_result = self._evaluate_thermal_loading(working_model, branches, thermal_limit)
+            thermal_result = self._evaluate_thermal_loading(
+                working_model, branches, thermal_limit
+            )
             thermal_supported = thermal_result["supported"]
             max_loading = thermal_result["max_loading_pu"] or 0.0
             result["max_loading"] = round(max_loading * 100, 2)
@@ -599,17 +718,19 @@ class ContingencyAnalysisSkill(SkillBase):
 
             if thermal_violations:
                 result["status"] = "VIOLATION"
-                result["violations"].extend([
-                    {"type": "THERMAL", "details": t} for t in thermal_violations[:5]
-                ])
+                result["violations"].extend(
+                    [{"type": "THERMAL", "details": t} for t in thermal_violations[:5]]
+                )
             elif not thermal_supported:
                 result["status"] = "ERROR"
-                result["violations"].append({
-                    "type": "THERMAL_UNSUPPORTED",
-                    "details": {
-                        "message": "热稳定校核未完成：支路缺少额定容量/电流参数",
-                    },
-                })
+                result["violations"].append(
+                    {
+                        "type": "THERMAL_UNSUPPORTED",
+                        "details": {
+                            "message": "热稳定校核未完成：支路缺少额定容量/电流参数",
+                        },
+                    }
+                )
         else:
             result["max_loading"] = None
 
@@ -642,7 +763,9 @@ class ContingencyAnalysisSkill(SkillBase):
         except (TypeError, ValueError):
             return None
 
-    def _evaluate_thermal_loading(self, model: Any, branch_rows: List[Dict[str, Any]], thermal_limit: float) -> Dict[str, Any]:
+    def _evaluate_thermal_loading(
+        self, model: Any, branch_rows: List[Dict[str, Any]], thermal_limit: float
+    ) -> Dict[str, Any]:
         max_loading = None
         unsupported_count = 0
 
@@ -660,12 +783,16 @@ class ContingencyAnalysisSkill(SkillBase):
             q_ij = self._read_numeric_arg(row, "Qij") or 0.0
             p_ji = self._read_numeric_arg(row, "Pji") or 0.0
             q_ji = self._read_numeric_arg(row, "Qji") or 0.0
-            apparent_mva = max((p_ij ** 2 + q_ij ** 2) ** 0.5, (p_ji ** 2 + q_ji ** 2) ** 0.5)
+            apparent_mva = max((p_ij**2 + q_ij**2) ** 0.5, (p_ji**2 + q_ji**2) ** 0.5)
 
             rating_mva = None
             if "Transformer" in definition:
                 rating_mva = self._read_numeric_arg(args, "Tmva")
-            elif "TransmissionLine" in definition or definition.endswith("/line") or definition.endswith("/3pline"):
+            elif (
+                "TransmissionLine" in definition
+                or definition.endswith("/line")
+                or definition.endswith("/3pline")
+            ):
                 i_rated = self._read_numeric_arg(args, "Irated")
                 v_base = self._read_numeric_arg(args, "Vbase")
                 if i_rated and i_rated > 0 and v_base and v_base > 0:
@@ -696,7 +823,9 @@ class ContingencyAnalysisSkill(SkillBase):
             "unsupported_count": unsupported_count,
         }
 
-    def _calculate_severity(self, result: Dict, voltage_limit: Dict, thermal_limit: float) -> float:
+    def _calculate_severity(
+        self, result: Dict, voltage_limit: Dict, thermal_limit: float
+    ) -> float:
         """计算故障严重度 (0-1)"""
         severity = 0.0
 
@@ -711,9 +840,13 @@ class ContingencyAnalysisSkill(SkillBase):
         max_v = result.get("max_voltage", 1.0)
 
         if min_v < voltage_limit["min"]:
-            severity = max(severity, (voltage_limit["min"] - min_v) / voltage_limit["min"])
+            severity = max(
+                severity, (voltage_limit["min"] - min_v) / voltage_limit["min"]
+            )
         if max_v > voltage_limit["max"]:
-            severity = max(severity, (max_v - voltage_limit["max"]) / (1.1 - voltage_limit["max"]))
+            severity = max(
+                severity, (max_v - voltage_limit["max"]) / (1.1 - voltage_limit["max"])
+            )
 
         # 热稳定越界严重度
         max_loading = result.get("max_loading", 0.0) / 100.0
@@ -734,7 +867,9 @@ class ContingencyAnalysisSkill(SkillBase):
         # 排序
         weak_points = [
             {"component": comp, "critical_cases": count}
-            for comp, count in sorted(component_count.items(), key=lambda x: x[1], reverse=True)
+            for comp, count in sorted(
+                component_count.items(), key=lambda x: x[1], reverse=True
+            )
         ]
 
         return weak_points[:top_n]
@@ -743,27 +878,38 @@ class ContingencyAnalysisSkill(SkillBase):
         """导出CSV"""
         import csv
 
-        with open(path, 'w', newline='', encoding='utf-8') as f:
+        with open(path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow([
-                "rank", "contingency", "status", "severity",
-                "min_voltage_pu", "max_voltage_pu", "max_loading_pct",
-                "violation_count"
-            ])
+            writer.writerow(
+                [
+                    "rank",
+                    "contingency",
+                    "status",
+                    "severity",
+                    "min_voltage_pu",
+                    "max_voltage_pu",
+                    "max_loading_pct",
+                    "violation_count",
+                ]
+            )
 
             for i, result in enumerate(results, 1):
-                writer.writerow([
-                    i,
-                    result.get("name", ""),
-                    result.get("status", ""),
-                    result.get("severity", 0),
-                    result.get("min_voltage", ""),
-                    result.get("max_voltage", ""),
-                    result.get("max_loading", ""),
-                    len(result.get("violations", [])),
-                ])
+                writer.writerow(
+                    [
+                        i,
+                        result.get("name", ""),
+                        result.get("status", ""),
+                        result.get("severity", 0),
+                        result.get("min_voltage", ""),
+                        result.get("max_voltage", ""),
+                        result.get("max_loading", ""),
+                        len(result.get("violations", [])),
+                    ]
+                )
 
-    def _generate_report(self, data: Dict, path: Path, voltage_limit: Dict, thermal_limit: float):
+    def _generate_report(
+        self, data: Dict, path: Path, voltage_limit: Dict, thermal_limit: float
+    ):
         """生成Markdown报告"""
         summary = data.get("summary", {})
         weak_points = data.get("weak_points", [])
@@ -787,37 +933,43 @@ class ContingencyAnalysisSkill(SkillBase):
             "",
         ]
 
-        if summary.get('pass_rate', 0) >= 95:
+        if summary.get("pass_rate", 0) >= 95:
             lines.append("✅ **系统N-1安全裕度充足**")
-        elif summary.get('pass_rate', 0) >= 80:
+        elif summary.get("pass_rate", 0) >= 80:
             lines.append("⚠️ **系统N-1安全裕度一般，存在局部风险**")
         else:
             lines.append("🚨 **系统N-1安全裕度不足，需加强网架结构**")
 
-        lines.extend([
-            "",
-            "## 评判标准",
-            "",
-            f"- **电压限值**: {voltage_limit['min']:.3f} - {voltage_limit['max']:.3f} pu",
-            f"- **热稳定限值**: {thermal_limit * 100:.1f}%",
-            "- **严重度阈值**: ≥0.8",
-            "",
-            "## 系统薄弱环节",
-            "",
-            "| 排名 | 元件 | 关键故障次数 |",
-            "|------|------|--------------|",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 评判标准",
+                "",
+                f"- **电压限值**: {voltage_limit['min']:.3f} - {voltage_limit['max']:.3f} pu",
+                f"- **热稳定限值**: {thermal_limit * 100:.1f}%",
+                "- **严重度阈值**: ≥0.8",
+                "",
+                "## 系统薄弱环节",
+                "",
+                "| 排名 | 元件 | 关键故障次数 |",
+                "|------|------|--------------|",
+            ]
+        )
 
         for i, wp in enumerate(weak_points, 1):
-            lines.append(f"| {i} | {wp.get('component', 'N/A')} | {wp.get('critical_cases', 0)} |")
+            lines.append(
+                f"| {i} | {wp.get('component', 'N/A')} | {wp.get('critical_cases', 0)} |"
+            )
 
-        lines.extend([
-            "",
-            "## 最严重故障场景 (Top 10)",
-            "",
-            "| 排名 | 故障场景 | 严重度 | 状态 | 最低电压 | 最高负载率 |",
-            "|------|----------|--------|------|----------|------------|",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 最严重故障场景 (Top 10)",
+                "",
+                "| 排名 | 故障场景 | 严重度 | 状态 | 最低电压 | 最高负载率 |",
+                "|------|----------|--------|------|----------|------------|",
+            ]
+        )
 
         for i, case in enumerate(top_cases[:10], 1):
             lines.append(
@@ -826,32 +978,36 @@ class ContingencyAnalysisSkill(SkillBase):
                 f"{case.get('min_voltage', 'N/A')} | {case.get('max_loading', 'N/A')}% |"
             )
 
-        lines.extend([
-            "",
-            "## 建议措施",
-            "",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 建议措施",
+                "",
+            ]
+        )
 
-        if summary.get('severe_cases', 0) > 0:
+        if summary.get("severe_cases", 0) > 0:
             lines.append("### 针对严重故障场景")
             lines.append("1. **加强薄弱环节**: 对排名前列的元件进行加固或冗余设计")
             lines.append("2. **电压支撑**: 在电压薄弱节点配置无功补偿装置")
             lines.append("3. **负载均衡**: 优化运行方式，避免线路过载")
             lines.append("4. **保护配合**: 校核继电保护定值，确保故障快速隔离")
-        elif summary.get('pass_rate', 0) == 100.0:
+        elif summary.get("pass_rate", 0) == 100.0:
             lines.append("✅ **当前系统满足N-1安全准则，无需额外措施**")
         else:
             lines.append("🚨 **系统N-1安全裕度不足，需加强网架结构**")
 
-        lines.extend([
-            "",
-            "## 附录: 故障状态说明",
-            "",
-            "- **PASS**: 故障后系统正常运行，无越限",
-            "- **VIOLATION**: 故障后存在电压或热稳定越限",
-            "- **FAIL**: 故障后潮流不收敛",
-            "- **TIMEOUT**: 计算超时",
-            "",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 附录: 故障状态说明",
+                "",
+                "- **PASS**: 故障后系统正常运行，无越限",
+                "- **VIOLATION**: 故障后存在电压或热稳定越限",
+                "- **FAIL**: 故障后潮流不收敛",
+                "- **TIMEOUT**: 计算超时",
+                "",
+            ]
+        )
 
         path.write_text("\n".join(lines), encoding="utf-8")

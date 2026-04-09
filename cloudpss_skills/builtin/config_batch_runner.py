@@ -28,7 +28,16 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import load_or_fetch_model
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +45,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ConfigRunResult:
     """单个配置运行结果"""
+
     config_index: int
     config_name: str
     status: str  # success, failed, timeout
@@ -78,16 +88,34 @@ class ConfigBatchRunnerSkill(SkillBase):
                     "properties": {
                         "rid": {"type": "string", "description": "模型RID"},
                         "source": {"enum": ["cloud", "local"], "default": "cloud"},
-                        "job_name": {"type": "string", "description": "指定job名称，不指定则使用第一个EMT/PF job"},
+                        "job_name": {
+                            "type": "string",
+                            "description": "指定job名称，不指定则使用第一个EMT/PF job",
+                        },
                     },
                 },
                 "configs": {
                     "type": "object",
                     "properties": {
-                        "mode": {"enum": ["all", "range", "list"], "default": "all", "description": "配置选择模式"},
-                        "indices": {"type": "array", "items": {"type": "integer"}, "description": "指定配置索引列表(list模式)"},
-                        "start": {"type": "integer", "default": 0, "description": "起始索引(range模式)"},
-                        "end": {"type": "integer", "description": "结束索引(range模式)"},
+                        "mode": {
+                            "enum": ["all", "range", "list"],
+                            "default": "all",
+                            "description": "配置选择模式",
+                        },
+                        "indices": {
+                            "type": "array",
+                            "items": {"type": "integer"},
+                            "description": "指定配置索引列表(list模式)",
+                        },
+                        "start": {
+                            "type": "integer",
+                            "default": 0,
+                            "description": "起始索引(range模式)",
+                        },
+                        "end": {
+                            "type": "integer",
+                            "description": "结束索引(range模式)",
+                        },
                         "custom_args": {
                             "type": "object",
                             "description": "覆盖参数，如{'end_time': 10, 'step_time': 0.0001}",
@@ -97,9 +125,21 @@ class ConfigBatchRunnerSkill(SkillBase):
                 "execution": {
                     "type": "object",
                     "properties": {
-                        "polling_interval": {"type": "number", "default": 5.0, "description": "状态轮询间隔(s)"},
-                        "timeout": {"type": "number", "default": 3600.0, "description": "单配置超时(s)"},
-                        "continue_on_error": {"type": "boolean", "default": True, "description": "出错时继续下一个配置"},
+                        "polling_interval": {
+                            "type": "number",
+                            "default": 5.0,
+                            "description": "状态轮询间隔(s)",
+                        },
+                        "timeout": {
+                            "type": "number",
+                            "default": 3600.0,
+                            "description": "单配置超时(s)",
+                        },
+                        "continue_on_error": {
+                            "type": "boolean",
+                            "default": True,
+                            "description": "出错时继续下一个配置",
+                        },
                     },
                 },
                 "output": {
@@ -108,8 +148,16 @@ class ConfigBatchRunnerSkill(SkillBase):
                         "format": {"enum": ["json", "csv"], "default": "json"},
                         "path": {"type": "string", "default": "./results/"},
                         "prefix": {"type": "string", "default": "config_batch"},
-                        "save_runner_ids": {"type": "boolean", "default": True, "description": "保存runner ID列表到CSV"},
-                        "export_results": {"type": "boolean", "default": False, "description": "是否导出详细仿真结果"},
+                        "save_runner_ids": {
+                            "type": "boolean",
+                            "default": True,
+                            "description": "保存runner ID列表到CSV",
+                        },
+                        "export_results": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": "是否导出详细仿真结果",
+                        },
                     },
                 },
             },
@@ -177,11 +225,9 @@ class ConfigBatchRunnerSkill(SkillBase):
         results = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(
-                timestamp=datetime.now(),
-                level=level,
-                message=message
-            ))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
@@ -197,7 +243,9 @@ class ConfigBatchRunnerSkill(SkillBase):
                     token = token_path.read_text().strip()
 
             if not token:
-                raise ValueError("未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件")
+                raise ValueError(
+                    "未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件"
+                )
 
             setToken(token)
             log("INFO", "认证成功")
@@ -210,10 +258,7 @@ class ConfigBatchRunnerSkill(SkillBase):
 
             log("INFO", f"加载模型: {rid}")
 
-            if source == "cloud":
-                model = Model.fetch(rid)
-            else:
-                model = Model.load(rid)
+            model = load_or_fetch_model(model_config, config)
 
             log("INFO", f"模型名称: {model.name}")
             log("INFO", f"可用配置数: {len(model.configs)}")
@@ -259,7 +304,10 @@ class ConfigBatchRunnerSkill(SkillBase):
                 # 自动选择第一个EMT或PF job
                 job = None
                 for j in model.jobs:
-                    if j.get("rid") in ["function/CloudPSS/emtps", "function/CloudPSS/powerflow"]:
+                    if j.get("rid") in [
+                        "function/CloudPSS/emtps",
+                        "function/CloudPSS/powerflow",
+                    ]:
                         job = j
                         break
                 if not job and model.jobs:
@@ -272,9 +320,16 @@ class ConfigBatchRunnerSkill(SkillBase):
 
             for idx, config_idx in enumerate(config_indices):
                 cfg = model.configs[config_idx]
-                cfg_name = cfg.get("name", f"Config_{config_idx}") if isinstance(cfg, dict) else f"Config_{config_idx}"
+                cfg_name = (
+                    cfg.get("name", f"Config_{config_idx}")
+                    if isinstance(cfg, dict)
+                    else f"Config_{config_idx}"
+                )
 
-                log("INFO", f"[{idx+1}/{len(config_indices)}] 运行配置: {cfg_name} (索引: {config_idx})")
+                log(
+                    "INFO",
+                    f"[{idx + 1}/{len(config_indices)}] 运行配置: {cfg_name} (索引: {config_idx})",
+                )
 
                 cfg_start_time = time.time()
 
@@ -284,7 +339,7 @@ class ConfigBatchRunnerSkill(SkillBase):
                         for key, value in custom_args.items():
                             if isinstance(cfg, dict) and "args" in cfg:
                                 cfg["args"][key] = value
-                            elif hasattr(cfg, 'args'):
+                            elif hasattr(cfg, "args"):
                                 cfg.args[key] = value
                             if "args" in job:
                                 job["args"][key] = value
@@ -292,7 +347,7 @@ class ConfigBatchRunnerSkill(SkillBase):
                     # 运行仿真
                     runner = model.run(job, cfg)
                     runner_id = runner.id
-                    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
                     log("INFO", f"  -> Runner ID: {runner_id}")
 
@@ -303,7 +358,9 @@ class ConfigBatchRunnerSkill(SkillBase):
                         elapsed += polling_interval
                         logs_buffer = []
                         try:
-                            if hasattr(runner, "result") and hasattr(runner.result, "getLogs"):
+                            if hasattr(runner, "result") and hasattr(
+                                runner.result, "getLogs"
+                            ):
                                 logs_buffer = runner.result.getLogs() or []
                         except (AttributeError, RuntimeError, TypeError):
                             logs_buffer = []
@@ -323,13 +380,13 @@ class ConfigBatchRunnerSkill(SkillBase):
                             runner_id=runner_id,
                             timestamp=current_time,
                             execution_time=elapsed,
-                            error_message="执行超时"
+                            error_message="执行超时",
                         )
                     else:
                         # 获取结果摘要
                         result_summary = {}
                         try:
-                            if hasattr(runner.result, 'getPlots'):
+                            if hasattr(runner.result, "getPlots"):
                                 plots = runner.result.getPlots()
                                 result_summary["plots_count"] = len(plots)
                         except (KeyError, AttributeError) as e:
@@ -345,20 +402,32 @@ class ConfigBatchRunnerSkill(SkillBase):
                             runner_id=runner_id,
                             timestamp=current_time,
                             execution_time=execution_time,
-                            result_summary=result_summary
+                            result_summary=result_summary,
                         )
 
                     results.append(result)
-                    runner_ids.append((runner_id, current_time, cfg_name, model.rid, model.name))
+                    runner_ids.append(
+                        (runner_id, current_time, cfg_name, model.rid, model.name)
+                    )
 
-                except (KeyError, AttributeError, ValueError, RuntimeError, TimeoutError, TypeError, FileNotFoundError, ConnectionError, Exception) as e:
+                except (
+                    KeyError,
+                    AttributeError,
+                    ValueError,
+                    RuntimeError,
+                    TimeoutError,
+                    TypeError,
+                    FileNotFoundError,
+                    ConnectionError,
+                    Exception,
+                ) as e:
                     error_msg = str(e)
                     log("ERROR", f"  -> 运行失败: {error_msg}")
                     result = ConfigRunResult(
                         config_index=config_idx,
                         config_name=cfg_name,
                         status="failed",
-                        error_message=error_msg
+                        error_message=error_msg,
                     )
                     results.append(result)
 
@@ -377,35 +446,60 @@ class ConfigBatchRunnerSkill(SkillBase):
 
             # 保存JSON报告
             report_file = output_path / f"{prefix}_report.json"
-            report_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
-            artifacts.append(Artifact(
-                type="json",
-                path=str(report_file),
-                size=report_file.stat().st_size,
-                description="批量运行报告"
-            ))
+            report_file.write_text(
+                json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+            artifacts.append(
+                Artifact(
+                    type="json",
+                    path=str(report_file),
+                    size=report_file.stat().st_size,
+                    description="批量运行报告",
+                )
+            )
 
             # 保存Runner ID列表（CSV格式）
             if output_config.get("save_runner_ids", True) and runner_ids:
                 csv_file = output_path / f"{prefix}_runner_ids.csv"
-                with open(csv_file, 'w', newline='', encoding='utf-8-sig') as f:
+                with open(csv_file, "w", newline="", encoding="utf-8-sig") as f:
                     writer = csv.writer(f)
-                    writer.writerow(['Runner ID', 'Timestamp', 'Config Name', 'Model RID', 'Model Name'])
-                    for runner_id, timestamp, cfg_name, model_rid, model_name in runner_ids:
-                        writer.writerow([runner_id, timestamp, cfg_name, model_rid, model_name])
-                artifacts.append(Artifact(
-                    type="csv",
-                    path=str(csv_file),
-                    size=csv_file.stat().st_size,
-                    description="Runner ID列表"
-                ))
+                    writer.writerow(
+                        [
+                            "Runner ID",
+                            "Timestamp",
+                            "Config Name",
+                            "Model RID",
+                            "Model Name",
+                        ]
+                    )
+                    for (
+                        runner_id,
+                        timestamp,
+                        cfg_name,
+                        model_rid,
+                        model_name,
+                    ) in runner_ids:
+                        writer.writerow(
+                            [runner_id, timestamp, cfg_name, model_rid, model_name]
+                        )
+                artifacts.append(
+                    Artifact(
+                        type="csv",
+                        path=str(csv_file),
+                        size=csv_file.stat().st_size,
+                        description="Runner ID列表",
+                    )
+                )
 
             # 统计
             success_count = sum(1 for r in results if r.status == "success")
             failed_count = sum(1 for r in results if r.status == "failed")
             timeout_count = sum(1 for r in results if r.status == "timeout")
 
-            log("INFO", f"批量运行完成: 成功 {success_count}, 失败 {failed_count}, 超时 {timeout_count}")
+            log(
+                "INFO",
+                f"批量运行完成: 成功 {success_count}, 失败 {failed_count}, 超时 {timeout_count}",
+            )
 
             # 根据结果确定状态
             has_failures = failed_count > 0 or timeout_count > 0
@@ -429,7 +523,17 @@ class ConfigBatchRunnerSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, ValueError, RuntimeError, TimeoutError, TypeError, FileNotFoundError, ConnectionError, Exception) as e:
+        except (
+            KeyError,
+            AttributeError,
+            ValueError,
+            RuntimeError,
+            TimeoutError,
+            TypeError,
+            FileNotFoundError,
+            ConnectionError,
+            Exception,
+        ) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
@@ -442,7 +546,9 @@ class ConfigBatchRunnerSkill(SkillBase):
                 error=str(e),
             )
 
-    def _generate_report(self, results: List[ConfigRunResult], model: Any, config: Dict) -> Dict:
+    def _generate_report(
+        self, results: List[ConfigRunResult], model: Any, config: Dict
+    ) -> Dict:
         """生成报告"""
         success_results = [r for r in results if r.status == "success"]
         failed_results = [r for r in results if r.status == "failed"]
@@ -459,7 +565,9 @@ class ConfigBatchRunnerSkill(SkillBase):
                 "failed_count": len(failed_results),
                 "timeout_count": len(timeout_results),
                 "total_execution_time": total_time,
-                "average_execution_time": total_time / len(success_results) if success_results else 0,
+                "average_execution_time": total_time / len(success_results)
+                if success_results
+                else 0,
             },
             "successful_runs": [self._result_to_dict(r) for r in success_results],
             "failed_runs": [self._result_to_dict(r) for r in failed_results],

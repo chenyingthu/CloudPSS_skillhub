@@ -13,8 +13,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Tuple, Optional
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
 from cloudpss_skills.core.utils import parse_cloudpss_table
+from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_powerflow
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +133,6 @@ class VoltageStabilitySkill(SkillBase):
         }
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
-        from cloudpss import Model, setToken
         import time
 
         start_time = datetime.now()
@@ -132,7 +140,9 @@ class VoltageStabilitySkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(timestamp=datetime.now(), level=level, message=message))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
@@ -149,17 +159,16 @@ class VoltageStabilitySkill(SkillBase):
             log("INFO", "认证成功")
 
             model_config = config["model"]
-            if model_config.get("source") == "local":
-                base_model = Model.load(model_config["rid"])
-            else:
-                base_model = Model.fetch(model_config["rid"])
+            base_model = load_or_fetch_model(model_config)
             log("INFO", f"模型: {base_model.name}")
 
             scan_config = config.get("scan", {})
             monitoring_config = config.get("monitoring", {})
             output_config = config.get("output", {})
 
-            load_scaling = scan_config.get("load_scaling", [1.0, 1.2, 1.4, 1.6, 1.8, 2.0])
+            load_scaling = scan_config.get(
+                "load_scaling", [1.0, 1.2, 1.4, 1.6, 1.8, 2.0]
+            )
             load_target = scan_config.get("load_target")
             scale_generation = scan_config.get("scale_generation", True)
 
@@ -182,7 +191,7 @@ class VoltageStabilitySkill(SkillBase):
             max_loadability = None
 
             for i, scale in enumerate(load_scaling):
-                log("INFO", f"[{i+1}/{len(load_scaling)}] 负荷水平={scale}x")
+                log("INFO", f"[{i + 1}/{len(load_scaling)}] 负荷水平={scale}x")
                 working_model = Model(deepcopy(base_model.toJSON()))
 
                 # 调整负荷和发电机
@@ -192,7 +201,7 @@ class VoltageStabilitySkill(SkillBase):
 
                 # 运行潮流
                 try:
-                    job = working_model.runPowerFlow()
+                    job = run_powerflow(working_model, config)
                     log("INFO", f"  Job ID: {job.id}")
 
                     # 等待完成
@@ -209,11 +218,13 @@ class VoltageStabilitySkill(SkillBase):
 
                     if job.status() != 1:
                         log("WARNING", f"  潮流计算超时或失败")
-                        results.append({
-                            "scale": scale,
-                            "converged": False,
-                            "voltages": {},
-                        })
+                        results.append(
+                            {
+                                "scale": scale,
+                                "converged": False,
+                                "voltages": {},
+                            }
+                        )
                         continue
 
                     # 提取结果
@@ -241,13 +252,21 @@ class VoltageStabilitySkill(SkillBase):
                             collapse_point = scale
                         log("WARNING", f"  电压低于崩溃阈值!")
 
-                except (AttributeError, ConnectionError, RuntimeError, FileNotFoundError, ValueError) as e:
+                except (
+                    AttributeError,
+                    ConnectionError,
+                    RuntimeError,
+                    FileNotFoundError,
+                    ValueError,
+                ) as e:
                     log("ERROR", f"  计算失败: {e}")
-                    results.append({
-                        "scale": scale,
-                        "converged": False,
-                        "error": str(e),
-                    })
+                    results.append(
+                        {
+                            "scale": scale,
+                            "converged": False,
+                            "error": str(e),
+                        }
+                    )
                     # 记录失败但继续下一个负荷水平，不中断扫描
                     continue
 
@@ -277,40 +296,78 @@ class VoltageStabilitySkill(SkillBase):
 
             # JSON输出
             json_path = output_path / f"{prefix}_{timestamp}.json"
-            with open(json_path, 'w') as f:
+            with open(json_path, "w") as f:
                 json.dump(result_data, f, indent=2)
-            artifacts.append(Artifact(type="json", path=str(json_path), size=json_path.stat().st_size, description="电压稳定性分析结果"))
+            artifacts.append(
+                Artifact(
+                    type="json",
+                    path=str(json_path),
+                    size=json_path.stat().st_size,
+                    description="电压稳定性分析结果",
+                )
+            )
 
             # CSV输出
             csv_path = output_path / f"{prefix}_{timestamp}.csv"
-            with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            with open(csv_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                headers = ["load_scale", "converged", "min_voltage"] + [f"V_{bus}" for bus in target_buses]
+                headers = ["load_scale", "converged", "min_voltage"] + [
+                    f"V_{bus}" for bus in target_buses
+                ]
                 writer.writerow(headers)
                 for r in results:
-                    row = [r["scale"], r.get("converged", False), r.get("min_voltage", 0)]
+                    row = [
+                        r["scale"],
+                        r.get("converged", False),
+                        r.get("min_voltage", 0),
+                    ]
                     for bus in target_buses:
                         row.append(r.get("voltages", {}).get(bus, 0))
                     writer.writerow(row)
-            artifacts.append(Artifact(type="csv", path=str(csv_path), size=csv_path.stat().st_size, description="电压稳定性CSV"))
+            artifacts.append(
+                Artifact(
+                    type="csv",
+                    path=str(csv_path),
+                    size=csv_path.stat().st_size,
+                    description="电压稳定性CSV",
+                )
+            )
 
             # PV曲线数据
             if output_config.get("export_pv_curve", True) and pv_curve_data:
                 pv_path = output_path / f"{prefix}_pv_curve_{timestamp}.csv"
-                with open(pv_path, 'w', newline='', encoding='utf-8') as f:
+                with open(pv_path, "w", newline="", encoding="utf-8") as f:
                     writer = csv.writer(f)
                     writer.writerow(["bus", "load_scale", "voltage_pu"])
                     for point in pv_curve_data:
-                        writer.writerow([point["bus"], point["scale"], point["voltage"]])
-                artifacts.append(Artifact(type="csv", path=str(pv_path), size=pv_path.stat().st_size, description="PV曲线数据"))
+                        writer.writerow(
+                            [point["bus"], point["scale"], point["voltage"]]
+                        )
+                artifacts.append(
+                    Artifact(
+                        type="csv",
+                        path=str(pv_path),
+                        size=pv_path.stat().st_size,
+                        description="PV曲线数据",
+                    )
+                )
 
             # 生成报告
             if output_config.get("generate_report", True):
                 report_path = output_path / f"{prefix}_report_{timestamp}.md"
                 self._generate_report(result_data, report_path, target_buses)
-                artifacts.append(Artifact(type="markdown", path=str(report_path), size=report_path.stat().st_size, description="电压稳定性分析报告"))
+                artifacts.append(
+                    Artifact(
+                        type="markdown",
+                        path=str(report_path),
+                        size=report_path.stat().st_size,
+                        description="电压稳定性分析报告",
+                    )
+                )
 
-            overall_status = SkillStatus.SUCCESS if converged_cases else SkillStatus.FAILED
+            overall_status = (
+                SkillStatus.SUCCESS if converged_cases else SkillStatus.FAILED
+            )
             return SkillResult(
                 skill_name=self.name,
                 status=overall_status,
@@ -321,7 +378,14 @@ class VoltageStabilitySkill(SkillBase):
                 logs=logs,
             )
 
-        except (AttributeError, ConnectionError, RuntimeError, FileNotFoundError, ValueError, TypeError) as e:
+        except (
+            AttributeError,
+            ConnectionError,
+            RuntimeError,
+            FileNotFoundError,
+            ValueError,
+            TypeError,
+        ) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
@@ -334,14 +398,16 @@ class VoltageStabilitySkill(SkillBase):
                 error=str(e),
             )
 
-    def _get_base_components(self, model, load_target: Optional[str]) -> Tuple[List, List]:
+    def _get_base_components(
+        self, model, load_target: Optional[str]
+    ) -> Tuple[List, List]:
         """获取基线负荷和发电机组件"""
         components = model.getAllComponents()
         loads = []
         gens = []
 
         for key, comp in components.items():
-            if not hasattr(comp, 'args'):
+            if not hasattr(comp, "args"):
                 continue
 
             comp_def = getattr(comp, "definition", "")
@@ -349,7 +415,11 @@ class VoltageStabilitySkill(SkillBase):
 
             # 识别负荷 - 支持多种负荷定义
             if any(x in comp_def for x in ["Load", "_newExpLoad", "_newLoad"]):
-                if load_target is None or comp_label == load_target or load_target in key:
+                if (
+                    load_target is None
+                    or comp_label == load_target
+                    or load_target in key
+                ):
                     loads.append({"key": key, "component": comp, "label": comp_label})
 
             # 识别发电机（用于调整出力）
@@ -358,10 +428,12 @@ class VoltageStabilitySkill(SkillBase):
 
         return loads, gens
 
-    def _scale_loads_and_generation(self, model, loads: List, gens: List, scale: float,
-                                    scale_gen: bool, log_func):
+    def _scale_loads_and_generation(
+        self, model, loads: List, gens: List, scale: float, scale_gen: bool, log_func
+    ):
         """调整负荷和发电机出力"""
         import logging
+
         logger = logging.getLogger(__name__)
 
         total_load_p = 0
@@ -371,7 +443,7 @@ class VoltageStabilitySkill(SkillBase):
             comp = load_info["component"]
             key = load_info["key"]
 
-            if not hasattr(comp, 'args') or comp.args is None:
+            if not hasattr(comp, "args") or comp.args is None:
                 continue
 
             # 尝试获取负荷参数（支持多种参数名）
@@ -438,7 +510,7 @@ class VoltageStabilitySkill(SkillBase):
                 comp = gen_info["component"]
                 key = gen_info["key"]
 
-                if not hasattr(comp, 'args') or comp.args is None:
+                if not hasattr(comp, "args") or comp.args is None:
                     continue
 
                 # 检查发电机类型
@@ -462,7 +534,9 @@ class VoltageStabilitySkill(SkillBase):
                     except (AttributeError, TypeError) as e:
                         logger.debug(f"Failed to update generator {key}: {e}")
 
-    def _extract_bus_voltages(self, result, target_buses: List[str]) -> Dict[str, float]:
+    def _extract_bus_voltages(
+        self, result, target_buses: List[str]
+    ) -> Dict[str, float]:
         """提取母线电压"""
         voltages = {}
         if not target_buses:
@@ -482,7 +556,9 @@ class VoltageStabilitySkill(SkillBase):
                 continue
 
             for target_bus in target_buses:
-                if self._matches_bus_identifier(target_bus, bus_id) or self._matches_bus_identifier(target_bus, bus_name):
+                if self._matches_bus_identifier(
+                    target_bus, bus_id
+                ) or self._matches_bus_identifier(target_bus, bus_name):
                     voltages[target_bus] = vm_value
 
         return voltages
@@ -497,17 +573,21 @@ class VoltageStabilitySkill(SkillBase):
             return True
         return target_norm in candidate_norm or candidate_norm in target_norm
 
-    def _generate_pv_curve(self, converged_cases: List, target_buses: List[str]) -> List[Dict]:
+    def _generate_pv_curve(
+        self, converged_cases: List, target_buses: List[str]
+    ) -> List[Dict]:
         """生成PV曲线数据点"""
         pv_data = []
         for case in converged_cases:
             scale = case["scale"]
             for bus, voltage in case.get("voltages", {}).items():
-                pv_data.append({
-                    "bus": bus,
-                    "scale": scale,
-                    "voltage": voltage,
-                })
+                pv_data.append(
+                    {
+                        "bus": bus,
+                        "scale": scale,
+                        "voltage": voltage,
+                    }
+                )
         return pv_data
 
     def _generate_report(self, data: Dict, path: Path, target_buses: List[str]):
@@ -522,29 +602,39 @@ class VoltageStabilitySkill(SkillBase):
             "",
         ]
 
-        if data.get('collapse_point'):
-            lines.extend([
-                "## 电压稳定性评估",
-                "",
-                f"⚠️ **电压崩溃点**: 约在负荷水平 **{data['collapse_point']}x** 处",
-                f"**最大负荷能力**: {data.get('max_loadability', 'N/A')}x",
-                "",
-            ])
+        if data.get("collapse_point"):
+            lines.extend(
+                [
+                    "## 电压稳定性评估",
+                    "",
+                    f"⚠️ **电压崩溃点**: 约在负荷水平 **{data['collapse_point']}x** 处",
+                    f"**最大负荷能力**: {data.get('max_loadability', 'N/A')}x",
+                    "",
+                ]
+            )
         else:
-            lines.extend([
-                "## 电压稳定性评估",
-                "",
-                f"✅ 在给定负荷范围内未发生电压崩溃",
-                f"**最大负荷能力**: {data.get('max_loadability', 'N/A')}x",
-                "",
-            ])
+            lines.extend(
+                [
+                    "## 电压稳定性评估",
+                    "",
+                    f"✅ 在给定负荷范围内未发生电压崩溃",
+                    f"**最大负荷能力**: {data.get('max_loadability', 'N/A')}x",
+                    "",
+                ]
+            )
 
-        lines.extend([
-            "## 电压变化情况",
-            "",
-            "| 负荷水平 | 收敛 | 最小电压(pu) | " + " | ".join([f"{b}(pu)" for b in target_buses]) + " |",
-            "|----------|------|--------------|" + "|".join(["--------"] * len(target_buses)) + "|",
-        ])
+        lines.extend(
+            [
+                "## 电压变化情况",
+                "",
+                "| 负荷水平 | 收敛 | 最小电压(pu) | "
+                + " | ".join([f"{b}(pu)" for b in target_buses])
+                + " |",
+                "|----------|------|--------------|"
+                + "|".join(["--------"] * len(target_buses))
+                + "|",
+            ]
+        )
 
         for r in data.get("results", []):
             conv_str = "是" if r.get("converged") else "否"
@@ -553,21 +643,31 @@ class VoltageStabilitySkill(SkillBase):
             for bus in target_buses:
                 v = r.get("voltages", {}).get(bus, 0)
                 bus_voltages.append(f"{v:.4f}" if r.get("converged") else "-")
-            lines.append(f"| {r['scale']:.2f} | {conv_str} | {min_v} | " + " | ".join(bus_voltages) + " |")
+            lines.append(
+                f"| {r['scale']:.2f} | {conv_str} | {min_v} | "
+                + " | ".join(bus_voltages)
+                + " |"
+            )
 
-        lines.extend([
-            "",
-            "## PV曲线数据",
-            "",
-            "负荷增长过程中的母线电压变化可用于绘制PV曲线。",
-            "",
-            "## 结论",
-            "",
-        ])
+        lines.extend(
+            [
+                "",
+                "## PV曲线数据",
+                "",
+                "负荷增长过程中的母线电压变化可用于绘制PV曲线。",
+                "",
+                "## 结论",
+                "",
+            ]
+        )
 
-        if data.get('collapse_point'):
-            lines.append(f"系统在负荷增长至 {data['collapse_point']}x 时接近电压崩溃，建议加强电压支撑措施。")
+        if data.get("collapse_point"):
+            lines.append(
+                f"系统在负荷增长至 {data['collapse_point']}x 时接近电压崩溃，建议加强电压支撑措施。"
+            )
         else:
-            lines.append(f"系统在测试范围内保持电压稳定，最大负荷能力约为 {data.get('max_loadability', 'N/A')}x。")
+            lines.append(
+                f"系统在测试范围内保持电压稳定，最大负荷能力约为 {data.get('max_loadability', 'N/A')}x。"
+            )
 
         path.write_text("\n".join(lines), encoding="utf-8")

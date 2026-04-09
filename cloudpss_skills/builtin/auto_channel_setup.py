@@ -11,7 +11,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import load_or_fetch_model
 
 logger = logging.getLogger(__name__)
 
@@ -71,14 +80,18 @@ class AutoChannelSetupSkill(SkillBase):
                                 "voltage_levels": {
                                     "type": "array",
                                     "items": {"type": "number"},
-                                    "description": "电压等级筛选(kV)，如[220, 500]，空数组表示全部"
+                                    "description": "电压等级筛选(kV)，如[220, 500]，空数组表示全部",
                                 },
                                 "bus_names": {
                                     "type": "array",
                                     "items": {"type": "string"},
-                                    "description": "母线名称筛选，空数组表示全部"
+                                    "description": "母线名称筛选，空数组表示全部",
                                 },
-                                "freq": {"type": "integer", "default": 200, "description": "采样频率(Hz)"},
+                                "freq": {
+                                    "type": "integer",
+                                    "default": 200,
+                                    "description": "采样频率(Hz)",
+                                },
                             },
                         },
                         "current": {
@@ -117,8 +130,16 @@ class AutoChannelSetupSkill(SkillBase):
                 "output": {
                     "type": "object",
                     "properties": {
-                        "save_model": {"type": "boolean", "default": False, "description": "是否保存修改后的模型"},
-                        "dry_run": {"type": "boolean", "default": False, "description": "仅预览不修改"},
+                        "save_model": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": "是否保存修改后的模型",
+                        },
+                        "dry_run": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": "仅预览不修改",
+                        },
                     },
                 },
             },
@@ -173,10 +194,7 @@ class AutoChannelSetupSkill(SkillBase):
 
         # 检查至少启用了一种量测
         measurements = config.get("measurements", {})
-        any_enabled = any(
-            m.get("enabled", False)
-            for m in measurements.values()
-        )
+        any_enabled = any(m.get("enabled", False) for m in measurements.values())
         if not any_enabled:
             result.add_error("至少启用一种量测类型(voltage/current/power/frequency)")
 
@@ -192,11 +210,9 @@ class AutoChannelSetupSkill(SkillBase):
         added_channels = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(
-                timestamp=datetime.now(),
-                level=level,
-                message=message
-            ))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
@@ -212,7 +228,9 @@ class AutoChannelSetupSkill(SkillBase):
                     token = token_path.read_text().strip()
 
             if not token:
-                raise ValueError("未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件")
+                raise ValueError(
+                    "未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件"
+                )
 
             setToken(token)
             log("INFO", "认证成功")
@@ -220,14 +238,10 @@ class AutoChannelSetupSkill(SkillBase):
             # 2. 加载模型
             model_config = config.get("model", {})
             rid = model_config["rid"]
-            source = model_config.get("source", "cloud")
 
             log("INFO", f"加载模型: {rid}")
 
-            if source == "cloud":
-                model = Model.fetch(rid)
-            else:
-                model = Model.load(rid)
+            model = load_or_fetch_model(model_config, config)
 
             log("INFO", f"模型名称: {model.name}")
 
@@ -313,12 +327,14 @@ class AutoChannelSetupSkill(SkillBase):
             report_path.parent.mkdir(parents=True, exist_ok=True)
             report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False))
 
-            artifacts.append(Artifact(
-                type="json",
-                path=str(report_path),
-                size=report_path.stat().st_size,
-                description="量测配置报告"
-            ))
+            artifacts.append(
+                Artifact(
+                    type="json",
+                    path=str(report_path),
+                    size=report_path.stat().st_size,
+                    description="量测配置报告",
+                )
+            )
 
             log("INFO", f"配置完成！共添加 {len(added_channels)} 个量测通道")
 
@@ -331,10 +347,18 @@ class AutoChannelSetupSkill(SkillBase):
                     "model_rid": rid,
                     "model_name": model.name,
                     "total_channels": len(added_channels),
-                    "voltage_channels": len([c for c in added_channels if c["type"] == "voltage"]),
-                    "current_channels": len([c for c in added_channels if c["type"] == "current"]),
-                    "power_channels": len([c for c in added_channels if c["type"] == "power"]),
-                    "frequency_channels": len([c for c in added_channels if c["type"] == "frequency"]),
+                    "voltage_channels": len(
+                        [c for c in added_channels if c["type"] == "voltage"]
+                    ),
+                    "current_channels": len(
+                        [c for c in added_channels if c["type"] == "current"]
+                    ),
+                    "power_channels": len(
+                        [c for c in added_channels if c["type"] == "power"]
+                    ),
+                    "frequency_channels": len(
+                        [c for c in added_channels if c["type"] == "frequency"]
+                    ),
                     "dry_run": dry_run,
                     "saved": save_model and not dry_run,
                 },
@@ -342,7 +366,16 @@ class AutoChannelSetupSkill(SkillBase):
                 logs=logs,
             )
 
-        except (AttributeError, FileNotFoundError, TypeError, ValueError, RuntimeError, KeyError, ConnectionError, Exception) as e:
+        except (
+            AttributeError,
+            FileNotFoundError,
+            TypeError,
+            ValueError,
+            RuntimeError,
+            KeyError,
+            ConnectionError,
+            Exception,
+        ) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
@@ -356,10 +389,7 @@ class AutoChannelSetupSkill(SkillBase):
             )
 
     def _add_voltage_measurements(
-        self,
-        model: Any,
-        config: Dict,
-        dry_run: bool
+        self, model: Any, config: Dict, dry_run: bool
     ) -> List[Dict]:
         """添加电压量测通道"""
         channels = []
@@ -403,10 +433,7 @@ class AutoChannelSetupSkill(SkillBase):
         return channels
 
     def _add_current_measurements(
-        self,
-        model: Any,
-        config: Dict,
-        dry_run: bool
+        self, model: Any, config: Dict, dry_run: bool
     ) -> List[Dict]:
         """添加电流量测通道"""
         channels = []
@@ -419,7 +446,9 @@ class AutoChannelSetupSkill(SkillBase):
                 components = model.getComponentsByRid(self.COMPONENT_RIDS["line_3p"])
                 pin_suffix = "Is"  # 送端电流
             elif comp_type == "transformer":
-                components = model.getComponentsByRid(self.COMPONENT_RIDS["transformer_3p"])
+                components = model.getComponentsByRid(
+                    self.COMPONENT_RIDS["transformer_3p"]
+                )
                 pin_suffix = "I1"  # 一次侧电流
             else:
                 continue
@@ -446,10 +475,7 @@ class AutoChannelSetupSkill(SkillBase):
         return channels
 
     def _add_power_measurements(
-        self,
-        model: Any,
-        config: Dict,
-        dry_run: bool
+        self, model: Any, config: Dict, dry_run: bool
     ) -> List[Dict]:
         """添加功率量测通道"""
         channels = []
@@ -483,14 +509,16 @@ class AutoChannelSetupSkill(SkillBase):
                     if not dry_run:
                         comp.args[p_pin_suffix] = p_pin
 
-                channels.append({
-                    "type": "power",
-                    "component": comp_name,
-                    "pin": p_pin,
-                    "power_type": "P",
-                    "freq": freq,
-                    "dim": 1,
-                })
+                channels.append(
+                    {
+                        "type": "power",
+                        "component": comp_name,
+                        "pin": p_pin,
+                        "power_type": "P",
+                        "freq": freq,
+                        "dim": 1,
+                    }
+                )
 
                 # 无功功率
                 q_pin = comp.args.get(q_pin_suffix, "")
@@ -499,22 +527,21 @@ class AutoChannelSetupSkill(SkillBase):
                     if not dry_run:
                         comp.args[q_pin_suffix] = q_pin
 
-                channels.append({
-                    "type": "power",
-                    "component": comp_name,
-                    "pin": q_pin,
-                    "power_type": "Q",
-                    "freq": freq,
-                    "dim": 1,
-                })
+                channels.append(
+                    {
+                        "type": "power",
+                        "component": comp_name,
+                        "pin": q_pin,
+                        "power_type": "Q",
+                        "freq": freq,
+                        "dim": 1,
+                    }
+                )
 
         return channels
 
     def _add_frequency_measurements(
-        self,
-        model: Any,
-        config: Dict,
-        dry_run: bool
+        self, model: Any, config: Dict, dry_run: bool
     ) -> List[Dict]:
         """添加频率量测通道"""
         channels = []
@@ -575,11 +602,15 @@ class AutoChannelSetupSkill(SkillBase):
 
         output_channels = []
         for (mtype, freq), items in groups.items():
-            channel_ids = [f"#{ch['component']}" for ch in items[:10]]  # 限制每组最多10个
-            output_channels.append({
-                "plot_name": f"{mtype.capitalize()}_{freq}Hz",
-                "freq": freq,
-                "channels": channel_ids,
-            })
+            channel_ids = [
+                f"#{ch['component']}" for ch in items[:10]
+            ]  # 限制每组最多10个
+            output_channels.append(
+                {
+                    "plot_name": f"{mtype.capitalize()}_{freq}Hz",
+                    "freq": freq,
+                    "channels": channel_ids,
+                }
+            )
 
         return output_channels

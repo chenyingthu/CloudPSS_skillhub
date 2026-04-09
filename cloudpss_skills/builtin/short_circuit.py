@@ -15,7 +15,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_emt
 
 logger = logging.getLogger(__name__)
 
@@ -67,9 +76,21 @@ class ShortCircuitSkill(SkillBase):
                             "default": "three_phase",
                             "description": "短路类型",
                         },
-                        "resistance": {"type": "number", "default": 0.0001, "description": "短路电阻(Ω)"},
-                        "fs": {"type": "number", "default": 2.0, "description": "故障开始时间(s)"},
-                        "fe": {"type": "number", "default": 2.1, "description": "故障结束时间(s)"},
+                        "resistance": {
+                            "type": "number",
+                            "default": 0.0001,
+                            "description": "短路电阻(Ω)",
+                        },
+                        "fs": {
+                            "type": "number",
+                            "default": 2.0,
+                            "description": "故障开始时间(s)",
+                        },
+                        "fe": {
+                            "type": "number",
+                            "default": 2.1,
+                            "description": "故障结束时间(s)",
+                        },
                     },
                 },
                 "monitoring": {
@@ -90,8 +111,16 @@ class ShortCircuitSkill(SkillBase):
                 "calculation": {
                     "type": "object",
                     "properties": {
-                        "base_voltage": {"type": "number", "default": 500, "description": "基准电压(kV)"},
-                        "base_capacity": {"type": "number", "default": 100, "description": "基准容量(MVA)"},
+                        "base_voltage": {
+                            "type": "number",
+                            "default": 500,
+                            "description": "基准电压(kV)",
+                        },
+                        "base_capacity": {
+                            "type": "number",
+                            "default": 100,
+                            "description": "基准容量(MVA)",
+                        },
                         "sample_window": {
                             "type": "array",
                             "items": {"type": "number"},
@@ -142,35 +171,21 @@ class ShortCircuitSkill(SkillBase):
         }
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
-        from cloudpss import Model, setToken
-        import time
+        from cloudpss import Model
 
         start_time = datetime.now()
         logs = []
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(timestamp=datetime.now(), level=level, message=message))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
-            log("INFO", "加载认证...")
-            auth = config.get("auth", {})
-            token = auth.get("token")
-            if not token:
-                token_file = auth.get("token_file", ".cloudpss_token")
-                token_path = Path(token_file)
-                if not token_path.exists():
-                    raise FileNotFoundError(f"Token文件不存在: {token_file}")
-                token = token_path.read_text().strip()
-            setToken(token)
-            log("INFO", "认证成功")
-
             model_config = config["model"]
-            if model_config.get("source") == "local":
-                base_model = Model.load(model_config["rid"])
-            else:
-                base_model = Model.fetch(model_config["rid"])
+            base_model = load_or_fetch_model(model_config, config)
             log("INFO", f"模型: {base_model.name}")
 
             fault_config = config["fault"]
@@ -200,30 +215,25 @@ class ShortCircuitSkill(SkillBase):
             working_model = Model(deepcopy(base_model.toJSON()))
 
             # 配置故障
-            self._configure_fault(working_model, fault_type, fault_resistance, fs, fe, log)
+            self._configure_fault(
+                working_model, fault_type, fault_resistance, fs, fe, log
+            )
 
             # 运行EMT
             log("INFO", "运行EMT仿真...")
-            job = working_model.runEMT()
-            log("INFO", f"Job ID: {job.id}")
-
-            # 等待完成
-            while True:
-                status = job.status()
-                if status == 1:
-                    break
-                if status == 2:
-                    raise RuntimeError("EMT仿真失败")
-                time.sleep(2)
-
-            result = job.result
+            result = run_emt(working_model, config)
             log("INFO", "EMT仿真完成")
 
             # 分析结果
             log("INFO", "分析短路电流...")
             analysis = self._analyze_short_circuit(
-                result, current_channels, voltage_channels, sample_window,
-                base_voltage, base_capacity, log
+                result,
+                current_channels,
+                voltage_channels,
+                sample_window,
+                base_voltage,
+                base_capacity,
+                log,
             )
 
             # 计算短路容量
@@ -250,30 +260,61 @@ class ShortCircuitSkill(SkillBase):
 
             # JSON输出
             json_path = output_path / f"{prefix}_{timestamp}.json"
-            with open(json_path, 'w') as f:
+            with open(json_path, "w") as f:
                 json.dump(result_data, f, indent=2)
-            artifacts.append(Artifact(type="json", path=str(json_path), size=json_path.stat().st_size, description="短路电流计算结果"))
+            artifacts.append(
+                Artifact(
+                    type="json",
+                    path=str(json_path),
+                    size=json_path.stat().st_size,
+                    description="短路电流计算结果",
+                )
+            )
 
             # CSV输出
             csv_path = output_path / f"{prefix}_{timestamp}.csv"
-            with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            with open(csv_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                writer.writerow(["channel", "peak_current_ka", "steady_current_ka", "dc_component_ka", "time_constant_ms"])
+                writer.writerow(
+                    [
+                        "channel",
+                        "peak_current_ka",
+                        "steady_current_ka",
+                        "dc_component_ka",
+                        "time_constant_ms",
+                    ]
+                )
                 for ch, data in analysis.items():
-                    writer.writerow([
-                        ch,
-                        f"{data.get('peak_current', 0):.4f}",
-                        f"{data.get('steady_current', 0):.4f}",
-                        f"{data.get('dc_component', 0):.4f}",
-                        f"{data.get('time_constant', 0):.2f}",
-                    ])
-            artifacts.append(Artifact(type="csv", path=str(csv_path), size=csv_path.stat().st_size, description="短路电流数据"))
+                    writer.writerow(
+                        [
+                            ch,
+                            f"{data.get('peak_current', 0):.4f}",
+                            f"{data.get('steady_current', 0):.4f}",
+                            f"{data.get('dc_component', 0):.4f}",
+                            f"{data.get('time_constant', 0):.2f}",
+                        ]
+                    )
+            artifacts.append(
+                Artifact(
+                    type="csv",
+                    path=str(csv_path),
+                    size=csv_path.stat().st_size,
+                    description="短路电流数据",
+                )
+            )
 
             # 生成报告
             if output_config.get("generate_report", True):
                 report_path = output_path / f"{prefix}_report_{timestamp}.md"
                 self._generate_report(result_data, report_path)
-                artifacts.append(Artifact(type="markdown", path=str(report_path), size=report_path.stat().st_size, description="短路电流分析报告"))
+                artifacts.append(
+                    Artifact(
+                        type="markdown",
+                        path=str(report_path),
+                        size=report_path.stat().st_size,
+                        description="短路电流分析报告",
+                    )
+                )
 
             return SkillResult(
                 skill_name=self.name,
@@ -285,7 +326,15 @@ class ShortCircuitSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError, TypeError) as e:
+        except (
+            KeyError,
+            AttributeError,
+            ZeroDivisionError,
+            RuntimeError,
+            FileNotFoundError,
+            ValueError,
+            TypeError,
+        ) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
@@ -298,13 +347,17 @@ class ShortCircuitSkill(SkillBase):
                 error=str(e),
             )
 
-    def _configure_fault(self, model, fault_type: str, resistance: float, fs: float, fe: float, log_func):
+    def _configure_fault(
+        self, model, fault_type: str, resistance: float, fs: float, fe: float, log_func
+    ):
         """配置故障"""
         components = model.getAllComponents()
         fault = None
 
         # 根据故障类型选择故障组件
-        fault_def = FAULT_DEFINITION if fault_type == "three_phase" else FAULT_SINGLE_LINE
+        fault_def = (
+            FAULT_DEFINITION if fault_type == "three_phase" else FAULT_SINGLE_LINE
+        )
 
         for comp in components.values():
             if getattr(comp, "definition", None) == fault_def:
@@ -327,9 +380,16 @@ class ShortCircuitSkill(SkillBase):
         else:
             log_func("WARNING", f"未找到故障组件: {fault_def}")
 
-    def _analyze_short_circuit(self, result, current_channels: List, voltage_channels: List,
-                               sample_window: List, base_voltage: float, base_capacity: float,
-                               log_func) -> Dict:
+    def _analyze_short_circuit(
+        self,
+        result,
+        current_channels: List,
+        voltage_channels: List,
+        sample_window: List,
+        base_voltage: float,
+        base_capacity: float,
+        log_func,
+    ) -> Dict:
         """分析短路电流"""
         analysis = {}
 
@@ -348,8 +408,11 @@ class ShortCircuitSkill(SkillBase):
                             continue
 
                         # 提取故障期间数据
-                        fault_data = [(t, v) for t, v in zip(xs, ys)
-                                     if sample_window[0] <= t <= sample_window[1]]
+                        fault_data = [
+                            (t, v)
+                            for t, v in zip(xs, ys)
+                            if sample_window[0] <= t <= sample_window[1]
+                        ]
 
                         if not fault_data:
                             continue
@@ -361,7 +424,11 @@ class ShortCircuitSkill(SkillBase):
                         peak_current = max(abs(v) for v in currents) if currents else 0
 
                         # 稳态电流（取最后10个点的平均值）
-                        steady_current = sum(currents[-10:]) / len(currents[-10:]) if len(currents) >= 10 else 0
+                        steady_current = (
+                            sum(currents[-10:]) / len(currents[-10:])
+                            if len(currents) >= 10
+                            else 0
+                        )
 
                         # 直流分量（峰值 - 稳态峰值）
                         dc_component = peak_current - abs(steady_current)
@@ -383,7 +450,10 @@ class ShortCircuitSkill(SkillBase):
                             "time_constant": time_constant,
                         }
 
-                        log_func("INFO", f"  {ch}: 峰值={peak_current:.4f}kA, 稳态={steady_current:.4f}kA")
+                        log_func(
+                            "INFO",
+                            f"  {ch}: 峰值={peak_current:.4f}kA, 稳态={steady_current:.4f}kA",
+                        )
 
             # 分析电压通道
             for ch in voltage_channels:
@@ -393,8 +463,11 @@ class ShortCircuitSkill(SkillBase):
                         xs = trace.get("x", [])
                         ys = trace.get("y", [])
 
-                        fault_data = [(t, v) for t, v in zip(xs, ys)
-                                     if sample_window[0] <= t <= sample_window[1]]
+                        fault_data = [
+                            (t, v)
+                            for t, v in zip(xs, ys)
+                            if sample_window[0] <= t <= sample_window[1]
+                        ]
 
                         if fault_data:
                             voltages = [d[1] for d in fault_data]
@@ -408,7 +481,9 @@ class ShortCircuitSkill(SkillBase):
 
         return analysis
 
-    def _calculate_short_circuit_capacity(self, analysis: Dict, base_voltage: float, base_capacity: float) -> Dict:
+    def _calculate_short_circuit_capacity(
+        self, analysis: Dict, base_voltage: float, base_capacity: float
+    ) -> Dict:
         """计算短路容量"""
         sqrt3 = math.sqrt(3)
 
@@ -457,27 +532,34 @@ class ShortCircuitSkill(SkillBase):
                     f"{analysis.get('time_constant', 0):.2f} |"
                 )
 
-        lines.extend([
-            "",
-            "## 短路容量",
-            "",
-            "| 通道 | 稳态电流(kA) | 短路容量(MVA) |",
-            "|------|--------------|---------------|",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 短路容量",
+                "",
+                "| 通道 | 稳态电流(kA) | 短路容量(MVA) |",
+                "|------|--------------|---------------|",
+            ]
+        )
 
         for ch, scc in data.get("short_circuit_mva", {}).items():
             lines.append(
                 f"| {ch} | {scc.get('steady_current_ka', 0):.4f} | {scc.get('short_circuit_mva', 0):.2f} |"
             )
 
-        lines.extend([
-            "",
-            "## 结论",
-            "",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 结论",
+                "",
+            ]
+        )
 
         if data.get("short_circuit_mva"):
-            max_scc = max(scc.get("short_circuit_mva", 0) for scc in data["short_circuit_mva"].values())
+            max_scc = max(
+                scc.get("short_circuit_mva", 0)
+                for scc in data["short_circuit_mva"].values()
+            )
             lines.append(f"最大短路容量约为 **{max_scc:.2f} MVA**")
 
         path.write_text("\n".join(lines), encoding="utf-8")

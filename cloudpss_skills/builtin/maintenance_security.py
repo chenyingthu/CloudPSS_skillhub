@@ -10,9 +10,18 @@ import logging
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_powerflow
 from cloudpss_skills.core.utils import parse_cloudpss_table
 
 logger = logging.getLogger(__name__)
@@ -59,7 +68,10 @@ class MaintenanceSecuritySkill(SkillBase):
                     "type": "object",
                     "required": ["branch_id"],
                     "properties": {
-                        "branch_id": {"type": "string", "description": "计划停运的支路ID"},
+                        "branch_id": {
+                            "type": "string",
+                            "description": "计划停运的支路ID",
+                        },
                         "description": {"type": "string", "description": "检修说明"},
                     },
                 },
@@ -69,7 +81,7 @@ class MaintenanceSecuritySkill(SkillBase):
                         "branches": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "残余N-1复核支路列表，空表示自动发现"
+                            "description": "残余N-1复核支路列表，空表示自动发现",
                         },
                         "include_transformers": {"type": "boolean", "default": True},
                         "limit": {"type": "integer"},
@@ -124,7 +136,9 @@ class MaintenanceSecuritySkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(timestamp=datetime.now(), level=level, message=message))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
@@ -143,10 +157,7 @@ class MaintenanceSecuritySkill(SkillBase):
 
             # 获取模型
             model_config = config["model"]
-            if model_config.get("source") == "local":
-                base_model = Model.load(model_config["rid"])
-            else:
-                base_model = Model.fetch(model_config["rid"])
+            base_model = load_or_fetch_model(model_config, config)
             log("INFO", f"模型: {base_model.name}")
 
             # 获取配置
@@ -159,21 +170,25 @@ class MaintenanceSecuritySkill(SkillBase):
 
             # 基线潮流
             log("INFO", "计算基线潮流...")
-            base_buses, base_branches = self._run_powerflow(base_model)
+            base_buses, base_branches = self._run_powerflow(base_model, config)
             log("INFO", f"基线: {len(base_buses)}母线, {len(base_branches)}支路")
 
             # 计划停运
             log("INFO", f"执行计划停运: {maintenance_id} ({maintenance_desc})")
             working_model = Model(deepcopy(base_model.toJSON()))
             self._disable_branch(working_model, maintenance_id)
-            maint_buses, maint_branches = self._run_powerflow(working_model)
+            maint_buses, maint_branches = self._run_powerflow(working_model, config)
 
             # 评估检修态
             maintenance_case = {
                 "branch_id": maintenance_id,
                 "description": maintenance_desc,
-                "min_vm": min(b.get("Vm", 1.0) for b in maint_buses) if maint_buses else 1.0,
-                "max_branch_loading": self._max_branch_loading(working_model, maint_branches),
+                "min_vm": min(b.get("Vm", 1.0) for b in maint_buses)
+                if maint_buses
+                else 1.0,
+                "max_branch_loading": self._max_branch_loading(
+                    working_model, maint_branches
+                ),
             }
             maintenance_case["severity"] = self._classify_severity(maintenance_case)
             log("INFO", f"检修态: severity={maintenance_case['severity']}")
@@ -182,28 +197,38 @@ class MaintenanceSecuritySkill(SkillBase):
             log("INFO", "残余N-1复核...")
             followup_ids = residual_config.get("branches", [])
             if not followup_ids:
-                followup_ids = self._discover_branches(working_model, residual_config.get("include_transformers", True))
+                followup_ids = self._discover_branches(
+                    working_model, residual_config.get("include_transformers", True)
+                )
                 followup_ids = [b for b in followup_ids if b != maintenance_id]
 
             if residual_config.get("limit"):
-                followup_ids = followup_ids[:residual_config["limit"]]
+                followup_ids = followup_ids[: residual_config["limit"]]
 
             n1_results = []
             failed_cases = []
             for i, branch_id in enumerate(followup_ids):
-                log("INFO", f"  [{i+1}/{len(followup_ids)}] N-1: {branch_id}")
+                log("INFO", f"  [{i + 1}/{len(followup_ids)}] N-1: {branch_id}")
                 try:
                     n1_model = Model(deepcopy(working_model.toJSON()))
                     self._disable_branch(n1_model, branch_id)
-                    n1_buses, n1_branches = self._run_powerflow(n1_model)
+                    n1_buses, n1_branches = self._run_powerflow(n1_model, config)
                     n1_case = {
                         "branch_id": branch_id,
-                        "min_vm": min(b.get("Vm", 1.0) for b in n1_buses) if n1_buses else 1.0,
+                        "min_vm": min(b.get("Vm", 1.0) for b in n1_buses)
+                        if n1_buses
+                        else 1.0,
                         "max_loading": self._max_branch_loading(n1_model, n1_branches),
                     }
                     n1_case["severity"] = self._classify_severity(n1_case)
                     n1_results.append(n1_case)
-                except (KeyError, AttributeError, RuntimeError, ValueError, TypeError) as e:
+                except (
+                    KeyError,
+                    AttributeError,
+                    RuntimeError,
+                    ValueError,
+                    TypeError,
+                ) as e:
                     log("WARNING", f"    失败: {e}")
                     failed_cases.append({"branch_id": branch_id, "error": str(e)})
 
@@ -216,7 +241,11 @@ class MaintenanceSecuritySkill(SkillBase):
             critical_count = sum(1 for r in n1_results if r["severity"] == "critical")
             warning_count = sum(1 for r in n1_results if r["severity"] == "warning")
             overall_status = SkillStatus.SUCCESS
-            if maintenance_case["severity"] != "normal" or critical_count > 0 or failed_cases:
+            if (
+                maintenance_case["severity"] != "normal"
+                or critical_count > 0
+                or failed_cases
+            ):
                 overall_status = SkillStatus.FAILED
 
             result_data = {
@@ -232,20 +261,41 @@ class MaintenanceSecuritySkill(SkillBase):
 
             # JSON
             json_path = output_path / f"{prefix}_{timestamp}.json"
-            with open(json_path, 'w') as f:
+            with open(json_path, "w") as f:
                 json.dump(result_data, f, indent=2)
-            artifacts.append(Artifact(type="json", path=str(json_path), size=json_path.stat().st_size, description="检修安全结果"))
+            artifacts.append(
+                Artifact(
+                    type="json",
+                    path=str(json_path),
+                    size=json_path.stat().st_size,
+                    description="检修安全结果",
+                )
+            )
 
             # CSV
             csv_path = output_path / f"{prefix}_{timestamp}.csv"
             self._export_csv(maintenance_case, n1_results, csv_path)
-            artifacts.append(Artifact(type="csv", path=str(csv_path), size=csv_path.stat().st_size, description="检修安全CSV"))
+            artifacts.append(
+                Artifact(
+                    type="csv",
+                    path=str(csv_path),
+                    size=csv_path.stat().st_size,
+                    description="检修安全CSV",
+                )
+            )
 
             # Report
             if output_config.get("generate_report", True):
                 report_path = output_path / f"{prefix}_report_{timestamp}.md"
                 self._generate_report(maintenance_case, n1_results, report_path)
-                artifacts.append(Artifact(type="markdown", path=str(report_path), size=report_path.stat().st_size, description="检修安全报告"))
+                artifacts.append(
+                    Artifact(
+                        type="markdown",
+                        path=str(report_path),
+                        size=report_path.stat().st_size,
+                        description="检修安全报告",
+                    )
+                )
 
             return SkillResult(
                 skill_name=self.name,
@@ -257,7 +307,14 @@ class MaintenanceSecuritySkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, RuntimeError, FileNotFoundError, ValueError, TypeError) as e:
+        except (
+            KeyError,
+            AttributeError,
+            RuntimeError,
+            FileNotFoundError,
+            ValueError,
+            TypeError,
+        ) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
@@ -270,8 +327,8 @@ class MaintenanceSecuritySkill(SkillBase):
                 error=str(e),
             )
 
-    def _run_powerflow(self, model):
-        job = model.runPowerFlow()
+    def _run_powerflow(self, model, config: Optional[Dict] = None):
+        job = run_powerflow(model, config)
         while True:
             status = job.status()
             if status == 1:
@@ -279,6 +336,7 @@ class MaintenanceSecuritySkill(SkillBase):
             if status == 2:
                 raise RuntimeError("潮流计算失败")
             import time
+
             time.sleep(2)
         result = job.result
         if result is None:
@@ -344,14 +402,28 @@ class MaintenanceSecuritySkill(SkillBase):
         return "normal"
 
     def _export_csv(self, maintenance, n1_results, path):
-        with open(path, 'w', newline='', encoding='utf-8') as f:
+        with open(path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(["type", "branch_id", "severity", "min_vm", "max_loading"])
-            writer.writerow(["maintenance", maintenance["branch_id"], maintenance["severity"],
-                           f"{maintenance['min_vm']:.4f}", f"{maintenance['max_branch_loading']:.4f}"])
+            writer.writerow(
+                [
+                    "maintenance",
+                    maintenance["branch_id"],
+                    maintenance["severity"],
+                    f"{maintenance['min_vm']:.4f}",
+                    f"{maintenance['max_branch_loading']:.4f}",
+                ]
+            )
             for r in n1_results:
-                writer.writerow(["residual_n1", r["branch_id"], r["severity"],
-                               f"{r['min_vm']:.4f}", f"{r['max_loading']:.4f}"])
+                writer.writerow(
+                    [
+                        "residual_n1",
+                        r["branch_id"],
+                        r["severity"],
+                        f"{r['min_vm']:.4f}",
+                        f"{r['max_loading']:.4f}",
+                    ]
+                )
 
     def _generate_report(self, maintenance, n1_results, path):
         lines = [
@@ -367,12 +439,14 @@ class MaintenanceSecuritySkill(SkillBase):
         ]
         critical = [r for r in n1_results if r["severity"] == "critical"]
         warning = [r for r in n1_results if r["severity"] == "warning"]
-        lines.extend([
-            f"- 严重: {len(critical)}",
-            f"- 警告: {len(warning)}",
-            f"- 正常: {len(n1_results) - len(critical) - len(warning)}",
-            "",
-        ])
+        lines.extend(
+            [
+                f"- 严重: {len(critical)}",
+                f"- 警告: {len(warning)}",
+                f"- 正常: {len(n1_results) - len(critical) - len(warning)}",
+                "",
+            ]
+        )
         if critical:
             lines.append("### 严重工况")
             for r in critical:
@@ -405,7 +479,7 @@ class MaintenanceSecuritySkill(SkillBase):
         q_ij = self._read_numeric_arg(row, "Qij") or 0.0
         p_ji = self._read_numeric_arg(row, "Pji") or 0.0
         q_ji = self._read_numeric_arg(row, "Qji") or 0.0
-        apparent_mva = max((p_ij ** 2 + q_ij ** 2) ** 0.5, (p_ji ** 2 + q_ji ** 2) ** 0.5)
+        apparent_mva = max((p_ij**2 + q_ij**2) ** 0.5, (p_ji**2 + q_ji**2) ** 0.5)
 
         rating_mva = None
         if "Transformer" in definition:

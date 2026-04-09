@@ -13,7 +13,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_emt
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +80,7 @@ class EmtN1ScreeningSkill(SkillBase):
                         "branches": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "要检查的支路ID列表，空表示自动发现"
+                            "description": "要检查的支路ID列表，空表示自动发现",
                         },
                         "include_transformers": {"type": "boolean", "default": True},
                         "limit": {"type": "integer", "description": "最大检查支路数"},
@@ -92,16 +101,32 @@ class EmtN1ScreeningSkill(SkillBase):
                             "type": "array",
                             "items": {"type": "string"},
                             "default": ["Bus7"],
-                            "description": "要监测的母线电压通道名"
+                            "description": "要监测的母线电压通道名",
                         },
                         "power_trace": {"type": "string", "default": "#P1:0"},
                         "time_windows": {
                             "type": "object",
                             "properties": {
-                                "prefault": {"type": "array", "items": {"type": "number"}, "default": [2.42, 2.44]},
-                                "fault": {"type": "array", "items": {"type": "number"}, "default": [2.56, 2.58]},
-                                "postfault": {"type": "array", "items": {"type": "number"}, "default": [2.92, 2.94]},
-                                "late_recovery": {"type": "array", "items": {"type": "number"}, "default": [2.96, 2.98]},
+                                "prefault": {
+                                    "type": "array",
+                                    "items": {"type": "number"},
+                                    "default": [2.42, 2.44],
+                                },
+                                "fault": {
+                                    "type": "array",
+                                    "items": {"type": "number"},
+                                    "default": [2.56, 2.58],
+                                },
+                                "postfault": {
+                                    "type": "array",
+                                    "items": {"type": "number"},
+                                    "default": [2.92, 2.94],
+                                },
+                                "late_recovery": {
+                                    "type": "array",
+                                    "items": {"type": "number"},
+                                    "default": [2.96, 2.98],
+                                },
                             },
                         },
                         "severity_thresholds": {
@@ -166,11 +191,9 @@ class EmtN1ScreeningSkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(
-                timestamp=datetime.now(),
-                level=level,
-                message=message
-            ))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
@@ -194,10 +217,7 @@ class EmtN1ScreeningSkill(SkillBase):
             model_config = config["model"]
             model_rid = model_config["rid"]
 
-            if model_config.get("source") == "local":
-                base_model = Model.load(model_rid)
-            else:
-                base_model = Model.fetch(model_rid)
+            base_model = load_or_fetch_model(model_config, config)
 
             log("INFO", f"模型: {base_model.name} ({base_model.rid})")
 
@@ -214,7 +234,9 @@ class EmtN1ScreeningSkill(SkillBase):
             branch_ids = scan_config.get("branches", [])
             if not branch_ids:
                 log("INFO", "自动发现候选支路...")
-                branch_ids = self._discover_branches(base_model, include_transformers, log)
+                branch_ids = self._discover_branches(
+                    base_model, include_transformers, log
+                )
                 log("INFO", f"发现 {len(branch_ids)} 条候选支路")
 
             if limit:
@@ -227,17 +249,25 @@ class EmtN1ScreeningSkill(SkillBase):
             # 5. 执行基线仿真
             log("INFO", "执行基线仿真...")
             baseline = self._run_security_case(
-                base_model, None, fault_config, assessment_config, log
+                base_model, None, fault_config, assessment_config, log, config
             )
-            log("INFO", f"基线完成: worst_post_gap={baseline['worst_postfault_gap']:.2f}")
+            log(
+                "INFO",
+                f"基线完成: worst_post_gap={baseline['worst_postfault_gap']:.2f}",
+            )
 
             # 6. 执行各支路N-1仿真
             results = []
             for i, branch_id in enumerate(branch_ids):
-                log("INFO", f"[{i+1}/{len(branch_ids)}] 支路: {branch_id}")
+                log("INFO", f"[{i + 1}/{len(branch_ids)}] 支路: {branch_id}")
                 try:
                     result = self._run_security_case(
-                        base_model, branch_id, fault_config, assessment_config, log
+                        base_model,
+                        branch_id,
+                        fault_config,
+                        assessment_config,
+                        log,
+                        config,
                     )
                     result["delta_worst_postfault_gap_vs_baseline"] = (
                         result["worst_postfault_gap"] - baseline["worst_postfault_gap"]
@@ -252,7 +282,9 @@ class EmtN1ScreeningSkill(SkillBase):
 
             # 7. 排序和分级
             log("INFO", "排序和分级...")
-            thresholds = assessment_config.get("severity_thresholds", {"warning": 10.0, "critical": 15.0})
+            thresholds = assessment_config.get(
+                "severity_thresholds", {"warning": 10.0, "critical": 15.0}
+            )
             ranked_results = self._rank_results(results, thresholds)
 
             for i, result in enumerate(ranked_results, 1):
@@ -269,10 +301,14 @@ class EmtN1ScreeningSkill(SkillBase):
             use_timestamp = output_config.get("timestamp", True)
             generate_report = output_config.get("generate_report", True)
 
-            timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S") if use_timestamp else ""
+            timestamp_str = (
+                datetime.now().strftime("%Y%m%d_%H%M%S") if use_timestamp else ""
+            )
 
             # JSON结果
-            json_filename = f"{prefix}_{timestamp_str}.json" if timestamp_str else f"{prefix}.json"
+            json_filename = (
+                f"{prefix}_{timestamp_str}.json" if timestamp_str else f"{prefix}.json"
+            )
             json_path = output_path / json_filename
 
             result_data = {
@@ -291,48 +327,62 @@ class EmtN1ScreeningSkill(SkillBase):
                         "severity": r["severity"],
                         "worst_postfault_gap": r["worst_postfault_gap"],
                         "worst_late_gap": r["worst_late_gap"],
-                        "delta_post_vs_baseline": r["delta_worst_postfault_gap_vs_baseline"],
+                        "delta_post_vs_baseline": r[
+                            "delta_worst_postfault_gap_vs_baseline"
+                        ],
                     }
                     for r in ranked_results
                 ],
             }
 
-            with open(json_path, 'w', encoding='utf-8') as f:
+            with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(result_data, f, indent=2, ensure_ascii=False)
 
-            artifacts.append(Artifact(
-                type="json",
-                path=str(json_path),
-                size=json_path.stat().st_size,
-                description="N-1筛查结果"
-            ))
+            artifacts.append(
+                Artifact(
+                    type="json",
+                    path=str(json_path),
+                    size=json_path.stat().st_size,
+                    description="N-1筛查结果",
+                )
+            )
             log("INFO", f"JSON结果: {json_path}")
 
             # CSV结果
-            csv_filename = f"{prefix}_{timestamp_str}.csv" if timestamp_str else f"{prefix}.csv"
+            csv_filename = (
+                f"{prefix}_{timestamp_str}.csv" if timestamp_str else f"{prefix}.csv"
+            )
             csv_path = output_path / csv_filename
             self._export_csv(ranked_results, csv_path)
 
-            artifacts.append(Artifact(
-                type="csv",
-                path=str(csv_path),
-                size=csv_path.stat().st_size,
-                description="N-1筛查CSV"
-            ))
+            artifacts.append(
+                Artifact(
+                    type="csv",
+                    path=str(csv_path),
+                    size=csv_path.stat().st_size,
+                    description="N-1筛查CSV",
+                )
+            )
             log("INFO", f"CSV结果: {csv_path}")
 
             # Markdown报告
             if generate_report:
-                report_filename = f"{prefix}_report_{timestamp_str}.md" if timestamp_str else f"{prefix}_report.md"
+                report_filename = (
+                    f"{prefix}_report_{timestamp_str}.md"
+                    if timestamp_str
+                    else f"{prefix}_report.md"
+                )
                 report_path = output_path / report_filename
                 self._generate_report(baseline, ranked_results, digest, report_path)
 
-                artifacts.append(Artifact(
-                    type="markdown",
-                    path=str(report_path),
-                    size=report_path.stat().st_size,
-                    description="N-1筛查报告"
-                ))
+                artifacts.append(
+                    Artifact(
+                        type="markdown",
+                        path=str(report_path),
+                        size=report_path.stat().st_size,
+                        description="N-1筛查报告",
+                    )
+                )
                 log("INFO", f"研究报告: {report_path}")
 
             # 根据结果确定状态
@@ -354,7 +404,15 @@ class EmtN1ScreeningSkill(SkillBase):
                 },
             )
 
-        except (KeyError, AttributeError, RuntimeError, FileNotFoundError, ValueError, TimeoutError, TypeError) as e:
+        except (
+            KeyError,
+            AttributeError,
+            RuntimeError,
+            FileNotFoundError,
+            ValueError,
+            TimeoutError,
+            TypeError,
+        ) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
@@ -367,7 +425,9 @@ class EmtN1ScreeningSkill(SkillBase):
                 error=str(e),
             )
 
-    def _discover_branches(self, model, include_transformers: bool, log_func) -> List[str]:
+    def _discover_branches(
+        self, model, include_transformers: bool, log_func
+    ) -> List[str]:
         """发现候选支路"""
         rids = [TRANSMISSION_LINE_RID]
         if include_transformers:
@@ -386,7 +446,15 @@ class EmtN1ScreeningSkill(SkillBase):
 
         return sorted(branch_ids)
 
-    def _run_security_case(self, base_model, branch_id, fault_config, assessment_config, log_func) -> Dict:
+    def _run_security_case(
+        self,
+        base_model,
+        branch_id,
+        fault_config,
+        assessment_config,
+        log_func,
+        config: Optional[Dict] = None,
+    ) -> Dict:
         """执行单个安全案例"""
         from cloudpss import Model
         import time
@@ -401,7 +469,9 @@ class EmtN1ScreeningSkill(SkillBase):
             try:
                 branch = working_model.getComponentByKey(branch_id)
                 branch_name = branch.args.get("Name") or branch.label or branch.id
-                branch_kind = "transformer" if branch.definition == TRANSFORMER_RID else "line"
+                branch_kind = (
+                    "transformer" if branch.definition == TRANSFORMER_RID else "line"
+                )
                 working_model.updateComponent(branch_id, props={"enabled": False})
             except (AttributeError, TypeError) as e:
                 raise RuntimeError(f"停用支路失败: {e}")
@@ -425,7 +495,7 @@ class EmtN1ScreeningSkill(SkillBase):
             )
 
         # 运行EMT
-        job = working_model.runEMT()
+        job = run_emt(working_model, config)
 
         # 等待完成
         start_time = time.time()
@@ -452,10 +522,17 @@ class EmtN1ScreeningSkill(SkillBase):
                     if bus in channel_names:
                         trace = result.getPlotChannelData(i, bus)
                         bus_metrics[bus] = {
-                            "prefault_rms": self._trace_rms(trace, *time_windows["prefault"]),
+                            "prefault_rms": self._trace_rms(
+                                trace, *time_windows["prefault"]
+                            ),
                             "fault_rms": self._trace_rms(trace, *time_windows["fault"]),
-                            "postfault_rms": self._trace_rms(trace, *time_windows["postfault"]),
-                            "postfault_gap": self._trace_rms(trace, *time_windows["prefault"]) - self._trace_rms(trace, *time_windows["postfault"]),
+                            "postfault_rms": self._trace_rms(
+                                trace, *time_windows["postfault"]
+                            ),
+                            "postfault_gap": self._trace_rms(
+                                trace, *time_windows["prefault"]
+                            )
+                            - self._trace_rms(trace, *time_windows["postfault"]),
                         }
                         break
             except Exception as e:
@@ -463,11 +540,15 @@ class EmtN1ScreeningSkill(SkillBase):
                 logger.debug(f"忽略预期异常: {e}")
 
         # 计算最坏情况
-        worst_post = max(m["postfault_gap"] for m in bus_metrics.values()) if bus_metrics else 0
+        worst_post = (
+            max(m["postfault_gap"] for m in bus_metrics.values()) if bus_metrics else 0
+        )
         worst_late = worst_post  # 简化处理
 
         # 严重度分级
-        thresholds = assessment_config.get("severity_thresholds", {"warning": 10.0, "critical": 15.0})
+        thresholds = assessment_config.get(
+            "severity_thresholds", {"warning": 10.0, "critical": 15.0}
+        )
         if worst_post > thresholds.get("critical", 15.0):
             severity = "critical"
         elif worst_post > thresholds.get("warning", 10.0):
@@ -498,7 +579,10 @@ class EmtN1ScreeningSkill(SkillBase):
         severity_order = {"critical": 2, "warning": 1, "observe": 0}
         return sorted(
             results,
-            key=lambda r: (severity_order.get(r["severity"], 0), r["worst_postfault_gap"]),
+            key=lambda r: (
+                severity_order.get(r["severity"], 0),
+                r["worst_postfault_gap"],
+            ),
             reverse=True,
         )
 
@@ -518,27 +602,37 @@ class EmtN1ScreeningSkill(SkillBase):
     def _export_csv(self, results: List[Dict], path: Path):
         """导出CSV"""
         fieldnames = [
-            "rank", "branch_id", "branch_name", "branch_kind", "severity",
-            "worst_postfault_gap", "worst_late_gap",
-            "delta_worst_post_vs_baseline", "delta_worst_late_vs_baseline",
+            "rank",
+            "branch_id",
+            "branch_name",
+            "branch_kind",
+            "severity",
+            "worst_postfault_gap",
+            "worst_late_gap",
+            "delta_worst_post_vs_baseline",
+            "delta_worst_late_vs_baseline",
         ]
         with open(path, "w", encoding="utf-8", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for r in results:
-                writer.writerow({
-                    "rank": r["rank"],
-                    "branch_id": r["branch_id"],
-                    "branch_name": r["branch_name"],
-                    "branch_kind": r["branch_kind"],
-                    "severity": r["severity"],
-                    "worst_postfault_gap": f"{r['worst_postfault_gap']:.3f}",
-                    "worst_late_gap": f"{r['worst_late_gap']:.3f}",
-                    "delta_worst_post_vs_baseline": f"{r.get('delta_worst_postfault_gap_vs_baseline', 0):+.3f}",
-                    "delta_worst_late_vs_baseline": f"{r.get('delta_worst_late_gap_vs_baseline', 0):+.3f}",
-                })
+                writer.writerow(
+                    {
+                        "rank": r["rank"],
+                        "branch_id": r["branch_id"],
+                        "branch_name": r["branch_name"],
+                        "branch_kind": r["branch_kind"],
+                        "severity": r["severity"],
+                        "worst_postfault_gap": f"{r['worst_postfault_gap']:.3f}",
+                        "worst_late_gap": f"{r['worst_late_gap']:.3f}",
+                        "delta_worst_post_vs_baseline": f"{r.get('delta_worst_postfault_gap_vs_baseline', 0):+.3f}",
+                        "delta_worst_late_vs_baseline": f"{r.get('delta_worst_late_gap_vs_baseline', 0):+.3f}",
+                    }
+                )
 
-    def _generate_report(self, baseline: Dict, results: List[Dict], digest: Dict, path: Path):
+    def _generate_report(
+        self, baseline: Dict, results: List[Dict], digest: Dict, path: Path
+    ):
         """生成Markdown报告"""
         lines = [
             "# EMT N-1 安全筛查报告",
@@ -570,21 +664,25 @@ class EmtN1ScreeningSkill(SkillBase):
                 f"{r.get('delta_worst_postfault_gap_vs_baseline', 0):+.2f} |"
             )
 
-        lines.extend([
-            "",
-            "## 最严重工况",
-            "",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 最严重工况",
+                "",
+            ]
+        )
 
         if digest.get("top_case"):
             top = digest["top_case"]
-            lines.extend([
-                f"**{top['branch_name']}** ({top['branch_kind']})",
-                "",
-                f"- 严重度: {top['severity']}",
-                f"- 恢复缺口: {top['worst_postfault_gap']:.3f}",
-                f"- 相对基线: {top.get('delta_worst_postfault_gap_vs_baseline', 0):+.3f}",
-                "",
-            ])
+            lines.extend(
+                [
+                    f"**{top['branch_name']}** ({top['branch_kind']})",
+                    "",
+                    f"- 严重度: {top['severity']}",
+                    f"- 恢复缺口: {top['worst_postfault_gap']:.3f}",
+                    f"- 相对基线: {top.get('delta_worst_postfault_gap_vs_baseline', 0):+.3f}",
+                    "",
+                ]
+            )
 
         path.write_text("\n".join(lines), encoding="utf-8")

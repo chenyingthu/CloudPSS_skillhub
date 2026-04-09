@@ -14,7 +14,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_emt
 
 logger = logging.getLogger(__name__)
 
@@ -96,9 +105,17 @@ class TransientStabilitySkill(SkillBase):
                 "assessment": {
                     "type": "object",
                     "properties": {
-                        "stable_criterion": {"type": "string", "enum": ["damped", "bounded"], "default": "damped"},
+                        "stable_criterion": {
+                            "type": "string",
+                            "enum": ["damped", "bounded"],
+                            "default": "damped",
+                        },
                         "max_speed_deviation": {"type": "number", "default": 0.5},
-                        "analysis_window": {"type": "array", "items": {"type": "number"}, "default": [3.0, 8.0]},
+                        "analysis_window": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                            "default": [3.0, 8.0],
+                        },
                         "settling_time_threshold": {"type": "number", "default": 0.02},
                     },
                 },
@@ -145,35 +162,23 @@ class TransientStabilitySkill(SkillBase):
         }
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
-        from cloudpss import Model, setToken
-        import time
+        from cloudpss import Model
 
         start_time = datetime.now()
         logs = []
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(timestamp=datetime.now(), level=level, message=message))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
-            log("INFO", "加载认证...")
-            auth = config.get("auth", {})
-            token = auth.get("token")
-            if not token:
-                token_file = auth.get("token_file", ".cloudpss_token")
-                token_path = Path(token_file)
-                if not token_path.exists():
-                    raise FileNotFoundError(f"Token文件不存在: {token_file}")
-                token = token_path.read_text().strip()
-            setToken(token)
-            log("INFO", "认证成功")
+            log("INFO", "加载模型...")
 
             model_config = config["model"]
-            if model_config.get("source") == "local":
-                base_model = Model.load(model_config["rid"])
-            else:
-                base_model = Model.fetch(model_config["rid"])
+            base_model = load_or_fetch_model(model_config, config)
             log("INFO", f"模型: {base_model.name}")
 
             fault_config = config["fault"]
@@ -187,8 +192,12 @@ class TransientStabilitySkill(SkillBase):
             fault_location = fault_config["location"]
 
             monitored_gens = gen_config.get("monitored", ["Gen1", "Gen2", "Gen3"])
-            speed_channels = gen_config.get("speed_channels", ["#wr1:0", "#wr2:0", "#wr3:0"])
-            power_channels = gen_config.get("power_channels", ["#P1:0", "#P2:0", "#P3:0"])
+            speed_channels = gen_config.get(
+                "speed_channels", ["#wr1:0", "#wr2:0", "#wr3:0"]
+            )
+            power_channels = gen_config.get(
+                "power_channels", ["#P1:0", "#P2:0", "#P3:0"]
+            )
 
             max_dev = assessment_config.get("max_speed_deviation", 0.5)
             analysis_window = assessment_config.get("analysis_window", [3.0, 8.0])
@@ -200,7 +209,7 @@ class TransientStabilitySkill(SkillBase):
 
             results = []
             for i, fe in enumerate(fe_values):
-                log("INFO", f"[{i+1}/{len(fe_values)}] 故障切除时间 fe={fe}s")
+                log("INFO", f"[{i + 1}/{len(fe_values)}] 故障切除时间 fe={fe}s")
                 working_model = Model(deepcopy(base_model.toJSON()))
 
                 # 配置故障
@@ -223,22 +232,18 @@ class TransientStabilitySkill(SkillBase):
                     log("INFO", f"  故障配置: fs={fs}s, fe={fe}s, chg={chg}")
 
                 # 运行EMT
-                job = working_model.runEMT()
-                log("INFO", f"  Job ID: {job.id}")
+                emt_result = run_emt(working_model, config)
+                log("INFO", f"  Job ID: {emt_result.job.id}")
 
-                while True:
-                    status = job.status()
-                    if status == 1:
-                        break
-                    if status == 2:
-                        raise RuntimeError("EMT仿真失败")
-                    time.sleep(3)
-
-                result = job.result
+                result = emt_result.result
 
                 # 提取稳定性指标
                 stability_metrics = self._analyze_stability(
-                    result, speed_channels, power_channels, analysis_window, settling_threshold
+                    result,
+                    speed_channels,
+                    power_channels,
+                    analysis_window,
+                    settling_threshold,
                 )
 
                 case_result = {
@@ -251,7 +256,10 @@ class TransientStabilitySkill(SkillBase):
                 # 评估稳定性
                 is_stable = self._assess_stability(stability_metrics, max_dev)
                 status_str = "稳定" if is_stable else "不稳定/临界"
-                log("INFO", f"  -> 稳定性: {status_str}, 最大转速偏差: {stability_metrics.get('max_speed_deviation', 0):.4f}")
+                log(
+                    "INFO",
+                    f"  -> 稳定性: {status_str}, 最大转速偏差: {stability_metrics.get('max_speed_deviation', 0):.4f}",
+                )
 
             # 分析趋势
             stability_trend = self._analyze_stability_trend(results)
@@ -271,32 +279,64 @@ class TransientStabilitySkill(SkillBase):
 
             # JSON输出
             json_path = output_path / f"{prefix}_{timestamp}.json"
-            with open(json_path, 'w') as f:
+            with open(json_path, "w") as f:
                 json.dump(result_data, f, indent=2)
-            artifacts.append(Artifact(type="json", path=str(json_path), size=json_path.stat().st_size, description="暂态稳定性分析结果"))
+            artifacts.append(
+                Artifact(
+                    type="json",
+                    path=str(json_path),
+                    size=json_path.stat().st_size,
+                    description="暂态稳定性分析结果",
+                )
+            )
 
             # CSV输出
             csv_path = output_path / f"{prefix}_{timestamp}.csv"
-            with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            with open(csv_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                writer.writerow(["fe", "is_stable", "max_speed_dev", "settling_time", "damping_ratio", "oscillation_freq"])
+                writer.writerow(
+                    [
+                        "fe",
+                        "is_stable",
+                        "max_speed_dev",
+                        "settling_time",
+                        "damping_ratio",
+                        "oscillation_freq",
+                    ]
+                )
                 for r in results:
                     m = r["stability"]
-                    writer.writerow([
-                        r["fe"],
-                        m.get("is_stable", False),
-                        f"{m.get('max_speed_deviation', 0):.4f}",
-                        f"{m.get('settling_time', 0):.2f}",
-                        f"{m.get('damping_ratio', 0):.4f}",
-                        f"{m.get('oscillation_freq', 0):.2f}",
-                    ])
-            artifacts.append(Artifact(type="csv", path=str(csv_path), size=csv_path.stat().st_size, description="暂态稳定性CSV"))
+                    writer.writerow(
+                        [
+                            r["fe"],
+                            m.get("is_stable", False),
+                            f"{m.get('max_speed_deviation', 0):.4f}",
+                            f"{m.get('settling_time', 0):.2f}",
+                            f"{m.get('damping_ratio', 0):.4f}",
+                            f"{m.get('oscillation_freq', 0):.2f}",
+                        ]
+                    )
+            artifacts.append(
+                Artifact(
+                    type="csv",
+                    path=str(csv_path),
+                    size=csv_path.stat().st_size,
+                    description="暂态稳定性CSV",
+                )
+            )
 
             # 生成报告
             if output_config.get("generate_report", True):
                 report_path = output_path / f"{prefix}_report_{timestamp}.md"
                 self._generate_report(result_data, report_path)
-                artifacts.append(Artifact(type="markdown", path=str(report_path), size=report_path.stat().st_size, description="暂态稳定性分析报告"))
+                artifacts.append(
+                    Artifact(
+                        type="markdown",
+                        path=str(report_path),
+                        size=report_path.stat().st_size,
+                        description="暂态稳定性分析报告",
+                    )
+                )
 
             return SkillResult(
                 skill_name=self.name,
@@ -308,7 +348,15 @@ class TransientStabilitySkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError, TypeError) as e:
+        except (
+            KeyError,
+            AttributeError,
+            ZeroDivisionError,
+            RuntimeError,
+            FileNotFoundError,
+            ValueError,
+            TypeError,
+        ) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
@@ -321,7 +369,14 @@ class TransientStabilitySkill(SkillBase):
                 error=str(e),
             )
 
-    def _analyze_stability(self, result, speed_channels, power_channels, analysis_window, settling_threshold):
+    def _analyze_stability(
+        self,
+        result,
+        speed_channels,
+        power_channels,
+        analysis_window,
+        settling_threshold,
+    ):
         """分析稳定性指标"""
         metrics = {
             "max_speed_deviation": 0,
@@ -342,22 +397,35 @@ class TransientStabilitySkill(SkillBase):
                 if speed_ch in channel_names:
                     trace = result.getPlotChannelData(plot_idx, speed_ch)
                     if trace and trace.get("y"):
-                        speed_data_list.append((speed_ch, trace.get("x", []), trace.get("y", [])))
+                        speed_data_list.append(
+                            (speed_ch, trace.get("x", []), trace.get("y", []))
+                        )
 
             # 方式3: 自动检测发电机转速通道 (IEEE39格式: #Gen31.wr:0, #Gen32.wr:0...)
             if not speed_data_list:
                 for ch in channel_names:
-                    if ".wr:" in ch or ch.endswith(".wr") or ".omega:" in ch or ".speed:" in ch:
+                    if (
+                        ".wr:" in ch
+                        or ch.endswith(".wr")
+                        or ".omega:" in ch
+                        or ".speed:" in ch
+                    ):
                         trace = result.getPlotChannelData(plot_idx, ch)
                         if trace and trace.get("y"):
-                            speed_data_list.append((ch, trace.get("x", []), trace.get("y", [])))
+                            speed_data_list.append(
+                                (ch, trace.get("x", []), trace.get("y", []))
+                            )
 
             for speed_ch, xs, ys in speed_data_list:
                 if not xs or not ys:
                     continue
 
                 # 分析窗口内的数据
-                window_data = [(t, v) for t, v in zip(xs, ys) if analysis_window[0] <= t <= analysis_window[1]]
+                window_data = [
+                    (t, v)
+                    for t, v in zip(xs, ys)
+                    if analysis_window[0] <= t <= analysis_window[1]
+                ]
                 if not window_data:
                     continue
 
@@ -371,7 +439,9 @@ class TransientStabilitySkill(SkillBase):
                 # 最大转速偏差
                 deviations = [abs(v - base_speed) for v in values]
                 max_dev = max(deviations) if deviations else 0
-                metrics["max_speed_deviation"] = max(metrics["max_speed_deviation"], max_dev)
+                metrics["max_speed_deviation"] = max(
+                    metrics["max_speed_deviation"], max_dev
+                )
 
                 # 估算稳定时间
                 settling_time = analysis_window[1]
@@ -391,8 +461,7 @@ class TransientStabilitySkill(SkillBase):
 
         # 稳定性判据
         metrics["is_stable"] = (
-            metrics["max_speed_deviation"] < 0.5 and
-            metrics["damping_ratio"] > 0.0
+            metrics["max_speed_deviation"] < 0.5 and metrics["damping_ratio"] > 0.0
         )
 
         return metrics
@@ -405,22 +474,28 @@ class TransientStabilitySkill(SkillBase):
         # 找峰值
         peaks = []
         for i in range(1, len(values) - 1):
-            if values[i] > values[i-1] and values[i] > values[i+1]:
+            if values[i] > values[i - 1] and values[i] > values[i + 1]:
                 peaks.append((times[i], values[i]))
 
         if len(peaks) < 2:
             return 0, 0
 
         # 估算振荡频率
-        periods = [peaks[i+1][0] - peaks[i][0] for i in range(len(peaks)-1)]
+        periods = [peaks[i + 1][0] - peaks[i][0] for i in range(len(peaks) - 1)]
         avg_period = sum(periods) / len(periods) if periods else 0
         freq = 1.0 / avg_period if avg_period > 0 else 0
 
         # 估算阻尼比（对数递减法）
         if len(peaks) >= 3:
             amplitudes = [p[1] for p in peaks]
-            log_decrements = [math.log(amplitudes[i] / amplitudes[i+1]) for i in range(len(amplitudes)-1) if amplitudes[i+1] > 0]
-            avg_log_dec = sum(log_decrements) / len(log_decrements) if log_decrements else 0
+            log_decrements = [
+                math.log(amplitudes[i] / amplitudes[i + 1])
+                for i in range(len(amplitudes) - 1)
+                if amplitudes[i + 1] > 0
+            ]
+            avg_log_dec = (
+                sum(log_decrements) / len(log_decrements) if log_decrements else 0
+            )
             # 阻尼比 ≈ 对数递减 / (2π)
             damping = avg_log_dec / (2 * math.pi) if avg_log_dec > 0 else 0
         else:
@@ -431,8 +506,8 @@ class TransientStabilitySkill(SkillBase):
     def _assess_stability(self, metrics, max_dev_threshold):
         """评估稳定性"""
         return (
-            metrics.get("max_speed_deviation", 999) < max_dev_threshold and
-            metrics.get("damping_ratio", -1) > 0
+            metrics.get("max_speed_deviation", 999) < max_dev_threshold
+            and metrics.get("damping_ratio", -1) > 0
         )
 
     def _analyze_stability_trend(self, results):
@@ -446,7 +521,9 @@ class TransientStabilitySkill(SkillBase):
 
         # 随着切除时间推迟，稳定性通常变差
         if all(stabilities):
-            if all(deviations[i] <= deviations[i+1] for i in range(len(deviations)-1)):
+            if all(
+                deviations[i] <= deviations[i + 1] for i in range(len(deviations) - 1)
+            ):
                 return "degrading_with_delay"
             return "stable_all_cases"
         elif not any(stabilities):
@@ -478,11 +555,13 @@ class TransientStabilitySkill(SkillBase):
                 f"{m.get('settling_time', 0):.2f} | {m.get('damping_ratio', 0):.4f} | {m.get('oscillation_freq', 0):.2f} |"
             )
 
-        lines.extend([
-            "",
-            "## 结论",
-            "",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 结论",
+                "",
+            ]
+        )
 
         trend = data["stability_trend"]
         if trend == "stable_all_cases":

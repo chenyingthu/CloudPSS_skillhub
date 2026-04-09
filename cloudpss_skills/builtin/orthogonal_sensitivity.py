@@ -26,7 +26,16 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Set
 from dataclasses import dataclass, field
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import load_or_fetch_model
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +43,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ParameterLevel:
     """参数水平"""
+
     name: str
     levels: List[float]
 
@@ -41,6 +51,7 @@ class ParameterLevel:
 @dataclass
 class OrthogonalRun:
     """正交运行"""
+
     run_id: int
     parameter_values: Dict[str, float]
     status: str = "pending"
@@ -51,6 +62,7 @@ class OrthogonalRun:
 @dataclass
 class SensitivityResult:
     """敏感性结果"""
+
     parameter: str
     effect_value: float  # 效应值
     sensitivity_rank: int  # 敏感性排序
@@ -68,7 +80,7 @@ ORTHOGONAL_TABLES = {
             [1, 2, 2],
             [2, 1, 2],
             [2, 2, 1],
-        ]
+        ],
     },
     "L8_2_7": {  # L8(2^7) - 8次运行，7个2水平参数
         "runs": 8,
@@ -83,7 +95,7 @@ ORTHOGONAL_TABLES = {
             [2, 1, 2, 2, 1, 2, 1],
             [2, 2, 1, 1, 2, 2, 1],
             [2, 2, 1, 2, 1, 1, 2],
-        ]
+        ],
     },
     "L9_3_4": {  # L9(3^4) - 9次运行，4个3水平参数
         "runs": 9,
@@ -99,7 +111,7 @@ ORTHOGONAL_TABLES = {
             [3, 1, 3, 2],
             [3, 2, 1, 3],
             [3, 3, 2, 1],
-        ]
+        ],
     },
     "L16_4_5": {  # L16(4^5) - 16次运行，5个4水平参数
         "runs": 16,
@@ -122,7 +134,7 @@ ORTHOGONAL_TABLES = {
             [4, 2, 3, 1, 4],
             [4, 3, 2, 4, 1],
             [4, 4, 1, 3, 2],
-        ]
+        ],
     },
 }
 
@@ -169,7 +181,10 @@ class OrthogonalSensitivitySkill(SkillBase):
                         "type": "object",
                         "required": ["name", "levels"],
                         "properties": {
-                            "name": {"type": "string", "description": "参数名称 (e.g., Gen1.pf_P)"},
+                            "name": {
+                                "type": "string",
+                                "description": "参数名称 (e.g., Gen1.pf_P)",
+                            },
                             "levels": {
                                 "type": "array",
                                 "items": {"type": "number"},
@@ -177,7 +192,10 @@ class OrthogonalSensitivitySkill(SkillBase):
                                 "maxItems": 4,
                                 "description": "参数水平值（2-4个）",
                             },
-                            "component_rid": {"type": "string", "description": "元件RID筛选"},
+                            "component_rid": {
+                                "type": "string",
+                                "description": "元件RID筛选",
+                            },
                         },
                     },
                 },
@@ -185,23 +203,43 @@ class OrthogonalSensitivitySkill(SkillBase):
                     "type": "object",
                     "required": ["metric"],
                     "properties": {
-                        "metric": {"enum": ["voltage", "power", "frequency", "custom"], "description": "评估指标类型"},
+                        "metric": {
+                            "enum": ["voltage", "power", "frequency", "custom"],
+                            "description": "评估指标类型",
+                        },
                         "bus_name": {"type": "string", "description": "监测母线名称"},
-                        "component_name": {"type": "string", "description": "监测元件名称"},
-                        "custom_expression": {"type": "string", "description": "自定义指标表达式"},
+                        "component_name": {
+                            "type": "string",
+                            "description": "监测元件名称",
+                        },
+                        "custom_expression": {
+                            "type": "string",
+                            "description": "自定义指标表达式",
+                        },
                     },
                 },
                 "design": {
                     "type": "object",
                     "properties": {
-                        "table_type": {"enum": ["auto", "L4_2_3", "L8_2_7", "L9_3_4", "L16_4_5"], "default": "auto", "description": "正交表类型"},
-                        "simulation_type": {"enum": ["power_flow", "emt"], "default": "power_flow"},
+                        "table_type": {
+                            "enum": ["auto", "L4_2_3", "L8_2_7", "L9_3_4", "L16_4_5"],
+                            "default": "auto",
+                            "description": "正交表类型",
+                        },
+                        "simulation_type": {
+                            "enum": ["power_flow", "emt"],
+                            "default": "power_flow",
+                        },
                     },
                 },
                 "execution": {
                     "type": "object",
                     "properties": {
-                        "timeout": {"type": "number", "default": 300.0, "description": "单次仿真超时(s)"},
+                        "timeout": {
+                            "type": "number",
+                            "default": 300.0,
+                            "description": "单次仿真超时(s)",
+                        },
                         "continue_on_error": {"type": "boolean", "default": True},
                     },
                 },
@@ -210,7 +248,10 @@ class OrthogonalSensitivitySkill(SkillBase):
                     "properties": {
                         "format": {"enum": ["json", "csv"], "default": "json"},
                         "path": {"type": "string", "default": "./results/"},
-                        "prefix": {"type": "string", "default": "orthogonal_sensitivity"},
+                        "prefix": {
+                            "type": "string",
+                            "default": "orthogonal_sensitivity",
+                        },
                     },
                 },
             },
@@ -261,11 +302,11 @@ class OrthogonalSensitivitySkill(SkillBase):
 
         for i, param in enumerate(parameters):
             if "name" not in param:
-                result.add_error(f"参数{i+1}必须指定name")
+                result.add_error(f"参数{i + 1}必须指定name")
             if "levels" not in param or len(param["levels"]) < 2:
-                result.add_error(f"参数{i+1}必须指定至少2个水平值")
+                result.add_error(f"参数{i + 1}必须指定至少2个水平值")
             if len(param.get("levels", [])) > 4:
-                result.add_error(f"参数{i+1}的水平数不能超过4")
+                result.add_error(f"参数{i + 1}的水平数不能超过4")
 
         target = config.get("target", {})
         if "metric" not in target:
@@ -283,11 +324,9 @@ class OrthogonalSensitivitySkill(SkillBase):
         runs = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(
-                timestamp=datetime.now(),
-                level=level,
-                message=message
-            ))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
@@ -313,10 +352,7 @@ class OrthogonalSensitivitySkill(SkillBase):
 
             log("INFO", f"加载模型: {rid}")
 
-            if source == "cloud":
-                model = Model.fetch(rid)
-            else:
-                model = Model.load(rid)
+            model = load_or_fetch_model(model_config, config)
 
             log("INFO", f"模型名称: {model.name}")
 
@@ -371,10 +407,7 @@ class OrthogonalSensitivitySkill(SkillBase):
                     level_idx = row[param_idx] - 1  # 正交表是1-based
                     param_values[param["name"]] = param["levels"][level_idx]
 
-                run = OrthogonalRun(
-                    run_id=run_idx + 1,
-                    parameter_values=param_values
-                )
+                run = OrthogonalRun(run_id=run_idx + 1, parameter_values=param_values)
                 runs.append(run)
 
             log("INFO", f"  -> 共 {len(runs)} 次运行")
@@ -387,7 +420,10 @@ class OrthogonalSensitivitySkill(SkillBase):
             else:
                 job = None
                 for j in model.jobs:
-                    if j.get("rid") in ["function/CloudPSS/powerflow", "function/CloudPSS/emtps"]:
+                    if j.get("rid") in [
+                        "function/CloudPSS/powerflow",
+                        "function/CloudPSS/emtps",
+                    ]:
                         job = j
                         break
                 if not job and model.jobs:
@@ -401,11 +437,15 @@ class OrthogonalSensitivitySkill(SkillBase):
             continue_on_error = execution.get("continue_on_error", True)
 
             for run in runs:
-                log("INFO", f"  -> 运行 {run.run_id}/{len(runs)}: {run.parameter_values}")
+                log(
+                    "INFO",
+                    f"  -> 运行 {run.run_id}/{len(runs)}: {run.parameter_values}",
+                )
 
                 try:
                     # 每次运行前深拷贝模型，避免参数改动累积
                     from copy import deepcopy
+
                     working_model = Model(deepcopy(model.toJSON()))
 
                     # 修改模型参数
@@ -419,7 +459,9 @@ class OrthogonalSensitivitySkill(SkillBase):
                             components = working_model.getComponentsByRid(comp_rid)
                         else:
                             # 尝试从参数名解析组件
-                            components = self._find_components_by_param(working_model, param_name, param.get("component_type"))
+                            components = self._find_components_by_param(
+                                working_model, param_name, param.get("component_type")
+                            )
 
                         if not components:
                             raise RuntimeError(
@@ -428,10 +470,10 @@ class OrthogonalSensitivitySkill(SkillBase):
                             )
 
                         for comp_key, comp in components.items():
-                            if hasattr(comp, 'args'):
+                            if hasattr(comp, "args"):
                                 # 假设参数名对应args中的key
-                                if '.' in param_name:
-                                    _, arg_name = param_name.split('.', 1)
+                                if "." in param_name:
+                                    _, arg_name = param_name.split(".", 1)
                                 else:
                                     arg_name = param_name
                                 comp.args[arg_name] = str(param_value)
@@ -448,7 +490,9 @@ class OrthogonalSensitivitySkill(SkillBase):
 
                     if runner.status():
                         # 获取结果指标
-                        metric_value = self._extract_metric(runner.result, target, model)
+                        metric_value = self._extract_metric(
+                            runner.result, target, model
+                        )
                         run.result = metric_value
                         run.status = "success"
                         log("INFO", f"     结果: {metric_value}")
@@ -457,7 +501,13 @@ class OrthogonalSensitivitySkill(SkillBase):
                         run.error = "仿真超时"
                         log("WARN", f"     超时")
 
-                except (KeyError, AttributeError, RuntimeError, ValueError, TypeError) as e:
+                except (
+                    KeyError,
+                    AttributeError,
+                    RuntimeError,
+                    ValueError,
+                    TypeError,
+                ) as e:
                     run.status = "failed"
                     run.error = str(e)
                     log("ERROR", f"     失败: {e}")
@@ -469,11 +519,16 @@ class OrthogonalSensitivitySkill(SkillBase):
             sensitivity_results = self._calculate_sensitivity(runs, parameters)
 
             for sr in sensitivity_results:
-                log("INFO", f"  -> {sr.parameter}: 效应={sr.effect_value:.4f}, 贡献率={sr.contribution_ratio:.1%}")
+                log(
+                    "INFO",
+                    f"  -> {sr.parameter}: 效应={sr.effect_value:.4f}, 贡献率={sr.contribution_ratio:.1%}",
+                )
 
             # 9. 生成报告
             log("INFO", "生成分析报告...")
-            report = self._generate_report(runs, sensitivity_results, config, table_type)
+            report = self._generate_report(
+                runs, sensitivity_results, config, table_type
+            )
 
             # 10. 导出结果
             output_path = Path(output_config.get("path", "./results/"))
@@ -481,13 +536,17 @@ class OrthogonalSensitivitySkill(SkillBase):
             prefix = output_config.get("prefix", "orthogonal_sensitivity")
 
             report_file = output_path / f"{prefix}_report.json"
-            report_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
-            artifacts.append(Artifact(
-                type="json",
-                path=str(report_file),
-                size=report_file.stat().st_size,
-                description="正交敏感性分析报告"
-            ))
+            report_file.write_text(
+                json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+            artifacts.append(
+                Artifact(
+                    type="json",
+                    path=str(report_file),
+                    size=report_file.stat().st_size,
+                    description="正交敏感性分析报告",
+                )
+            )
 
             # 成功统计
             success_count = sum(1 for r in runs if r.status == "success")
@@ -495,10 +554,16 @@ class OrthogonalSensitivitySkill(SkillBase):
             log("INFO", f"分析完成: 成功 {success_count}/{len(runs)}")
 
             # 根据成功率确定状态
-            final_status = SkillStatus.SUCCESS if success_count == len(runs) else SkillStatus.FAILED
+            final_status = (
+                SkillStatus.SUCCESS
+                if success_count == len(runs)
+                else SkillStatus.FAILED
+            )
             first_error = next((r.error for r in runs if r.error), None)
-            final_error = None if final_status == SkillStatus.SUCCESS else (
-                first_error or "存在未完成或失败的正交运行"
+            final_error = (
+                None
+                if final_status == SkillStatus.SUCCESS
+                else (first_error or "存在未完成或失败的正交运行")
             )
 
             return SkillResult(
@@ -513,8 +578,14 @@ class OrthogonalSensitivitySkill(SkillBase):
                     "total_runs": len(runs),
                     "success_count": success_count,
                     "sensitivity_ranking": [
-                        {"parameter": sr.parameter, "effect": sr.effect_value, "rank": sr.sensitivity_rank}
-                        for sr in sorted(sensitivity_results, key=lambda x: x.sensitivity_rank)
+                        {
+                            "parameter": sr.parameter,
+                            "effect": sr.effect_value,
+                            "rank": sr.sensitivity_rank,
+                        }
+                        for sr in sorted(
+                            sensitivity_results, key=lambda x: x.sensitivity_rank
+                        )
                     ],
                 },
                 artifacts=artifacts,
@@ -522,9 +593,18 @@ class OrthogonalSensitivitySkill(SkillBase):
                 error=final_error,
             )
 
-        except (KeyError, AttributeError, ValueError, RuntimeError, TimeoutError, TypeError, FileNotFoundError) as e:
+        except (
+            KeyError,
+            AttributeError,
+            ValueError,
+            RuntimeError,
+            TimeoutError,
+            TypeError,
+            FileNotFoundError,
+        ) as e:
             log("ERROR", f"执行失败: {e}")
             import traceback
+
             log("DEBUG", traceback.format_exc())
             return SkillResult(
                 skill_name=self.name,
@@ -537,7 +617,9 @@ class OrthogonalSensitivitySkill(SkillBase):
                 error=str(e),
             )
 
-    def _find_components_by_param(self, model: Any, param_name: str, component_type: Optional[str] = None) -> Dict:
+    def _find_components_by_param(
+        self, model: Any, param_name: str, component_type: Optional[str] = None
+    ) -> Dict:
         """根据参数名查找组件"""
         # 如果提供了组件类型，直接按类型查找
         if component_type:
@@ -555,12 +637,14 @@ class OrthogonalSensitivitySkill(SkillBase):
                 label = getattr(comp, "label", "") or ""
                 name = getattr(comp, "name", "") or ""
                 comp_key = str(key)
-                arg_name = str(comp.args.get("Name", "")) if hasattr(comp, "args") else ""
+                arg_name = (
+                    str(comp.args.get("Name", "")) if hasattr(comp, "args") else ""
+                )
                 if (
-                    component_name == label or
-                    component_name == name or
-                    component_name == arg_name or
-                    component_name == comp_key
+                    component_name == label
+                    or component_name == name
+                    or component_name == arg_name
+                    or component_name == comp_key
                 ):
                     matches[key] = comp
         except Exception:
@@ -570,7 +654,9 @@ class OrthogonalSensitivitySkill(SkillBase):
             return matches
 
         # 无法识别参数类型，返回空字典
-        logger.warning(f"无法从参数名 '{param_name}' 识别组件类型，请显式指定 component_rid 或 component_type")
+        logger.warning(
+            f"无法从参数名 '{param_name}' 识别组件类型，请显式指定 component_rid 或 component_type"
+        )
         return {}
 
     def _extract_metric(self, result: Any, target: Dict, model: Any) -> float:
@@ -600,10 +686,13 @@ class OrthogonalSensitivitySkill(SkillBase):
             logger.warning(f"提取指标失败: {e}")
             return 0.0
 
-    def _calculate_sensitivity(self, runs: List[OrthogonalRun],
-                               parameters: List[Dict]) -> List[SensitivityResult]:
+    def _calculate_sensitivity(
+        self, runs: List[OrthogonalRun], parameters: List[Dict]
+    ) -> List[SensitivityResult]:
         """计算参数敏感性"""
-        success_runs = [r for r in runs if r.status == "success" and r.result is not None]
+        success_runs = [
+            r for r in runs if r.status == "success" and r.result is not None
+        ]
 
         if not success_runs:
             return []
@@ -619,7 +708,8 @@ class OrthogonalSensitivitySkill(SkillBase):
             level_means = {}
             for level_idx, level_value in enumerate(levels):
                 level_results = [
-                    r.result for r in success_runs
+                    r.result
+                    for r in success_runs
                     if r.parameter_values.get(param_name) == level_value
                 ]
                 if level_results:
@@ -644,19 +734,24 @@ class OrthogonalSensitivitySkill(SkillBase):
 
         for rank, (param_name, effect) in enumerate(sorted_params, 1):
             contribution = effect / total_effect if total_effect > 0 else 0
-            results.append(SensitivityResult(
-                parameter=param_name,
-                effect_value=effect,
-                sensitivity_rank=rank,
-                contribution_ratio=contribution
-            ))
+            results.append(
+                SensitivityResult(
+                    parameter=param_name,
+                    effect_value=effect,
+                    sensitivity_rank=rank,
+                    contribution_ratio=contribution,
+                )
+            )
 
         return results
 
-    def _generate_report(self, runs: List[OrthogonalRun],
-                         sensitivity: List[SensitivityResult],
-                         config: Dict,
-                         table_type: str) -> Dict:
+    def _generate_report(
+        self,
+        runs: List[OrthogonalRun],
+        sensitivity: List[SensitivityResult],
+        config: Dict,
+        table_type: str,
+    ) -> Dict:
         """生成报告"""
         return {
             "summary": {
