@@ -14,11 +14,18 @@ logger = logging.getLogger(__name__)
 
 # 默认配置常量
 DEFAULT_TOKEN_FILE = ".cloudpss_token"
+DEFAULT_INTERNAL_TOKEN_FILE = ".cloudpss_token_internal"
 DEFAULT_PAGE_SIZE = 1000
 DEFAULT_TIMEOUT = 300
 DEFAULT_POWERFLOW_TOLERANCE = 1e-6
 DEFAULT_VOLTAGE_MIN = 0.5
 DEFAULT_VOLTAGE_MAX = 1.5
+
+# CloudPSS 服务器配置
+SERVER_URLS = {
+    "public": "https://cloudpss.net/",
+    "internal": "http://166.111.60.76:50001",
+}
 
 
 def setup_auth(config: Dict) -> str:
@@ -35,12 +42,33 @@ def setup_auth(config: Dict) -> str:
         ValueError: 未找到 token
         FileNotFoundError: token 文件不存在
     """
+    import os
+
     auth = config.get("auth", {})
     token = auth.get("token")
 
-    # 从文件读取 token
-    if not token and auth.get("token_file"):
-        token_file = auth["token_file"]
+    # 确定使用哪个服务器
+    server = auth.get("server", "public")
+    base_url = auth.get("base_url") or auth.get("baseUrl")
+
+    # 如果指定了 baseUrl，优先使用
+    if base_url:
+        os.environ["CLOUDPSS_API_URL"] = base_url
+        logger.debug(f"使用自定义 baseUrl: {base_url}")
+    elif server == "internal":
+        os.environ["CLOUDPSS_API_URL"] = SERVER_URLS["internal"]
+        logger.debug(f"使用内部服务器: {SERVER_URLS['internal']}")
+    else:
+        os.environ["CLOUDPSS_API_URL"] = SERVER_URLS["public"]
+        logger.debug(f"使用公共云服务器: {SERVER_URLS['public']}")
+
+    # 选择对应的 token 文件
+    if not token:
+        if server == "internal":
+            token_file = auth.get("token_file") or DEFAULT_INTERNAL_TOKEN_FILE
+        else:
+            token_file = auth.get("token_file") or DEFAULT_TOKEN_FILE
+
         token_path = Path(token_file)
         if token_path.exists():
             token = token_path.read_text().strip()
@@ -48,10 +76,12 @@ def setup_auth(config: Dict) -> str:
 
     # 尝试默认 token 文件
     if not token:
-        token_path = Path(DEFAULT_TOKEN_FILE)
-        if token_path.exists():
-            token = token_path.read_text().strip()
-            logger.debug(f"从 {DEFAULT_TOKEN_FILE} 读取 token")
+        for default_file in [DEFAULT_TOKEN_FILE, DEFAULT_INTERNAL_TOKEN_FILE]:
+            token_path = Path(default_file)
+            if token_path.exists():
+                token = token_path.read_text().strip()
+                logger.debug(f"从 {default_file} 读取 token")
+                break
 
     if not token:
         raise ValueError(
