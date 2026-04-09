@@ -15,7 +15,16 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_emt
 
 logger = logging.getLogger(__name__)
 
@@ -57,15 +66,31 @@ class PowerQualityAnalysisSkill(SkillBase):
                 "simulation": {
                     "type": "object",
                     "properties": {
-                        "duration": {"type": "number", "default": 1.0, "description": "仿真时长(s)"},
-                        "step": {"type": "number", "default": 1e-5, "description": "仿真步长(s)"},
+                        "duration": {
+                            "type": "number",
+                            "default": 1.0,
+                            "description": "仿真时长(s)",
+                        },
+                        "step": {
+                            "type": "number",
+                            "default": 1e-5,
+                            "description": "仿真步长(s)",
+                        },
                     },
                 },
                 "analysis": {
                     "type": "object",
                     "properties": {
-                        "fundamental_freq": {"type": "number", "default": 50.0, "description": "基波频率(Hz)"},
-                        "max_harmonic": {"type": "integer", "default": 50, "description": "最高谐波次数"},
+                        "fundamental_freq": {
+                            "type": "number",
+                            "default": 50.0,
+                            "description": "基波频率(Hz)",
+                        },
+                        "max_harmonic": {
+                            "type": "integer",
+                            "default": 50,
+                            "description": "最高谐波次数",
+                        },
                         "analysis_window": {
                             "type": "array",
                             "items": {"type": "number"},
@@ -74,18 +99,46 @@ class PowerQualityAnalysisSkill(SkillBase):
                         },
                         "indicators": {
                             "type": "array",
-                            "items": {"enum": ["harmonic", "voltage_dip", "unbalance", "flicker", "dc_offset"]},
+                            "items": {
+                                "enum": [
+                                    "harmonic",
+                                    "voltage_dip",
+                                    "unbalance",
+                                    "flicker",
+                                    "dc_offset",
+                                ]
+                            },
                             "default": ["harmonic", "voltage_dip", "unbalance"],
                             "description": "分析的电能质量指标",
                         },
                         "limits": {
                             "type": "object",
                             "properties": {
-                                "thd": {"type": "number", "default": 5.0, "description": "THD限值(%)"},
-                                "voltage_dip": {"type": "number", "default": 10.0, "description": "电压暂降阈值(%)"},
-                                "unbalance": {"type": "number", "default": 2.0, "description": "三相不平衡限值(%)"},
-                                "flicker": {"type": "number", "default": 1.0, "description": "闪变限值(Pst)"},
-                                "dc_offset": {"type": "number", "default": 1.0, "description": "直流偏置限值(%)"},
+                                "thd": {
+                                    "type": "number",
+                                    "default": 5.0,
+                                    "description": "THD限值(%)",
+                                },
+                                "voltage_dip": {
+                                    "type": "number",
+                                    "default": 10.0,
+                                    "description": "电压暂降阈值(%)",
+                                },
+                                "unbalance": {
+                                    "type": "number",
+                                    "default": 2.0,
+                                    "description": "三相不平衡限值(%)",
+                                },
+                                "flicker": {
+                                    "type": "number",
+                                    "default": 1.0,
+                                    "description": "闪变限值(Pst)",
+                                },
+                                "dc_offset": {
+                                    "type": "number",
+                                    "default": 1.0,
+                                    "description": "直流偏置限值(%)",
+                                },
                             },
                         },
                     },
@@ -170,7 +223,9 @@ class PowerQualityAnalysisSkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(timestamp=datetime.now(), level=level, message=message))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
@@ -187,10 +242,7 @@ class PowerQualityAnalysisSkill(SkillBase):
             log("INFO", "认证成功")
 
             model_config = config["model"]
-            if model_config.get("source") == "local":
-                base_model = Model.load(model_config["rid"])
-            else:
-                base_model = Model.fetch(model_config["rid"])
+            base_model = load_or_fetch_model(model_config, config)
             log("INFO", f"模型: {base_model.name}")
 
             # 获取配置
@@ -202,7 +254,9 @@ class PowerQualityAnalysisSkill(SkillBase):
             fundamental = analysis_config.get("fundamental_freq", 50.0)
             max_harmonic = analysis_config.get("max_harmonic", 50)
             analysis_window = analysis_config.get("analysis_window", [0.8, 1.0])
-            indicators = analysis_config.get("indicators", ["harmonic", "voltage_dip", "unbalance"])
+            indicators = analysis_config.get(
+                "indicators", ["harmonic", "voltage_dip", "unbalance"]
+            )
             limits = analysis_config.get("limits", {})
 
             three_phase = channels_config.get("three_phase", [])
@@ -223,9 +277,10 @@ class PowerQualityAnalysisSkill(SkillBase):
             # 运行EMT仿真
             log("INFO", f"运行EMT仿真 (时长: {emt_duration}s)...")
             working_model = Model(deepcopy(base_model.toJSON()))
-            job = working_model.runEMT()
+            job = run_emt(working_model, config)
 
             import time
+
             while True:
                 status = job.status()
                 if status == 1:
@@ -247,7 +302,9 @@ class PowerQualityAnalysisSkill(SkillBase):
                 if three_phase:
                     log("INFO", f"检测到 {len(three_phase)} 个三相通道组")
                     for tp in three_phase:
-                        log("INFO", f"  - {tp['name']}: {tp['a']}, {tp['b']}, {tp['c']}")
+                        log(
+                            "INFO", f"  - {tp['name']}: {tp['a']}, {tp['b']}, {tp['c']}"
+                        )
                 else:
                     log("WARNING", "未检测到三相通道组")
 
@@ -258,7 +315,7 @@ class PowerQualityAnalysisSkill(SkillBase):
                     for ch in single_phase[:5]:  # 最多显示5个
                         log("INFO", f"  - {ch}")
                     if len(single_phase) > 5:
-                        log("INFO", f"  ... ({len(single_phase)-5} more)")
+                        log("INFO", f"  ... ({len(single_phase) - 5} more)")
                 else:
                     log("WARNING", "未检测到单相通道")
 
@@ -284,11 +341,15 @@ class PowerQualityAnalysisSkill(SkillBase):
                     log("INFO", f"  分析三相组: {name}")
 
                     if "unbalance" in indicators:
-                        unbalance = self._analyze_unbalance(result, ch_a, ch_b, ch_c, analysis_window)
+                        unbalance = self._analyze_unbalance(
+                            result, ch_a, ch_b, ch_c, analysis_window
+                        )
                         pq_results["unbalance"][name] = unbalance
 
                     if "flicker" in indicators:
-                        flicker = self._analyze_flicker(result, ch_a, ch_b, ch_c, fundamental)
+                        flicker = self._analyze_flicker(
+                            result, ch_a, ch_b, ch_c, fundamental
+                        )
                         pq_results["flicker"][name] = flicker
 
                 except (KeyError, AttributeError) as e:
@@ -337,22 +398,47 @@ class PowerQualityAnalysisSkill(SkillBase):
 
             # JSON输出
             json_path = output_path / f"{prefix}_{timestamp}.json"
-            with open(json_path, 'w') as f:
+            with open(json_path, "w") as f:
                 json.dump(result_data, f, indent=2)
-            artifacts.append(Artifact(type="json", path=str(json_path), size=json_path.stat().st_size, description="电能质量分析结果"))
+            artifacts.append(
+                Artifact(
+                    type="json",
+                    path=str(json_path),
+                    size=json_path.stat().st_size,
+                    description="电能质量分析结果",
+                )
+            )
 
             # CSV输出
             csv_path = output_path / f"{prefix}_{timestamp}.csv"
             self._export_csv(pq_results, csv_path, limits)
-            artifacts.append(Artifact(type="csv", path=str(csv_path), size=csv_path.stat().st_size, description="电能质量指标汇总"))
+            artifacts.append(
+                Artifact(
+                    type="csv",
+                    path=str(csv_path),
+                    size=csv_path.stat().st_size,
+                    description="电能质量指标汇总",
+                )
+            )
 
             # 生成报告
             if output_config.get("generate_report", True):
                 report_path = output_path / f"{prefix}_report_{timestamp}.md"
                 self._generate_report(result_data, report_path)
-                artifacts.append(Artifact(type="markdown", path=str(report_path), size=report_path.stat().st_size, description="电能质量分析报告"))
+                artifacts.append(
+                    Artifact(
+                        type="markdown",
+                        path=str(report_path),
+                        size=report_path.stat().st_size,
+                        description="电能质量分析报告",
+                    )
+                )
 
-            final_status = SkillStatus.FAILED if summary.get("overall_status") == "FAIL" else SkillStatus.SUCCESS
+            final_status = (
+                SkillStatus.FAILED
+                if summary.get("overall_status") == "FAIL"
+                else SkillStatus.SUCCESS
+            )
             error = None
             if final_status == SkillStatus.FAILED:
                 error = "未提取到任何有效的电能质量分析结果"
@@ -371,6 +457,7 @@ class PowerQualityAnalysisSkill(SkillBase):
         except (KeyError, AttributeError, RuntimeError, TypeError, ValueError) as e:
             log("ERROR", f"执行失败: {e}")
             import traceback
+
             log("DEBUG", traceback.format_exc())
             return SkillResult(
                 skill_name=self.name,
@@ -390,7 +477,7 @@ class PowerQualityAnalysisSkill(SkillBase):
         try:
             plots = list(result.getPlots())
             for i, plot in enumerate(plots):
-                title = plot.get('data', {}).get('title', '').lower()
+                title = plot.get("data", {}).get("title", "").lower()
                 channels = result.getPlotChannelNames(i)
                 if len(channels) < 3:
                     continue
@@ -399,14 +486,17 @@ class PowerQualityAnalysisSkill(SkillBase):
 
                 if inferred_triplets:
                     for index, triplet in enumerate(inferred_triplets, 1):
-                        three_phase_groups.append({
-                            "name": plot.get('data', {}).get('title', f'三相组{i}') if len(inferred_triplets) == 1
-                            else f"{plot.get('data', {}).get('title', f'三相组{i}')}_{index}",
-                            "plot_index": i,
-                            "a": triplet["a"],
-                            "b": triplet["b"],
-                            "c": triplet["c"],
-                        })
+                        three_phase_groups.append(
+                            {
+                                "name": plot.get("data", {}).get("title", f"三相组{i}")
+                                if len(inferred_triplets) == 1
+                                else f"{plot.get('data', {}).get('title', f'三相组{i}')}_{index}",
+                                "plot_index": i,
+                                "a": triplet["a"],
+                                "b": triplet["b"],
+                                "c": triplet["c"],
+                            }
+                        )
 
         except (KeyError, AttributeError) as e:
             logger.warning(f"检测三相通道失败: {e}")
@@ -420,11 +510,18 @@ class PowerQualityAnalysisSkill(SkillBase):
         try:
             plots = list(result.getPlots())
             for i, plot in enumerate(plots):
-                title = plot.get('data', {}).get('title', '').lower()
+                title = plot.get("data", {}).get("title", "").lower()
                 channels = result.getPlotChannelNames(i)
 
                 # 优先检测电压、电流、功率相关的单通道
-                priority_keywords = ['电压', 'voltage', '电流', 'current', '功率', 'power']
+                priority_keywords = [
+                    "电压",
+                    "voltage",
+                    "电流",
+                    "current",
+                    "功率",
+                    "power",
+                ]
                 if any(kw in title for kw in priority_keywords):
                     for ch in channels:
                         # 避免重复添加
@@ -444,13 +541,30 @@ class PowerQualityAnalysisSkill(SkillBase):
             lowered = str(channel).lower()
             suffix = None
             stem = None
-            for marker in ['_a', '_b', '_c', '.a', '.b', '.c', ':a', ':b', ':c', ' a', ' b', ' c']:
+            for marker in [
+                "_a",
+                "_b",
+                "_c",
+                ".a",
+                ".b",
+                ".c",
+                ":a",
+                ":b",
+                ":c",
+                " a",
+                " b",
+                " c",
+            ]:
                 if lowered.endswith(marker):
                     suffix = marker[-1]
-                    stem = channel[:-2] if marker[0] in {'_', '.', ':'} else channel[:-2]
+                    stem = (
+                        channel[:-2] if marker[0] in {"_", ".", ":"} else channel[:-2]
+                    )
                     break
 
-            if suffix is None and lowered.endswith(('va', 'vb', 'vc', 'ia', 'ib', 'ic')):
+            if suffix is None and lowered.endswith(
+                ("va", "vb", "vc", "ia", "ib", "ic")
+            ):
                 suffix = lowered[-1]
                 stem = channel[:-1]
 
@@ -461,7 +575,7 @@ class PowerQualityAnalysisSkill(SkillBase):
 
         triplets = []
         for stem, phases in grouped.items():
-            if {'a', 'b', 'c'} <= set(phases.keys()):
+            if {"a", "b", "c"} <= set(phases.keys()):
                 triplets.append({"a": phases["a"], "b": phases["b"], "c": phases["c"]})
         return triplets
 
@@ -483,19 +597,25 @@ class PowerQualityAnalysisSkill(SkillBase):
         plot_idx = self._find_plot_index_for_channel(result, channel)
         return result.getPlotChannelData(plot_idx, channel)
 
-    def _analyze_harmonics(self, result, channel: str, analysis_window: List,
-                          fundamental: float, max_harmonic: int) -> Dict:
+    def _analyze_harmonics(
+        self,
+        result,
+        channel: str,
+        analysis_window: List,
+        fundamental: float,
+        max_harmonic: int,
+    ) -> Dict:
         """分析谐波"""
         plots = list(result.getPlots())
         if not plots:
             return {"error": "无波形数据"}
 
         data = self._get_channel_data(result, channel)
-        if not data or not data.get('y'):
+        if not data or not data.get("y"):
             return {"error": "通道无数据"}
 
-        t = np.array(data['x'])
-        y = np.array(data['y'])
+        t = np.array(data["x"])
+        y = np.array(data["y"])
 
         # 提取分析窗口
         mask = (t >= analysis_window[0]) & (t <= analysis_window[1])
@@ -559,8 +679,9 @@ class PowerQualityAnalysisSkill(SkillBase):
             "harmonics": harmonics,
         }
 
-    def _analyze_unbalance(self, result, ch_a: str, ch_b: str, ch_c: str,
-                          analysis_window: List) -> Dict:
+    def _analyze_unbalance(
+        self, result, ch_a: str, ch_b: str, ch_c: str, analysis_window: List
+    ) -> Dict:
         """分析三相不平衡度"""
         try:
             data_a = self._get_channel_data(result, ch_a)
@@ -570,14 +691,14 @@ class PowerQualityAnalysisSkill(SkillBase):
             if not all([data_a, data_b, data_c]):
                 return {"error": "三相数据不完整"}
 
-            t = np.array(data_a['x'])
+            t = np.array(data_a["x"])
 
             # 提取分析窗口
             mask = (t >= analysis_window[0]) & (t <= analysis_window[1])
 
-            va = np.array(data_a['y'])[mask]
-            vb = np.array(data_b['y'])[mask]
-            vc = np.array(data_c['y'])[mask]
+            va = np.array(data_a["y"])[mask]
+            vb = np.array(data_b["y"])[mask]
+            vc = np.array(data_c["y"])[mask]
 
             if len(va) < 10:
                 return {"error": "数据点不足"}
@@ -610,11 +731,11 @@ class PowerQualityAnalysisSkill(SkillBase):
         """分析电压暂降"""
         try:
             data = self._get_channel_data(result, channel)
-            if not data or not data.get('y'):
+            if not data or not data.get("y"):
                 return {"error": "通道无数据"}
 
-            t = np.array(data['x'])
-            y = np.array(data['y'])
+            t = np.array(data["x"])
+            y = np.array(data["y"])
 
             # 提取分析窗口
             mask = (t >= analysis_window[0]) & (t <= analysis_window[1])
@@ -630,7 +751,7 @@ class PowerQualityAnalysisSkill(SkillBase):
 
             rms_values = []
             for i in range(0, len(y_window) - window_size, window_size // 2):
-                window = y_window[i:i+window_size]
+                window = y_window[i : i + window_size]
                 rms = np.sqrt(np.mean(window**2))
                 rms_values.append(rms)
 
@@ -668,8 +789,9 @@ class PowerQualityAnalysisSkill(SkillBase):
         except (KeyError, AttributeError, ZeroDivisionError) as e:
             return {"error": str(e)}
 
-    def _analyze_flicker(self, result, ch_a: str, ch_b: str, ch_c: str,
-                        fundamental: float) -> Dict:
+    def _analyze_flicker(
+        self, result, ch_a: str, ch_b: str, ch_c: str, fundamental: float
+    ) -> Dict:
         """分析闪变"""
         # 闪变分析需要较长时间的统计数据
         # 简化版本：返回模拟值
@@ -683,11 +805,11 @@ class PowerQualityAnalysisSkill(SkillBase):
         """分析直流偏置"""
         try:
             data = self._get_channel_data(result, channel)
-            if not data or not data.get('y'):
+            if not data or not data.get("y"):
                 return {"error": "通道无数据"}
 
-            t = np.array(data['x'])
-            y = np.array(data['y'])
+            t = np.array(data["x"])
+            y = np.array(data["y"])
 
             # 提取分析窗口
             mask = (t >= analysis_window[0]) & (t <= analysis_window[1])
@@ -697,7 +819,7 @@ class PowerQualityAnalysisSkill(SkillBase):
             dc = np.mean(y_window)
 
             # 交流有效值
-            ac_rms = np.sqrt(np.mean((y_window - dc)**2))
+            ac_rms = np.sqrt(np.mean((y_window - dc) ** 2))
 
             # 直流偏置百分比
             dc_percent = (abs(dc) / ac_rms * 100) if ac_rms > 0 else 0
@@ -721,24 +843,25 @@ class PowerQualityAnalysisSkill(SkillBase):
         # 检查是否分析了任何通道
         valid_harmonic = self._valid_indicator_results(pq_results.get("harmonic", {}))
         valid_unbalance = self._valid_indicator_results(pq_results.get("unbalance", {}))
-        valid_voltage_dip = self._valid_indicator_results(pq_results.get("voltage_dip", {}))
+        valid_voltage_dip = self._valid_indicator_results(
+            pq_results.get("voltage_dip", {})
+        )
         valid_flicker = self._valid_indicator_results(pq_results.get("flicker", {}))
         valid_dc_offset = self._valid_indicator_results(pq_results.get("dc_offset", {}))
 
         total_analyzed = (
-            len(valid_harmonic) +
-            len(valid_unbalance) +
-            len(valid_voltage_dip) +
-            len(valid_flicker) +
-            len(valid_dc_offset)
+            len(valid_harmonic)
+            + len(valid_unbalance)
+            + len(valid_voltage_dip)
+            + len(valid_flicker)
+            + len(valid_dc_offset)
         )
 
         if total_analyzed == 0:
             summary["overall_status"] = "FAIL"
-            summary["violations"].append({
-                "type": "no_data",
-                "message": "未检测到任何有效通道进行分析"
-            })
+            summary["violations"].append(
+                {"type": "no_data", "message": "未检测到任何有效通道进行分析"}
+            )
             summary["violation_count"] = 1
             return summary
 
@@ -746,34 +869,40 @@ class PowerQualityAnalysisSkill(SkillBase):
         for ch, data in valid_harmonic.items():
             thd = data.get("thd", 0)
             if thd > limits.get("thd", 5.0):
-                summary["violations"].append({
-                    "type": "harmonic",
-                    "channel": ch,
-                    "value": thd,
-                    "limit": limits.get("thd", 5.0),
-                })
+                summary["violations"].append(
+                    {
+                        "type": "harmonic",
+                        "channel": ch,
+                        "value": thd,
+                        "limit": limits.get("thd", 5.0),
+                    }
+                )
 
         # 不平衡检查
         for name, data in valid_unbalance.items():
             unb = data.get("unbalance_percent", 0)
             if unb > limits.get("unbalance", 2.0):
-                summary["violations"].append({
-                    "type": "unbalance",
-                    "channel": name,
-                    "value": unb,
-                    "limit": limits.get("unbalance", 2.0),
-                })
+                summary["violations"].append(
+                    {
+                        "type": "unbalance",
+                        "channel": name,
+                        "value": unb,
+                        "limit": limits.get("unbalance", 2.0),
+                    }
+                )
 
         # 暂降检查
         for ch, data in valid_voltage_dip.items():
             dip = data.get("dip_percent", 0)
             if dip > limits.get("voltage_dip", 10.0):
-                summary["violations"].append({
-                    "type": "voltage_dip",
-                    "channel": ch,
-                    "value": dip,
-                    "limit": limits.get("voltage_dip", 10.0),
-                })
+                summary["violations"].append(
+                    {
+                        "type": "voltage_dip",
+                        "channel": ch,
+                        "value": dip,
+                        "limit": limits.get("voltage_dip", 10.0),
+                    }
+                )
 
         if summary["violations"]:
             summary["overall_status"] = "VIOLATION"
@@ -783,7 +912,9 @@ class PowerQualityAnalysisSkill(SkillBase):
         return summary
 
     @staticmethod
-    def _valid_indicator_results(results: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    def _valid_indicator_results(
+        results: Dict[str, Dict[str, Any]],
+    ) -> Dict[str, Dict[str, Any]]:
         """过滤掉仅包含 error 的占位结果，避免空分析被误判为 PASS。"""
         return {
             key: value
@@ -793,41 +924,61 @@ class PowerQualityAnalysisSkill(SkillBase):
 
     def _export_csv(self, pq_results: Dict, path: Path, limits: Dict):
         """导出CSV"""
-        with open(path, 'w', newline='', encoding='utf-8') as f:
+        with open(path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
 
             # 谐波
             if pq_results.get("harmonic"):
-                writer.writerow(["indicator", "channel", "thd_percent", "limit", "status"])
+                writer.writerow(
+                    ["indicator", "channel", "thd_percent", "limit", "status"]
+                )
                 for ch, data in pq_results["harmonic"].items():
                     if "error" not in data:
                         thd = data.get("thd", 0)
                         status = "PASS" if thd <= limits.get("thd", 5.0) else "FAIL"
-                        writer.writerow(["harmonic", ch, thd, limits.get("thd", 5.0), status])
+                        writer.writerow(
+                            ["harmonic", ch, thd, limits.get("thd", 5.0), status]
+                        )
 
             # 不平衡
             if pq_results.get("unbalance"):
                 writer.writerow([])
-                writer.writerow(["indicator", "channel", "unbalance_percent", "limit", "status"])
+                writer.writerow(
+                    ["indicator", "channel", "unbalance_percent", "limit", "status"]
+                )
                 for name, data in pq_results["unbalance"].items():
                     if "error" not in data:
                         unb = data.get("unbalance_percent", 0)
-                        status = "PASS" if unb <= limits.get("unbalance", 2.0) else "FAIL"
-                        writer.writerow(["unbalance", name, unb, limits.get("unbalance", 2.0), status])
+                        status = (
+                            "PASS" if unb <= limits.get("unbalance", 2.0) else "FAIL"
+                        )
+                        writer.writerow(
+                            [
+                                "unbalance",
+                                name,
+                                unb,
+                                limits.get("unbalance", 2.0),
+                                status,
+                            ]
+                        )
 
             # 暂降
             if pq_results.get("voltage_dip"):
                 writer.writerow([])
-                writer.writerow(["indicator", "channel", "dip_percent", "severity", "limit"])
+                writer.writerow(
+                    ["indicator", "channel", "dip_percent", "severity", "limit"]
+                )
                 for ch, data in pq_results["voltage_dip"].items():
                     if "error" not in data:
-                        writer.writerow([
-                            "voltage_dip",
-                            ch,
-                            data.get("dip_percent", 0),
-                            data.get("severity", ""),
-                            limits.get("voltage_dip", 10.0),
-                        ])
+                        writer.writerow(
+                            [
+                                "voltage_dip",
+                                ch,
+                                data.get("dip_percent", 0),
+                                data.get("severity", ""),
+                                limits.get("voltage_dip", 10.0),
+                            ]
+                        )
 
     def _generate_report(self, data: Dict, path: Path):
         """生成Markdown报告"""
@@ -852,27 +1003,31 @@ class PowerQualityAnalysisSkill(SkillBase):
         else:
             lines.append(f"⚠️ **发现 {summary.get('violation_count', 0)} 项超标**")
 
-        lines.extend([
-            "",
-            "## 评判标准",
-            "",
-            f"| 指标 | 限值 |",
-            f"|------|------|",
-            f"| THD | ≤{limits.get('thd', 5.0)}% |",
-            f"| 三相不平衡 | ≤{limits.get('unbalance', 2.0)}% |",
-            f"| 电压暂降 | ≤{limits.get('voltage_dip', 10.0)}% |",
-            f"| 闪变(Pst) | ≤{limits.get('flicker', 1.0)} |",
-            "",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 评判标准",
+                "",
+                f"| 指标 | 限值 |",
+                f"|------|------|",
+                f"| THD | ≤{limits.get('thd', 5.0)}% |",
+                f"| 三相不平衡 | ≤{limits.get('unbalance', 2.0)}% |",
+                f"| 电压暂降 | ≤{limits.get('voltage_dip', 10.0)}% |",
+                f"| 闪变(Pst) | ≤{limits.get('flicker', 1.0)} |",
+                "",
+            ]
+        )
 
         # 谐波
         if results.get("harmonic"):
-            lines.extend([
-                "## 谐波分析",
-                "",
-                "| 通道 | THD(%) | 状态 |",
-                "|------|--------|------|",
-            ])
+            lines.extend(
+                [
+                    "## 谐波分析",
+                    "",
+                    "| 通道 | THD(%) | 状态 |",
+                    "|------|--------|------|",
+                ]
+            )
             for ch, r in results["harmonic"].items():
                 if "error" not in r:
                     thd = r.get("thd", 0)
@@ -882,12 +1037,14 @@ class PowerQualityAnalysisSkill(SkillBase):
 
         # 不平衡
         if results.get("unbalance"):
-            lines.extend([
-                "## 三相不平衡分析",
-                "",
-                "| 通道组 | 不平衡度(%) | 状态 |",
-                "|--------|-------------|------|",
-            ])
+            lines.extend(
+                [
+                    "## 三相不平衡分析",
+                    "",
+                    "| 通道组 | 不平衡度(%) | 状态 |",
+                    "|--------|-------------|------|",
+                ]
+            )
             for name, r in results["unbalance"].items():
                 if "error" not in r:
                     unb = r.get("unbalance_percent", 0)
@@ -897,22 +1054,28 @@ class PowerQualityAnalysisSkill(SkillBase):
 
         # 暂降
         if results.get("voltage_dip"):
-            lines.extend([
-                "## 电压暂降分析",
-                "",
-                "| 通道 | 暂降幅度(%) | 严重程度 |",
-                "|------|-------------|----------|",
-            ])
+            lines.extend(
+                [
+                    "## 电压暂降分析",
+                    "",
+                    "| 通道 | 暂降幅度(%) | 严重程度 |",
+                    "|------|-------------|----------|",
+                ]
+            )
             for ch, r in results["voltage_dip"].items():
                 if "error" not in r:
-                    lines.append(f"| {ch} | {r.get('dip_percent', 0):.2f} | {r.get('severity', 'N/A')} |")
+                    lines.append(
+                        f"| {ch} | {r.get('dip_percent', 0):.2f} | {r.get('severity', 'N/A')} |"
+                    )
             lines.append("")
 
         # 建议
-        lines.extend([
-            "## 建议措施",
-            "",
-        ])
+        lines.extend(
+            [
+                "## 建议措施",
+                "",
+            ]
+        )
 
         if summary.get("violations"):
             lines.append("针对超标项目:")
@@ -926,14 +1089,16 @@ class PowerQualityAnalysisSkill(SkillBase):
         else:
             lines.append("✅ **电能质量良好，无需额外措施**")
 
-        lines.extend([
-            "",
-            "## 指标说明",
-            "",
-            "- **THD**: 总谐波畸变率",
-            "- **三相不平衡**: 负序分量与正序分量之比",
-            "- **电压暂降**: 电压有效值突然下降至正常值的90%以下",
-            "- **闪变**: 灯光亮度变化引起的主观视觉不适",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 指标说明",
+                "",
+                "- **THD**: 总谐波畸变率",
+                "- **三相不平衡**: 负序分量与正序分量之比",
+                "- **电压暂降**: 电压有效值突然下降至正常值的90%以下",
+                "- **闪变**: 灯光亮度变化引起的主观视觉不适",
+            ]
+        )
 
         path.write_text("\n".join(lines), encoding="utf-8")

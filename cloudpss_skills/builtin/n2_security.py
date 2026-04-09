@@ -17,8 +17,18 @@ from dataclasses import dataclass
 from datetime import datetime
 from itertools import combinations
 
-from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult
-from cloudpss_skills.core.auth_utils import setup_auth, DEFAULT_TIMEOUT
+from cloudpss_skills.core.base import (
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+)
+from cloudpss_skills.core.auth_utils import (
+    setup_auth,
+    DEFAULT_TIMEOUT,
+    load_or_fetch_model,
+    run_powerflow,
+)
 from cloudpss_skills.core.registry import register
 from cloudpss_skills.core.utils import parse_cloudpss_table
 
@@ -28,6 +38,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class N2ContingencyResult:
     """N-2故障场景结果"""
+
     branch1_id: str
     branch1_name: str
     branch2_id: str
@@ -96,16 +107,16 @@ class N2SecuritySkill(SkillBase):
                 "type": "object",
                 "properties": {
                     "token": {"type": "string"},
-                    "token_file": {"type": "string", "default": ".cloudpss_token"}
-                }
+                    "token_file": {"type": "string", "default": ".cloudpss_token"},
+                },
             },
             "model": {
                 "type": "object",
                 "required": ["rid"],
                 "properties": {
                     "rid": {"type": "string"},
-                    "source": {"enum": ["cloud", "local"], "default": "cloud"}
-                }
+                    "source": {"enum": ["cloud", "local"], "default": "cloud"},
+                },
             },
             "analysis": {
                 "type": "object",
@@ -113,7 +124,7 @@ class N2SecuritySkill(SkillBase):
                     "branches": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "要检查的支路列表，空表示全部"
+                        "description": "要检查的支路列表，空表示全部",
                     },
                     "branch_pairs": {
                         "type": "array",
@@ -121,9 +132,9 @@ class N2SecuritySkill(SkillBase):
                             "type": "array",
                             "items": {"type": "string"},
                             "minItems": 2,
-                            "maxItems": 2
+                            "maxItems": 2,
                         },
-                        "description": "指定要检查的支路对"
+                        "description": "指定要检查的支路对",
                     },
                     "check_voltage": {"type": "boolean", "default": True},
                     "check_thermal": {"type": "boolean", "default": True},
@@ -131,18 +142,18 @@ class N2SecuritySkill(SkillBase):
                     "voltage_max": {"type": "number", "default": 1.05},
                     "thermal_limit": {"type": "number", "default": 1.0},
                     "max_combinations": {"type": "number", "default": 100},
-                    "include_critical_pairs": {"type": "boolean", "default": True}
-                }
+                    "include_critical_pairs": {"type": "boolean", "default": True},
+                },
             },
             "output": {
                 "type": "object",
                 "properties": {
                     "format": {"enum": ["json", "console"], "default": "json"},
                     "path": {"type": "string"},
-                    "prefix": {"type": "string", "default": "n2_security"}
-                }
-            }
-        }
+                    "prefix": {"type": "string", "default": "n2_security"},
+                },
+            },
+        },
     }
 
     def validate(self, config: Dict) -> ValidationResult:
@@ -176,11 +187,7 @@ class N2SecuritySkill(SkillBase):
             logger.info(f"开始N-2安全校核: {model_rid}")
 
             # 获取模型
-            from cloudpss import Model
-            if model_config.get("source") == "local":
-                model = Model.load(model_rid)
-            else:
-                model = Model.fetch(model_rid)
+            model = load_or_fetch_model(model_config, config)
 
             logger.info(f"模型: {model.name}")
 
@@ -198,11 +205,13 @@ class N2SecuritySkill(SkillBase):
                     status=SkillStatus.FAILED,
                     start_time=start_time,
                     end_time=datetime.now(),
-                    error="无有效的N-2故障场景"
+                    error="无有效的N-2故障场景",
                 )
 
             # 执行N-2校核
-            results = self._run_n2_analysis(model_rid, model_config, scenarios, analysis_config)
+            results = self._run_n2_analysis(
+                model_rid, model_config, scenarios, analysis_config
+            )
 
             # 生成报告
             report = self._generate_report(model, scenarios, results, analysis_config)
@@ -220,17 +229,26 @@ class N2SecuritySkill(SkillBase):
                 status=SkillStatus.SUCCESS if failed_count == 0 else SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data=report
+                data=report,
             )
 
-        except (KeyError, AttributeError, ConnectionError, RuntimeError, TimeoutError, FileNotFoundError, ValueError, TypeError) as e:
+        except (
+            KeyError,
+            AttributeError,
+            ConnectionError,
+            RuntimeError,
+            TimeoutError,
+            FileNotFoundError,
+            ValueError,
+            TypeError,
+        ) as e:
             logger.error(f"N-2安全校核失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                error=str(e)
+                error=str(e),
             )
 
     def _get_branches(self, model, analysis_config: Dict) -> List[Dict]:
@@ -251,20 +269,28 @@ class N2SecuritySkill(SkillBase):
         for comp_id, comp in components.items():
             definition = getattr(comp, "definition", "")
             if any(bt in definition for bt in branch_types):
-                branches.append({
-                    "id": comp_id,
-                    "name": self._get_branch_display_name(comp, comp_id),
-                    "type": definition.split("/")[-1],
-                })
+                branches.append(
+                    {
+                        "id": comp_id,
+                        "name": self._get_branch_display_name(comp, comp_id),
+                        "type": definition.split("/")[-1],
+                    }
+                )
 
         # 过滤指定支路
         target_branches = analysis_config.get("branches", [])
         if target_branches:
-            branches = [b for b in branches if b["name"] in target_branches or b["id"] in target_branches]
+            branches = [
+                b
+                for b in branches
+                if b["name"] in target_branches or b["id"] in target_branches
+            ]
 
         return branches
 
-    def _generate_n2_scenarios(self, branches: List[Dict], analysis_config: Dict) -> List[Tuple[Dict, Dict]]:
+    def _generate_n2_scenarios(
+        self, branches: List[Dict], analysis_config: Dict
+    ) -> List[Tuple[Dict, Dict]]:
         """生成N-2故障场景"""
         # 检查是否指定了具体的支路对
         branch_pairs = analysis_config.get("branch_pairs", [])
@@ -273,8 +299,14 @@ class N2SecuritySkill(SkillBase):
             # 使用指定的支路对
             scenarios = []
             for pair in branch_pairs:
-                b1 = next((b for b in branches if b["name"] == pair[0] or b["id"] == pair[0]), None)
-                b2 = next((b for b in branches if b["name"] == pair[1] or b["id"] == pair[1]), None)
+                b1 = next(
+                    (b for b in branches if b["name"] == pair[0] or b["id"] == pair[0]),
+                    None,
+                )
+                b2 = next(
+                    (b for b in branches if b["name"] == pair[1] or b["id"] == pair[1]),
+                    None,
+                )
                 if b1 and b2 and b1["id"] != b2["id"]:
                     scenarios.append((b1, b2))
             return scenarios
@@ -287,16 +319,22 @@ class N2SecuritySkill(SkillBase):
 
         # 如果组合数超过限制，优先选择关键支路组合
         if len(all_combinations) > max_combinations:
-            logger.warning(f"N-2组合数({len(all_combinations)})超过限制({max_combinations})，将优先检查关键组合")
+            logger.warning(
+                f"N-2组合数({len(all_combinations)})超过限制({max_combinations})，将优先检查关键组合"
+            )
             # 简化策略：优先选择与同一母线相连的支路
             all_combinations = all_combinations[:max_combinations]
 
         return all_combinations
 
-    def _run_n2_analysis(self, model_rid: str, model_config: Dict,
-                         scenarios: List[Tuple[Dict, Dict]], analysis_config: Dict) -> List[N2ContingencyResult]:
+    def _run_n2_analysis(
+        self,
+        model_rid: str,
+        model_config: Dict,
+        scenarios: List[Tuple[Dict, Dict]],
+        analysis_config: Dict,
+    ) -> List[N2ContingencyResult]:
         """执行N-2分析"""
-        from cloudpss import Model
         import time
 
         results = []
@@ -307,38 +345,41 @@ class N2SecuritySkill(SkillBase):
         thermal_limit = analysis_config.get("thermal_limit", 1.0)
 
         for i, (branch1, branch2) in enumerate(scenarios, 1):
-            logger.info(f"[{i}/{len(scenarios)}] N-2故障: {branch1['name']} + {branch2['name']}")
+            logger.info(
+                f"[{i}/{len(scenarios)}] N-2故障: {branch1['name']} + {branch2['name']}"
+            )
 
             try:
                 # 重新加载模型
-                if model_config.get("source") == "local":
-                    working_model = Model.load(model_rid)
-                else:
-                    working_model = Model.fetch(model_rid)
+                working_model = load_or_fetch_model(model_config, analysis_config)
 
                 # 移除两个支路
                 try:
                     working_model.removeComponent(branch1["id"])
                     working_model.removeComponent(branch2["id"])
-                    logger.info(f"  -> 已移除支路: {branch1['name']}, {branch2['name']}")
+                    logger.info(
+                        f"  -> 已移除支路: {branch1['name']}, {branch2['name']}"
+                    )
                 except (KeyError, AttributeError) as e:
                     logger.warning(f"  -> 移除支路失败: {e}")
-                    results.append(N2ContingencyResult(
-                        branch1_id=branch1["id"],
-                        branch1_name=branch1["name"],
-                        branch2_id=branch2["id"],
-                        branch2_name=branch2["name"],
-                        status="error",
-                        converged=False,
-                        violation=f"模型修改失败: {e}",
-                        max_voltage_pu=None,
-                        min_voltage_pu=None,
-                        max_loading_pu=None
-                    ))
+                    results.append(
+                        N2ContingencyResult(
+                            branch1_id=branch1["id"],
+                            branch1_name=branch1["name"],
+                            branch2_id=branch2["id"],
+                            branch2_name=branch2["name"],
+                            status="error",
+                            converged=False,
+                            violation=f"模型修改失败: {e}",
+                            max_voltage_pu=None,
+                            min_voltage_pu=None,
+                            max_loading_pu=None,
+                        )
+                    )
                     continue
 
                 # 运行潮流计算
-                job = working_model.runPowerFlow()
+                job = run_powerflow(working_model, analysis_config)
 
                 # 等待完成
                 max_wait = 60
@@ -355,18 +396,20 @@ class N2SecuritySkill(SkillBase):
 
                 if status != 1:
                     # 潮流不收敛
-                    results.append(N2ContingencyResult(
-                        branch1_id=branch1["id"],
-                        branch1_name=branch1["name"],
-                        branch2_id=branch2["id"],
-                        branch2_name=branch2["name"],
-                        status="failed",
-                        converged=False,
-                        violation="潮流不收敛",
-                        max_voltage_pu=None,
-                        min_voltage_pu=None,
-                        max_loading_pu=None
-                    ))
+                    results.append(
+                        N2ContingencyResult(
+                            branch1_id=branch1["id"],
+                            branch1_name=branch1["name"],
+                            branch2_id=branch2["id"],
+                            branch2_name=branch2["name"],
+                            status="failed",
+                            converged=False,
+                            violation="潮流不收敛",
+                            max_voltage_pu=None,
+                            min_voltage_pu=None,
+                            max_loading_pu=None,
+                        )
+                    )
                     logger.error(f"  -> N-2失败: 潮流不收敛")
                     continue
 
@@ -387,13 +430,17 @@ class N2SecuritySkill(SkillBase):
                         # 解析CloudPSS列式数据格式
                         if buses and len(buses) > 0:
                             bus_data = buses[0]
-                            if isinstance(bus_data, dict) and 'data' in bus_data:
-                                columns = bus_data['data'].get('columns', [])
+                            if isinstance(bus_data, dict) and "data" in bus_data:
+                                columns = bus_data["data"].get("columns", [])
                                 vm_column = None
                                 for col in columns:
-                                    col_name = col.get('name', '')
-                                    if col_name == 'Vm' or 'V</i><sub>m</sub>' in col_name or col_name.startswith('Vm'):
-                                        vm_column = col.get('data', [])
+                                    col_name = col.get("name", "")
+                                    if (
+                                        col_name == "Vm"
+                                        or "V</i><sub>m</sub>" in col_name
+                                        or col_name.startswith("Vm")
+                                    ):
+                                        vm_column = col.get("data", [])
                                         break
                                 if vm_column:
                                     for vm in vm_column:
@@ -439,7 +486,13 @@ class N2SecuritySkill(SkillBase):
 
                         if thermal_result["violation"]:
                             violation = thermal_result["violation"]
-                    except (KeyError, AttributeError, RuntimeError, TypeError, ValueError) as e:
+                    except (
+                        KeyError,
+                        AttributeError,
+                        RuntimeError,
+                        TypeError,
+                        ValueError,
+                    ) as e:
                         logger.warning(f"热稳定检查失败: {e}")
                         violation = f"热稳定校核失败: {e}"
 
@@ -449,39 +502,45 @@ class N2SecuritySkill(SkillBase):
                     logger.error(f"  -> N-2失败: {violation}")
                 elif check_thermal and not thermal_supported:
                     status = "error"
-                    violation = "热稳定校核未完成：支路缺少额定容量/电流参数，不能宣称N-2通过"
+                    violation = (
+                        "热稳定校核未完成：支路缺少额定容量/电流参数，不能宣称N-2通过"
+                    )
                     logger.error(f"  -> N-2不完整: {violation}")
                 else:
                     status = "passed"
                     logger.info(f"  -> N-2通过")
 
-                results.append(N2ContingencyResult(
-                    branch1_id=branch1["id"],
-                    branch1_name=branch1["name"],
-                    branch2_id=branch2["id"],
-                    branch2_name=branch2["name"],
-                    status=status,
-                    converged=True,
-                    violation=violation,
-                    max_voltage_pu=max_v,
-                    min_voltage_pu=min_v,
-                    max_loading_pu=max_load
-                ))
+                results.append(
+                    N2ContingencyResult(
+                        branch1_id=branch1["id"],
+                        branch1_name=branch1["name"],
+                        branch2_id=branch2["id"],
+                        branch2_name=branch2["name"],
+                        status=status,
+                        converged=True,
+                        violation=violation,
+                        max_voltage_pu=max_v,
+                        min_voltage_pu=min_v,
+                        max_loading_pu=max_load,
+                    )
+                )
 
             except (KeyError, AttributeError) as e:
                 logger.error(f"  -> N-2异常: {e}")
-                results.append(N2ContingencyResult(
-                    branch1_id=branch1["id"],
-                    branch1_name=branch1["name"],
-                    branch2_id=branch2["id"],
-                    branch2_name=branch2["name"],
-                    status="error",
-                    converged=False,
-                    violation=str(e),
-                    max_voltage_pu=None,
-                    min_voltage_pu=None,
-                    max_loading_pu=None
-                ))
+                results.append(
+                    N2ContingencyResult(
+                        branch1_id=branch1["id"],
+                        branch1_name=branch1["name"],
+                        branch2_id=branch2["id"],
+                        branch2_name=branch2["name"],
+                        status="error",
+                        converged=False,
+                        violation=str(e),
+                        max_voltage_pu=None,
+                        min_voltage_pu=None,
+                        max_loading_pu=None,
+                    )
+                )
 
         return results
 
@@ -516,9 +575,13 @@ class N2SecuritySkill(SkillBase):
         except (TypeError, ValueError):
             return None
 
-    def _evaluate_thermal_loading(self, model: Any, pf_result: Any, thermal_limit: float) -> Dict[str, Any]:
+    def _evaluate_thermal_loading(
+        self, model: Any, pf_result: Any, thermal_limit: float
+    ) -> Dict[str, Any]:
         """基于真实潮流支路表和元件额定值计算负载率。"""
-        branch_tables = pf_result.getBranches() if hasattr(pf_result, "getBranches") else None
+        branch_tables = (
+            pf_result.getBranches() if hasattr(pf_result, "getBranches") else None
+        )
         if not branch_tables:
             raise RuntimeError("潮流结果缺少支路表")
 
@@ -547,7 +610,11 @@ class N2SecuritySkill(SkillBase):
             rating_mva = None
             if "Transformer" in definition:
                 rating_mva = self._read_numeric_arg(args, "Tmva")
-            elif "TransmissionLine" in definition or definition.endswith("/line") or definition.endswith("/3pline"):
+            elif (
+                "TransmissionLine" in definition
+                or definition.endswith("/line")
+                or definition.endswith("/3pline")
+            ):
                 i_rated = self._read_numeric_arg(args, "Irated")
                 v_base = self._read_numeric_arg(args, "Vbase")
                 if i_rated and i_rated > 0 and v_base and v_base > 0:
@@ -575,8 +642,13 @@ class N2SecuritySkill(SkillBase):
             "unsupported_count": unsupported_count,
         }
 
-    def _generate_report(self, model, scenarios: List[Tuple[Dict, Dict]],
-                        results: List[N2ContingencyResult], analysis_config: Dict) -> Dict:
+    def _generate_report(
+        self,
+        model,
+        scenarios: List[Tuple[Dict, Dict]],
+        results: List[N2ContingencyResult],
+        analysis_config: Dict,
+    ) -> Dict:
         """生成报告"""
         passed = sum(1 for r in results if r.status == "passed")
         failed = sum(1 for r in results if r.status == "failed")
@@ -587,14 +659,17 @@ class N2SecuritySkill(SkillBase):
             {
                 "branch1": r.branch1_name,
                 "branch2": r.branch2_name,
-                "violation": r.violation
+                "violation": r.violation,
             }
-            for r in results if r.status == "failed"
+            for r in results
+            if r.status == "failed"
         ]
 
         # 生成统计信息
         if results:
-            converged_results = [r for r in results if r.converged and r.max_voltage_pu is not None]
+            converged_results = [
+                r for r in results if r.converged and r.max_voltage_pu is not None
+            ]
             if converged_results:
                 voltage_stats = {
                     "max_overall": max(r.max_voltage_pu for r in converged_results),
@@ -636,7 +711,7 @@ class N2SecuritySkill(SkillBase):
                     "max_loading_pu": r.max_loading_pu,
                 }
                 for r in results
-            ]
+            ],
         }
 
         return report
@@ -688,7 +763,9 @@ class N2SecuritySkill(SkillBase):
         if report.get("critical_pairs"):
             lines.append(f"\n关键故障对 ({len(report['critical_pairs'])}):")
             for pair in report["critical_pairs"][:5]:  # 只显示前5个
-                lines.append(f"  - {pair['branch1']} + {pair['branch2']}: {pair['violation']}")
+                lines.append(
+                    f"  - {pair['branch1']} + {pair['branch2']}: {pair['violation']}"
+                )
 
         lines.append("=" * 70)
 

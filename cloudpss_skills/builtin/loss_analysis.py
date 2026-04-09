@@ -14,7 +14,14 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult, Artifact
+from cloudpss_skills.core.base import (
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    Artifact,
+)
+from cloudpss_skills.core.auth_utils import run_powerflow, fetch_model_by_rid
 from cloudpss_skills.core.registry import register
 from cloudpss_skills.core.utils import get_components_by_type
 
@@ -24,24 +31,26 @@ logger = logging.getLogger(__name__)
 @dataclass
 class BranchLoss:
     """支路损耗数据类"""
+
     branch_id: str
     from_bus: str
     to_bus: str
-    p_loss_mw: float          # 有功损耗(MW)
-    q_loss_mvar: float        # 无功损耗(MVar)
-    current_ka: float         # 电流(kA)
-    loading_percent: float    # 负载率(%)
+    p_loss_mw: float  # 有功损耗(MW)
+    q_loss_mvar: float  # 无功损耗(MVar)
+    current_ka: float  # 电流(kA)
+    loading_percent: float  # 负载率(%)
 
 
 @dataclass
 class TransformerLoss:
     """变压器损耗数据类"""
+
     transformer_id: str
     hv_bus: str
     lv_bus: str
-    core_loss_mw: Optional[float]       # 铁芯损耗(MW)
-    copper_loss_mw: Optional[float]     # 铜损(MW)
-    total_loss_mw: float      # 总损耗(MW)
+    core_loss_mw: Optional[float]  # 铁芯损耗(MW)
+    copper_loss_mw: Optional[float]  # 铜损(MW)
+    total_loss_mw: float  # 总损耗(MW)
     reactive_loss_mvar: float = 0.0
     breakdown_verified: bool = False
 
@@ -86,15 +95,15 @@ class LossAnalysisSkill(SkillBase):
                 "required": ["rid"],
                 "properties": {
                     "rid": {"type": "string"},
-                    "config_index": {"type": "integer", "default": 0}
-                }
+                    "config_index": {"type": "integer", "default": 0},
+                },
             },
             "auth": {
                 "type": "object",
                 "properties": {
                     "token": {"type": "string"},
-                    "token_file": {"type": "string"}
-                }
+                    "token_file": {"type": "string"},
+                },
             },
             "analysis": {
                 "type": "object",
@@ -105,16 +114,17 @@ class LossAnalysisSkill(SkillBase):
                             "enabled": {"type": "boolean", "default": True},
                             "components": {
                                 "type": "array",
-                                "items": {"type": "string", "enum": ["lines", "transformers", "shunts"]},
-                                "default": ["lines", "transformers"]
-                            }
-                        }
+                                "items": {
+                                    "type": "string",
+                                    "enum": ["lines", "transformers", "shunts"],
+                                },
+                                "default": ["lines", "transformers"],
+                            },
+                        },
                     },
                     "loss_sensitivity": {
                         "type": "object",
-                        "properties": {
-                            "enabled": {"type": "boolean", "default": True}
-                        }
+                        "properties": {"enabled": {"type": "boolean", "default": True}},
                     },
                     "loss_optimization": {
                         "type": "object",
@@ -122,21 +132,28 @@ class LossAnalysisSkill(SkillBase):
                             "enabled": {"type": "boolean", "default": True},
                             "method": {
                                 "type": "string",
-                                "enum": ["reactive_power_optimization", "generation_dispatch"],
-                                "default": "reactive_power_optimization"
-                            }
-                        }
-                    }
-                }
+                                "enum": [
+                                    "reactive_power_optimization",
+                                    "generation_dispatch",
+                                ],
+                                "default": "reactive_power_optimization",
+                            },
+                        },
+                    },
+                },
             },
             "output": {
                 "type": "object",
                 "properties": {
-                    "format": {"type": "string", "enum": ["json", "yaml"], "default": "json"},
-                    "save_path": {"type": "string"}
-                }
-            }
-        }
+                    "format": {
+                        "type": "string",
+                        "enum": ["json", "yaml"],
+                        "default": "json",
+                    },
+                    "save_path": {"type": "string"},
+                },
+            },
+        },
     }
 
     def __init__(self):
@@ -175,7 +192,9 @@ class LossAnalysisSkill(SkillBase):
 
             # 支路损耗计算
             if analysis_config.get("loss_calculation", {}).get("enabled", True):
-                components = analysis_config.get("loss_calculation", {}).get("components", ["lines", "transformers"])
+                components = analysis_config.get("loss_calculation", {}).get(
+                    "components", ["lines", "transformers"]
+                )
 
                 if "lines" in components:
                     logger.info("计算线路损耗...")
@@ -189,22 +208,30 @@ class LossAnalysisSkill(SkillBase):
             sensitivity_results = {}
             if analysis_config.get("loss_sensitivity", {}).get("enabled", True):
                 logger.info("计算网损灵敏度...")
-                sensitivity_results = self._calculate_loss_sensitivity(power_flow_result)
+                sensitivity_results = self._calculate_loss_sensitivity(
+                    power_flow_result
+                )
 
             # 无功优化建议
             optimization_results = {}
             if analysis_config.get("loss_optimization", {}).get("enabled", True):
                 logger.info("生成无功优化建议...")
-                optimization_results = self._generate_optimization_suggestions(power_flow_result)
+                optimization_results = self._generate_optimization_suggestions(
+                    power_flow_result
+                )
 
             # 构建结果
             result_data = {
                 "model": model_rid,
                 "summary": self._generate_summary(),
-                "branch_losses": [self._branch_to_dict(bl) for bl in self.branch_losses],
-                "transformer_losses": [self._transformer_to_dict(tl) for tl in self.transformer_losses],
+                "branch_losses": [
+                    self._branch_to_dict(bl) for bl in self.branch_losses
+                ],
+                "transformer_losses": [
+                    self._transformer_to_dict(tl) for tl in self.transformer_losses
+                ],
                 "sensitivity_analysis": sensitivity_results,
-                "optimization_suggestions": optimization_results
+                "optimization_suggestions": optimization_results,
             }
 
             logger.info("网损分析完成")
@@ -213,28 +240,35 @@ class LossAnalysisSkill(SkillBase):
                 status=SkillStatus.SUCCESS,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data=result_data
+                data=result_data,
             )
 
-        except (KeyError, AttributeError, ConnectionError, RuntimeError, FileNotFoundError, TypeError, ValueError) as e:
+        except (
+            KeyError,
+            AttributeError,
+            ConnectionError,
+            RuntimeError,
+            FileNotFoundError,
+            TypeError,
+            ValueError,
+        ) as e:
             logger.error(f"网损分析失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                error=str(e)
+                error=str(e),
             )
 
     def _run_power_flow(self) -> Dict:
         """运行潮流计算"""
-        from cloudpss import Model
-
-        job = self.model.runPowerFlow()
+        job = run_powerflow(self.model, self.config)
         status = job.status()
 
         # 等待完成
         import time
+
         max_wait = 60
         elapsed = 0
         while status == 0 and elapsed < max_wait:  # 0 = running
@@ -253,7 +287,7 @@ class LossAnalysisSkill(SkillBase):
             from cloudpss_skills.core.utils import parse_cloudpss_table
 
             # 使用duck typing检查是否有getBranches方法
-            if hasattr(power_flow_result, 'getBranches'):
+            if hasattr(power_flow_result, "getBranches"):
                 # 获取支路表格数据
                 branches_tables = power_flow_result.getBranches()
 
@@ -269,9 +303,9 @@ class LossAnalysisSkill(SkillBase):
                     for branch in branches_data:
                         try:
                             # 提取支路数据
-                            branch_name = branch.get('Branch', 'Unknown')
-                            from_bus = branch.get('From bus', '')
-                            to_bus = branch.get('To bus', '')
+                            branch_name = branch.get("Branch", "Unknown")
+                            from_bus = branch.get("From bus", "")
+                            to_bus = branch.get("To bus", "")
 
                             # 提取损耗数据 - 列名已被parse_cloudpss_table清理
                             # HTML格式 '<i>P</i><sub>loss</sub> / MW' -> 'Ploss'
@@ -279,8 +313,22 @@ class LossAnalysisSkill(SkillBase):
                             q_loss = 0.0
 
                             # 尝试可能的列名变体
-                            p_loss_keys = ['Ploss', 'P_loss', 'P_Loss', 'PLoss', 'loss_p', 'LossP']
-                            q_loss_keys = ['Qloss', 'Q_loss', 'Q_Loss', 'QLoss', 'loss_q', 'LossQ']
+                            p_loss_keys = [
+                                "Ploss",
+                                "P_loss",
+                                "P_Loss",
+                                "PLoss",
+                                "loss_p",
+                                "LossP",
+                            ]
+                            q_loss_keys = [
+                                "Qloss",
+                                "Q_loss",
+                                "Q_Loss",
+                                "QLoss",
+                                "loss_q",
+                                "LossQ",
+                            ]
 
                             for key in p_loss_keys:
                                 if key in branch and branch[key] is not None:
@@ -305,7 +353,7 @@ class LossAnalysisSkill(SkillBase):
                             loading = 0.0
 
                             # 尝试提取电流 (I / kA)
-                            i_keys = ['I', 'Ika', 'I_ka', 'Current', 'current']
+                            i_keys = ["I", "Ika", "I_ka", "Current", "current"]
                             for key in i_keys:
                                 if key in branch and branch[key] is not None:
                                     try:
@@ -323,10 +371,10 @@ class LossAnalysisSkill(SkillBase):
                                     p_loss_mw=abs(p_loss),
                                     q_loss_mvar=abs(q_loss),
                                     current_ka=i_ka,
-                                    loading_percent=min(loading, 100)
+                                    loading_percent=min(loading, 100),
                                 )
                                 self.branch_losses.append(loss)
-                        except (KeyError) as e:
+                        except KeyError as e:
                             logger.warning(f"处理支路数据失败: {e}")
 
                 logger.info(f"从潮流结果提取了{len(self.branch_losses)}条线路的损耗")
@@ -334,7 +382,7 @@ class LossAnalysisSkill(SkillBase):
             if len(self.branch_losses) == 0:
                 raise RuntimeError("未从真实潮流结果提取到线路损耗")
 
-        except (KeyError) as e:
+        except KeyError as e:
             logger.error(f"计算线路损耗失败: {e}")
             raise RuntimeError("从潮流结果提取线路损耗失败") from e
 
@@ -343,15 +391,24 @@ class LossAnalysisSkill(SkillBase):
         try:
             from cloudpss_skills.core.utils import parse_cloudpss_table
 
-            branch_tables = power_flow_result.getBranches() if hasattr(power_flow_result, "getBranches") else None
+            branch_tables = (
+                power_flow_result.getBranches()
+                if hasattr(power_flow_result, "getBranches")
+                else None
+            )
             if not branch_tables:
                 raise RuntimeError("潮流结果中缺少支路表，无法提取变压器损耗")
 
             branch_rows = parse_cloudpss_table(branch_tables)
             transformer_component_count = 0
-            for transformer_rid in ["model/CloudPSS/_newTransformer_3p2w", "model/CloudPSS/_newTransformer_3p"]:
+            for transformer_rid in [
+                "model/CloudPSS/_newTransformer_3p2w",
+                "model/CloudPSS/_newTransformer_3p",
+            ]:
                 try:
-                    transformer_component_count += len(get_components_by_type(self.model, transformer_rid))
+                    transformer_component_count += len(
+                        get_components_by_type(self.model, transformer_rid)
+                    )
                 except Exception as exc:
                     logger.debug(f"获取变压器组件 {transformer_rid} 失败: {exc}")
 
@@ -388,7 +445,9 @@ class LossAnalysisSkill(SkillBase):
                 )
 
             if transformer_component_count > 0 and not self.transformer_losses:
-                raise RuntimeError("模型包含变压器，但未能从真实潮流支路结果提取任何变压器损耗")
+                raise RuntimeError(
+                    "模型包含变压器，但未能从真实潮流支路结果提取任何变压器损耗"
+                )
 
             logger.info(f"从潮流结果提取了{len(self.transformer_losses)}台变压器的损耗")
 
@@ -403,9 +462,8 @@ class LossAnalysisSkill(SkillBase):
             "description": "网损对各节点无功注入的灵敏度",
             "method": "perturbation_analysis",
             "sensitivities": [
-                {"bus": f"Bus_{i}", "sensitivity": 0.01 * i}
-                for i in range(1, 11)
-            ]
+                {"bus": f"Bus_{i}", "sensitivity": 0.01 * i} for i in range(1, 11)
+            ],
         }
 
     def _generate_optimization_suggestions(self, power_flow_result) -> Dict:
@@ -415,24 +473,28 @@ class LossAnalysisSkill(SkillBase):
         suggestions = []
 
         if total_loss > 10:  # 如果网损大于10MW
-            suggestions.append({
-                "type": "reactive_power_compensation",
-                "priority": "high",
-                "description": "建议在关键母线增加无功补偿",
-                "expected_improvement": f"{total_loss * 0.1:.1f} MW"
-            })
+            suggestions.append(
+                {
+                    "type": "reactive_power_compensation",
+                    "priority": "high",
+                    "description": "建议在关键母线增加无功补偿",
+                    "expected_improvement": f"{total_loss * 0.1:.1f} MW",
+                }
+            )
 
-        suggestions.append({
-            "type": "voltage_optimization",
-            "priority": "medium",
-            "description": "优化电压水平可降低网损",
-            "expected_improvement": f"{total_loss * 0.05:.1f} MW"
-        })
+        suggestions.append(
+            {
+                "type": "voltage_optimization",
+                "priority": "medium",
+                "description": "优化电压水平可降低网损",
+                "expected_improvement": f"{total_loss * 0.05:.1f} MW",
+            }
+        )
 
         return {
             "current_total_loss_mw": total_loss,
             "optimization_potential": total_loss * 0.15,
-            "suggestions": suggestions
+            "suggestions": suggestions,
         }
 
     def _generate_summary(self) -> Dict:
@@ -442,7 +504,9 @@ class LossAnalysisSkill(SkillBase):
         total_loss = total_branch_loss + total_transformer_loss
 
         # 找出损耗最大的支路
-        top_loss_branches = sorted(self.branch_losses, key=lambda x: x.p_loss_mw, reverse=True)[:5]
+        top_loss_branches = sorted(
+            self.branch_losses, key=lambda x: x.p_loss_mw, reverse=True
+        )[:5]
 
         return {
             "total_loss_mw": round(total_loss, 2),
@@ -453,7 +517,7 @@ class LossAnalysisSkill(SkillBase):
             "top_loss_branches": [
                 {"id": bl.branch_id, "loss_mw": round(bl.p_loss_mw, 2)}
                 for bl in top_loss_branches
-            ]
+            ],
         }
 
     def _branch_to_dict(self, bl: BranchLoss) -> Dict:
@@ -465,7 +529,7 @@ class LossAnalysisSkill(SkillBase):
             "p_loss_mw": round(bl.p_loss_mw, 4),
             "q_loss_mvar": round(bl.q_loss_mvar, 4),
             "current_ka": round(bl.current_ka, 4),
-            "loading_percent": round(bl.loading_percent, 2)
+            "loading_percent": round(bl.loading_percent, 2),
         }
 
     def _transformer_to_dict(self, tl: TransformerLoss) -> Dict:
@@ -474,8 +538,12 @@ class LossAnalysisSkill(SkillBase):
             "transformer_id": tl.transformer_id,
             "hv_bus": tl.hv_bus,
             "lv_bus": tl.lv_bus,
-            "core_loss_mw": round(tl.core_loss_mw, 4) if tl.core_loss_mw is not None else None,
-            "copper_loss_mw": round(tl.copper_loss_mw, 4) if tl.copper_loss_mw is not None else None,
+            "core_loss_mw": round(tl.core_loss_mw, 4)
+            if tl.core_loss_mw is not None
+            else None,
+            "copper_loss_mw": round(tl.copper_loss_mw, 4)
+            if tl.copper_loss_mw is not None
+            else None,
             "total_loss_mw": round(tl.total_loss_mw, 4),
             "reactive_loss_mvar": round(tl.reactive_loss_mvar, 4),
             "breakdown_verified": tl.breakdown_verified,
@@ -515,7 +583,6 @@ class LossAnalysisSkill(SkillBase):
 
         setToken(token)
 
-    def _fetch_model(self, rid: str):
+    def _fetch_model(self, rid: str, config: Optional[Dict] = None):
         """获取模型"""
-        from cloudpss import Model
-        return Model.fetch(rid)
+        return fetch_model_by_rid(rid, config)

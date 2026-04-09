@@ -12,7 +12,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
 from cloudpss_skills.core.utils import fetch_job_with_result
 
 logger = logging.getLogger(__name__)
@@ -28,7 +36,9 @@ class CompareVisualizationSkill(SkillBase):
 
     @property
     def description(self) -> str:
-        return "生成多场景仿真结果的对比可视化图表，包括时序对比图、指标柱状图、热力图等"
+        return (
+            "生成多场景仿真结果的对比可视化图表，包括时序对比图、指标柱状图、热力图等"
+        )
 
     @property
     def config_schema(self) -> Dict[str, Any]:
@@ -56,7 +66,7 @@ class CompareVisualizationSkill(SkillBase):
                         "required": ["job_id"],
                     },
                     "minItems": 2,
-                    "description": "要对比的仿真任务列表，至少2个"
+                    "description": "要对比的仿真任务列表，至少2个",
                 },
                 "compare": {
                     "type": "object",
@@ -64,7 +74,7 @@ class CompareVisualizationSkill(SkillBase):
                         "channels": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "要对比的通道列表"
+                            "description": "要对比的通道列表",
                         },
                         "metrics": {
                             "type": "array",
@@ -95,7 +105,10 @@ class CompareVisualizationSkill(SkillBase):
                             "type": "object",
                             "properties": {
                                 "enabled": {"type": "boolean", "default": True},
-                                "group_by": {"enum": ["metric", "source"], "default": "metric"},
+                                "group_by": {
+                                    "enum": ["metric", "source"],
+                                    "default": "metric",
+                                },
                                 "title": {"type": "string"},
                             },
                         },
@@ -180,7 +193,9 @@ class CompareVisualizationSkill(SkillBase):
 
         if len(sources) < 2:
             result.add_error("至少需要2个仿真任务进行对比")
-            result.add_error("  示例: [{job_id: 'abc123', label: '基态'}, {job_id: 'def456', label: '故障态'}]")
+            result.add_error(
+                "  示例: [{job_id: 'abc123', label: '基态'}, {job_id: 'def456', label: '故障态'}]"
+            )
 
         for i, source in enumerate(sources):
             job_id = source.get("job_id", "")
@@ -193,7 +208,8 @@ class CompareVisualizationSkill(SkillBase):
         """执行对比可视化"""
         from cloudpss import setToken
         import matplotlib
-        matplotlib.use('Agg')
+
+        matplotlib.use("Agg")
         import matplotlib.pyplot as plt
         from matplotlib.gridspec import GridSpec
 
@@ -202,11 +218,9 @@ class CompareVisualizationSkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(
-                timestamp=datetime.now(),
-                level=level,
-                message=message
-            ))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
@@ -222,7 +236,9 @@ class CompareVisualizationSkill(SkillBase):
                     token = token_path.read_text().strip()
 
             if not token:
-                raise ValueError("未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件")
+                raise ValueError(
+                    "未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件"
+                )
 
             setToken(token)
             log("INFO", "认证成功")
@@ -243,20 +259,20 @@ class CompareVisualizationSkill(SkillBase):
             all_data = []
             for i, source in enumerate(sources):
                 job_id = source["job_id"]
-                label = source.get("label", f"场景{i+1}")
+                label = source.get("label", f"场景{i + 1}")
                 color = source.get("color")
 
                 log("INFO", f"获取任务: {label} ({job_id})")
 
                 try:
-                    job, result = fetch_job_with_result(job_id)
+                    job, result = fetch_job_with_result(job_id, config)
 
                     if result is None:
                         log("WARNING", f"  -> 任务 {label} 结果为空，跳过")
                         continue
 
                     # 提取EMT波形数据
-                    if hasattr(result, 'getPlots'):
+                    if hasattr(result, "getPlots"):
                         plots = list(result.getPlots())
                         task_data = {
                             "label": label,
@@ -272,16 +288,25 @@ class CompareVisualizationSkill(SkillBase):
                                 if target_channels and channel not in target_channels:
                                     continue
 
-                                channel_data = result.getPlotChannelData(plot_idx, channel)
+                                channel_data = result.getPlotChannelData(
+                                    plot_idx, channel
+                                )
                                 if channel_data:
-                                    x_data = channel_data.get('x', [])
-                                    y_data = channel_data.get('y', [])
+                                    x_data = channel_data.get("x", [])
+                                    y_data = channel_data.get("y", [])
 
                                     # 应用时间范围筛选
-                                    if time_range and (time_range.get("start") is not None or time_range.get("end") is not None):
-                                        start_t = time_range.get("start", float('-inf'))
-                                        end_t = time_range.get("end", float('inf'))
-                                        indices = [i for i, t in enumerate(x_data) if start_t <= t <= end_t]
+                                    if time_range and (
+                                        time_range.get("start") is not None
+                                        or time_range.get("end") is not None
+                                    ):
+                                        start_t = time_range.get("start", float("-inf"))
+                                        end_t = time_range.get("end", float("inf"))
+                                        indices = [
+                                            i
+                                            for i, t in enumerate(x_data)
+                                            if start_t <= t <= end_t
+                                        ]
                                         x_data = [x_data[i] for i in indices]
                                         y_data = [y_data[i] for i in indices]
 
@@ -294,11 +319,17 @@ class CompareVisualizationSkill(SkillBase):
                                         if "min" in metrics:
                                             channel_metrics["min"] = float(np.min(arr))
                                         if "mean" in metrics:
-                                            channel_metrics["mean"] = float(np.mean(arr))
+                                            channel_metrics["mean"] = float(
+                                                np.mean(arr)
+                                            )
                                         if "rms" in metrics:
-                                            channel_metrics["rms"] = float(np.sqrt(np.mean(arr**2)))
+                                            channel_metrics["rms"] = float(
+                                                np.sqrt(np.mean(arr**2))
+                                            )
                                         if "peak" in metrics:
-                                            channel_metrics["peak"] = float(np.max(np.abs(arr)))
+                                            channel_metrics["peak"] = float(
+                                                np.max(np.abs(arr))
+                                            )
 
                                         task_data["channels"][channel] = {
                                             "time": x_data,
@@ -356,8 +387,13 @@ class CompareVisualizationSkill(SkillBase):
                             if channel in task["channels"]:
                                 ch_data = task["channels"][channel]
                                 color = task.get("color")
-                                ax.plot(ch_data["time"], ch_data["values"],
-                                       label=task["label"], linewidth=1.5, color=color)
+                                ax.plot(
+                                    ch_data["time"],
+                                    ch_data["values"],
+                                    label=task["label"],
+                                    linewidth=1.5,
+                                    color=color,
+                                )
 
                         ax.set_title(f"{ts_title} - {channel}")
                         ax.set_xlabel("时间 (s)")
@@ -365,8 +401,11 @@ class CompareVisualizationSkill(SkillBase):
                         ax.legend(loc="best")
                         ax.grid(True, alpha=0.3)
 
-                        filepath = output_path / f"{filename_prefix}_timeseries_{channel}.{fmt}"
-                        plt.savefig(filepath, dpi=dpi, bbox_inches='tight')
+                        filepath = (
+                            output_path
+                            / f"{filename_prefix}_timeseries_{channel}.{fmt}"
+                        )
+                        plt.savefig(filepath, dpi=dpi, bbox_inches="tight")
                         plt.close()
 
                         generated_files.append(filepath)
@@ -382,7 +421,9 @@ class CompareVisualizationSkill(SkillBase):
                         n_cols = min(2, n_channels)
                         n_rows = (n_channels + n_cols - 1) // n_cols
 
-                        fig = plt.figure(figsize=(fig_width * n_cols, fig_height * n_rows / 2))
+                        fig = plt.figure(
+                            figsize=(fig_width * n_cols, fig_height * n_rows / 2)
+                        )
                         gs = GridSpec(n_rows, n_cols, figure=fig)
 
                         for idx, channel in enumerate(sorted(all_channel_names)):
@@ -392,8 +433,13 @@ class CompareVisualizationSkill(SkillBase):
                                 if channel in task["channels"]:
                                     ch_data = task["channels"][channel]
                                     color = task.get("color")
-                                    ax.plot(ch_data["time"], ch_data["values"],
-                                           label=task["label"], linewidth=1.2, color=color)
+                                    ax.plot(
+                                        ch_data["time"],
+                                        ch_data["values"],
+                                        label=task["label"],
+                                        linewidth=1.2,
+                                        color=color,
+                                    )
 
                             ax.set_title(channel)
                             ax.set_xlabel("时间 (s)")
@@ -401,11 +447,11 @@ class CompareVisualizationSkill(SkillBase):
                             ax.legend(loc="best", fontsize=8)
                             ax.grid(True, alpha=0.3)
 
-                        fig.suptitle(ts_title, fontsize=14, fontweight='bold')
+                        fig.suptitle(ts_title, fontsize=14, fontweight="bold")
                         plt.tight_layout()
 
                         filepath = output_path / f"{filename_prefix}_timeseries.{fmt}"
-                        plt.savefig(filepath, dpi=dpi, bbox_inches='tight')
+                        plt.savefig(filepath, dpi=dpi, bbox_inches="tight")
                         plt.close()
 
                         generated_files.append(filepath)
@@ -436,8 +482,15 @@ class CompareVisualizationSkill(SkillBase):
                         for channel in sorted(all_channel_names):
                             x_labels.append(channel)
                             for task in all_data:
-                                val = task["channels"].get(channel, {}).get("metrics", {}).get(metric)
-                                data_by_task[task["label"]].append(val if val is not None else 0)
+                                val = (
+                                    task["channels"]
+                                    .get(channel, {})
+                                    .get("metrics", {})
+                                    .get(metric)
+                                )
+                                data_by_task[task["label"]].append(
+                                    val if val is not None else 0
+                                )
 
                         # 绘制分组柱状图
                         x = np.arange(len(x_labels))
@@ -446,20 +499,25 @@ class CompareVisualizationSkill(SkillBase):
                         for i, task in enumerate(all_data):
                             offset = (i - len(all_data) / 2 + 0.5) * width
                             color = task.get("color")
-                            ax.bar(x + offset, data_by_task[task["label"]], width,
-                                  label=task["label"], color=color)
+                            ax.bar(
+                                x + offset,
+                                data_by_task[task["label"]],
+                                width,
+                                label=task["label"],
+                                color=color,
+                            )
 
                         ax.set_xlabel("通道")
                         ax.set_ylabel(metric.upper())
                         ax.set_title(f"{bar_title} - {metric.upper()}")
                         ax.set_xticks(x)
-                        ax.set_xticklabels(x_labels, rotation=45, ha='right')
+                        ax.set_xticklabels(x_labels, rotation=45, ha="right")
                         ax.legend(loc="best")
-                        ax.grid(True, alpha=0.3, axis='y')
+                        ax.grid(True, alpha=0.3, axis="y")
 
                         plt.tight_layout()
                         filepath = output_path / f"{filename_prefix}_bar_{metric}.{fmt}"
-                        plt.savefig(filepath, dpi=dpi, bbox_inches='tight')
+                        plt.savefig(filepath, dpi=dpi, bbox_inches="tight")
                         plt.close()
 
                         generated_files.append(filepath)
@@ -475,33 +533,46 @@ class CompareVisualizationSkill(SkillBase):
 
                         for channel in sorted(all_channel_names):
                             x_labels.append(channel)
-                            channel_metrics = task["channels"].get(channel, {}).get("metrics", {})
+                            channel_metrics = (
+                                task["channels"].get(channel, {}).get("metrics", {})
+                            )
                             for metric in metrics:
                                 val = channel_metrics.get(metric)
-                                data_by_metric[metric].append(val if val is not None else 0)
+                                data_by_metric[metric].append(
+                                    val if val is not None else 0
+                                )
 
                         x = np.arange(len(x_labels))
                         width = 0.8 / len(metrics)
 
                         for i, metric in enumerate(metrics):
                             offset = (i - len(metrics) / 2 + 0.5) * width
-                            ax.bar(x + offset, data_by_metric[metric], width, label=metric.upper())
+                            ax.bar(
+                                x + offset,
+                                data_by_metric[metric],
+                                width,
+                                label=metric.upper(),
+                            )
 
                         ax.set_xlabel("通道")
                         ax.set_ylabel("数值")
                         ax.set_title(f"{bar_title} - {task['label']}")
                         ax.set_xticks(x)
-                        ax.set_xticklabels(x_labels, rotation=45, ha='right')
+                        ax.set_xticklabels(x_labels, rotation=45, ha="right")
                         ax.legend(loc="best")
-                        ax.grid(True, alpha=0.3, axis='y')
+                        ax.grid(True, alpha=0.3, axis="y")
 
                         plt.tight_layout()
-                        filepath = output_path / f"{filename_prefix}_bar_{task['label']}.{fmt}"
-                        plt.savefig(filepath, dpi=dpi, bbox_inches='tight')
+                        filepath = (
+                            output_path / f"{filename_prefix}_bar_{task['label']}.{fmt}"
+                        )
+                        plt.savefig(filepath, dpi=dpi, bbox_inches="tight")
                         plt.close()
 
                         generated_files.append(filepath)
-                        log("INFO", f"  -> {task['label']}柱状图已保存: {filepath.name}")
+                        log(
+                            "INFO", f"  -> {task['label']}柱状图已保存: {filepath.name}"
+                        )
 
             # 图表3: 热力图
             heatmap_config = charts_config.get("heatmap", {})
@@ -511,10 +582,9 @@ class CompareVisualizationSkill(SkillBase):
                 heatmap_metric = heatmap_config.get("metric", "max")
                 heatmap_title = heatmap_config.get("title", "通道-场景热力图")
 
-                all_channel_names = sorted(set(
-                    ch for task in all_data
-                    for ch in task["channels"].keys()
-                ))
+                all_channel_names = sorted(
+                    set(ch for task in all_data for ch in task["channels"].keys())
+                )
                 all_channel_names = sorted(all_channel_names)
 
                 # 构建数据矩阵
@@ -524,33 +594,45 @@ class CompareVisualizationSkill(SkillBase):
                 for task in all_data:
                     row = []
                     for channel in all_channel_names:
-                        val = task["channels"].get(channel, {}).get("metrics", {}).get(heatmap_metric)
+                        val = (
+                            task["channels"]
+                            .get(channel, {})
+                            .get("metrics", {})
+                            .get(heatmap_metric)
+                        )
                         row.append(val if val is not None else 0)
                     heatmap_data.append(row)
                     task_labels.append(task["label"])
 
                 fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
-                im = ax.imshow(heatmap_data, cmap='YlOrRd', aspect='auto')
+                im = ax.imshow(heatmap_data, cmap="YlOrRd", aspect="auto")
 
                 # 设置刻度
                 ax.set_xticks(np.arange(len(all_channel_names)))
                 ax.set_yticks(np.arange(len(task_labels)))
-                ax.set_xticklabels(all_channel_names, rotation=45, ha='right')
+                ax.set_xticklabels(all_channel_names, rotation=45, ha="right")
                 ax.set_yticklabels(task_labels)
 
                 # 添加数值标注
                 for i in range(len(task_labels)):
                     for j in range(len(all_channel_names)):
-                        text = ax.text(j, i, f'{heatmap_data[i][j]:.2f}',
-                                      ha="center", va="center", color="black", fontsize=8)
+                        text = ax.text(
+                            j,
+                            i,
+                            f"{heatmap_data[i][j]:.2f}",
+                            ha="center",
+                            va="center",
+                            color="black",
+                            fontsize=8,
+                        )
 
                 ax.set_title(f"{heatmap_title} ({heatmap_metric.upper()})")
                 fig.colorbar(im, ax=ax, label=heatmap_metric.upper())
 
                 plt.tight_layout()
                 filepath = output_path / f"{filename_prefix}_heatmap.{fmt}"
-                plt.savefig(filepath, dpi=dpi, bbox_inches='tight')
+                plt.savefig(filepath, dpi=dpi, bbox_inches="tight")
                 plt.close()
 
                 generated_files.append(filepath)
@@ -570,17 +652,27 @@ class CompareVisualizationSkill(SkillBase):
                 radar_channels = sorted(list(all_channel_names))[:6]
 
                 if len(radar_channels) >= 3:
-                    fig, ax = plt.subplots(figsize=(fig_height, fig_height), subplot_kw=dict(projection='polar'))
+                    fig, ax = plt.subplots(
+                        figsize=(fig_height, fig_height),
+                        subplot_kw=dict(projection="polar"),
+                    )
 
                     # 设置角度
-                    angles = np.linspace(0, 2 * np.pi, len(radar_channels), endpoint=False).tolist()
+                    angles = np.linspace(
+                        0, 2 * np.pi, len(radar_channels), endpoint=False
+                    ).tolist()
                     angles += angles[:1]  # 闭合
 
                     for task in all_data:
                         values = []
                         for channel in radar_channels:
                             # 使用归一化后的峰值
-                            val = task["channels"].get(channel, {}).get("metrics", {}).get("peak", 0)
+                            val = (
+                                task["channels"]
+                                .get(channel, {})
+                                .get("metrics", {})
+                                .get("peak", 0)
+                            )
                             values.append(val)
 
                         # 归一化
@@ -589,17 +681,24 @@ class CompareVisualizationSkill(SkillBase):
                         values += values[:1]  # 闭合
 
                         color = task.get("color")
-                        ax.plot(angles, values, 'o-', linewidth=2, label=task["label"], color=color)
+                        ax.plot(
+                            angles,
+                            values,
+                            "o-",
+                            linewidth=2,
+                            label=task["label"],
+                            color=color,
+                        )
                         ax.fill(angles, values, alpha=0.1, color=color)
 
                     ax.set_xticks(angles[:-1])
                     ax.set_xticklabels(radar_channels)
                     ax.set_ylim(0, 1)
                     ax.set_title(radar_title, y=1.08)
-                    ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1))
+                    ax.legend(loc="upper right", bbox_to_anchor=(1.3, 1.1))
 
                     filepath = output_path / f"{filename_prefix}_radar.{fmt}"
-                    plt.savefig(filepath, dpi=dpi, bbox_inches='tight')
+                    plt.savefig(filepath, dpi=dpi, bbox_inches="tight")
                     plt.close()
 
                     generated_files.append(filepath)
@@ -607,12 +706,14 @@ class CompareVisualizationSkill(SkillBase):
 
             # 5. 生成产物记录
             for filepath in generated_files:
-                artifacts.append(Artifact(
-                    type=fmt,
-                    path=str(filepath),
-                    size=filepath.stat().st_size,
-                    description=f"对比图表: {filepath.name}"
-                ))
+                artifacts.append(
+                    Artifact(
+                        type=fmt,
+                        path=str(filepath),
+                        size=filepath.stat().st_size,
+                        description=f"对比图表: {filepath.name}",
+                    )
+                )
 
             if not generated_files:
                 raise RuntimeError("未生成任何图表，请检查通道筛选和图表配置")
@@ -638,7 +739,15 @@ class CompareVisualizationSkill(SkillBase):
                 },
             )
 
-        except (KeyError, AttributeError, ConnectionError, RuntimeError, FileNotFoundError, ValueError, TypeError) as e:
+        except (
+            KeyError,
+            AttributeError,
+            ConnectionError,
+            RuntimeError,
+            FileNotFoundError,
+            ValueError,
+            TypeError,
+        ) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
