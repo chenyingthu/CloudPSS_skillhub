@@ -20,6 +20,7 @@ import numpy as np
 from cloudpss import Model
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.auth_utils import fetch_model_by_rid
 from cloudpss_skills.core.utils import (
     calculate_dv_metrics,
     calculate_si_metric,
@@ -136,7 +137,7 @@ class DisturbanceSeveritySkill(SkillBase):
             model_rid = config["model"]["rid"]
             log("INFO", f"加载模型: {model_rid}")
 
-            model = Model.fetch(model_rid)
+            model = fetch_model_by_rid(model_rid, config)
 
             # 2. 获取或运行EMT仿真
             emt_result = self._get_emt_result(model, config)
@@ -266,7 +267,7 @@ class DisturbanceSeveritySkill(SkillBase):
         if "emt_result" in sim_config and sim_config["emt_result"]:
             result_id = sim_config["emt_result"]
             logger.info(f"使用已有EMT结果: {result_id}")
-            job, result = fetch_job_with_result(result_id)
+            job, result = fetch_job_with_result(result_id, config)
             if job.status() != 1:
                 raise RuntimeError(f"EMT任务未完成或失败，状态: {job.status()}")
             if result is None:

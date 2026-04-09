@@ -24,10 +24,15 @@ import numpy as np
 from cloudpss import Model
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.auth_utils import fetch_model_by_rid, run_emt
+from cloudpss_skills.core.emt_measurement_core import (
+    add_bus_voltage_measurements,
+    compute_vsi_from_voltage_channels,
+)
+from cloudpss_skills.core import sync_support_core as sync_core
 from cloudpss_skills.core.utils import (
+    fetch_job_with_result,
     get_bus_components,
-    get_time_index,
-    calculate_voltage_average,
     clean_component_key
 )
 
@@ -35,19 +40,11 @@ logger = logging.getLogger(__name__)
 
 
 def _matches_bus_identifier(candidate: str, target: str) -> bool:
-    candidate_norm = (candidate or "").strip().lower()
-    target_norm = (target or "").strip().lower()
-    if not candidate_norm or not target_norm:
-        return False
-    if candidate_norm == target_norm:
-        return True
-    compact_candidate = "".join(ch for ch in candidate_norm if ch.isalnum())
-    compact_target = "".join(ch for ch in target_norm if ch.isalnum())
-    if compact_candidate and compact_candidate == compact_target:
-        return True
-    candidate_digits = "".join(ch for ch in candidate_norm if ch.isdigit())
-    target_digits = "".join(ch for ch in target_norm if ch.isdigit())
-    return bool(candidate_digits and target_digits and candidate_digits == target_digits)
+    return sync_core.matches_bus_identifier(candidate, target)
+
+
+def _as_numeric(value: Any, default: float = 0.0) -> float:
+    return sync_core.as_numeric(value, default=default)
 
 
 @register
@@ -169,7 +166,7 @@ class VSIWeakBusSkill(SkillBase):
             logger.info(f"VSI弱母线分析开始 - 模型: {model_rid}")
             logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"加载模型: {model_rid}"))
 
-            model = Model.fetch(model_rid)
+            model = fetch_model_by_rid(model_rid, config)
 
             # 2. 筛选测试母线
             vsi_config = config.get("vsi_setup", {})
@@ -218,15 +215,14 @@ class VSIWeakBusSkill(SkillBase):
             sim_config = vsi_config.get("simulation", {})
             measure_indices = self._add_vsi_measures(
                 model,
-                vsi_q_keys,
+                test_buses,
                 freq=sim_config.get("freq", 100)
             )
 
-            voltage_measure_k = measure_indices["voltageMeasureK"]
-            q_measure_k = measure_indices["dQMeasureK"]
+            measurement_channels = measure_indices["voltage_channels"]
 
-            logger.info(f"量测通道: 电压={voltage_measure_k}, 无功={q_measure_k}")
-            logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"量测通道: 电压={voltage_measure_k}, 无功={q_measure_k}"))
+            logger.info(f"量测通道: 电压={len(measurement_channels)} 个")
+            logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"量测通道: 电压={len(measurement_channels)} 个"))
 
             # 5. 设置仿真参数
             end_time = injection_config.get("start_time", 8.0) + len(test_buses) * injection_config.get("interval", 1.5)
@@ -239,7 +235,7 @@ class VSIWeakBusSkill(SkillBase):
 
             try:
                 # 使用SDK支持的参数调用runEMT
-                job = model.runEMT()
+                job = run_emt(model, config)
 
                 # 等待完成
                 import time
@@ -261,7 +257,9 @@ class VSIWeakBusSkill(SkillBase):
                         metrics={"duration": (datetime.now() - start_time).total_seconds()}
                     )
 
-                emt_result = job.result
+                _job, emt_result = fetch_job_with_result(job.id, config)
+                if emt_result is None:
+                    raise RuntimeError("EMT结果为空")
                 logger.info("EMT仿真完成")
                 logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message="EMT仿真完成"))
 
@@ -285,8 +283,8 @@ class VSIWeakBusSkill(SkillBase):
             vsi_results = self._calculate_vsi(
                 emt_result,
                 test_buses,
-                voltage_measure_k,
-                q_measure_k,
+                measurement_channels,
+                injection_config.get("q_base", 100),
                 injection_config.get("start_time", 8.0),
                 injection_config.get("interval", 1.5),
                 injection_config.get("duration", 0.5)
@@ -406,8 +404,8 @@ class VSIWeakBusSkill(SkillBase):
         for key, data in buses.items():
             try:
                 # 获取母线电压
-                v_base = float(data.get("args", {}).get("V", 1.0))
-                v_base_kv = float(data.get("args", {}).get("VBase", 1.0))
+                v_base = sync_core.resolve_model_numeric(model, data.get("args", {}).get("V", 1.0), 1.0)
+                v_base_kv = sync_core.resolve_model_numeric(model, data.get("args", {}).get("VBase", 1.0), 1.0)
                 bus_voltage = v_base * v_base_kv
 
                 # 电压筛选
@@ -552,155 +550,42 @@ class VSIWeakBusSkill(SkillBase):
     def _add_vsi_measures(
         self,
         model: Model,
-        vsi_q_keys: List[str],
+        test_buses: List[Dict[str, Any]],
         freq: float = 100
-    ) -> Dict[str, int]:
+    ) -> Dict[str, Any]:
         """添加VSI量测"""
-        # 添加电压量测（所有母线）
-        try:
-            # 获取所有母线
-            buses = get_bus_components(model)
-            bus_pins = []
-
-            for key, data in buses.items():
-                try:
-                    comp = model.getComponentByKey(key)
-                    pin = comp.pins.get("0", key)
-                    bus_pins.append(pin)
-                except Exception as e:
-                    bus_pins.append(key)
-
-            # 添加电压量测通道
-            voltage_channel = {
-                "0": bus_pins,
-                "dim": 1,
-                "freq": freq,
-                "label": "VSI_电压量测",
-                "plot": {"name": "VSI_节点电压", "xlabel": "time", "ylabel": "V"}
-            }
-
-            # 这里假设model.addOutputChannel方法存在
-            # 如果不存在，需要在实际模型中使用相应方法
-            voltage_measure_k = 0  # 假设这是第一个通道
-
-        except (KeyError, AttributeError) as e:
-            logger.warning(f"添加电压量测失败: {e}")
-            voltage_measure_k = 0
-
-        # 添加无功量测
-        try:
-            q_pins = []
-            for key in vsi_q_keys:
-                try:
-                    comp = model.getComponentByKey(key)
-                    pin = comp.pins.get("0", key)
-                    q_pins.append(pin)
-                except Exception as e:
-                    q_pins.append(key)
-
-            q_channel = {
-                "0": q_pins,
-                "dim": 1,
-                "freq": freq,
-                "label": "VSI_无功量测",
-                "plot": {"name": "VSI_无功功率", "xlabel": "time", "ylabel": "Q"}
-            }
-
-            q_measure_k = 1  # 假设这是第二个通道
-
-        except (KeyError, AttributeError) as e:
-            logger.warning(f"添加无功量测失败: {e}")
-            q_measure_k = 1
-
-        return {"voltageMeasureK": voltage_measure_k, "dQMeasureK": q_measure_k}
+        measurement_channels = add_bus_voltage_measurements(
+            model,
+            buses=test_buses,
+            sampling_freq=int(freq),
+            signal_name_builder=lambda bus: f"#{bus['name'] or bus['label']}_vsi",
+            channel_name_builder=lambda bus: f"vsi_v_{bus['name'] or bus['label']}",
+            meter_label_builder=lambda bus: f"VSI_Meter_{bus['label']}",
+            channel_label_builder=lambda bus: f"VSI_Channel_{bus['label']}",
+        )
+        return {"voltage_channels": measurement_channels}
 
     def _calculate_vsi(
         self,
         result: Any,
         test_buses: List[Dict],
-        voltage_measure_k: int,
-        q_measure_k: int,
+        measurement_channels: List[Dict[str, Any]],
+        q_base: float,
         start_time: float,
         interval: float,
         duration: float
     ) -> Dict[str, Any]:
         """计算VSI指标"""
         try:
-            # 获取电压量测数据
-            voltage_plot = result.getPlot(voltage_measure_k)
-            voltage_traces = voltage_plot.get("data", {}).get("traces", [])
-
-            # 获取无功量测数据
-            q_plot = result.getPlot(q_measure_k)
-            q_traces = q_plot.get("data", {}).get("traces", [])
-
-            vsi_i = {}  # 每个母线的平均VSI
-            vsi_ij = {}  # VSI矩阵
-            unsupported_buses = []
-
-            # 对每个测试母线
-            for n, bus in enumerate(test_buses):
-                bus_label = bus["label"]
-
-                # 计算注入时刻的电压变化
-                ts_inject = start_time + n * interval
-                te_inject = ts_inject + duration
-                ts_before = ts_inject - duration
-
-                vsi_values = []
-
-                # 对每个观察母线
-                for k, v_trace in enumerate(voltage_traces):
-                    vx = v_trace.get("x", [])
-                    vy = v_trace.get("y", [])
-
-                    if not vx or not vy:
-                        continue
-
-                    # 注入前电压
-                    ms_before = get_time_index(vx, ts_before)
-                    me_before = get_time_index(vx, ts_inject)
-                    v_before = calculate_voltage_average(vy, ms_before, me_before)
-
-                    # 注入时电压
-                    ms_inject = get_time_index(vx, ts_inject)
-                    me_inject = get_time_index(vx, te_inject)
-                    v_after = calculate_voltage_average(vy, ms_inject, me_inject)
-
-                    # 获取注入的无功量
-                    q_injected = None
-                    if n < len(q_traces):
-                        q_trace = q_traces[n]
-                        qx = q_trace.get("x", [])
-                        qy = q_trace.get("y", [])
-                        if qx and qy:
-                            ms_q = get_time_index(qx, ts_inject)
-                            me_q = get_time_index(qx, te_inject)
-                            q_segment = qy[ms_q:me_q] if me_q > ms_q else qy[ms_q:ms_q + 1]
-                            if q_segment:
-                                q_injected = abs(sum(q_segment) / len(q_segment))
-
-                    if q_injected is None or q_injected == 0:
-                        continue
-
-                    # 计算VSI
-                    delta_v = abs(v_before - v_after)
-                    vsi = delta_v / q_injected if q_injected != 0 else 0
-                    vsi_values.append(vsi)
-
-                    # 记录到VSI矩阵
-                    if bus_label not in vsi_ij:
-                        vsi_ij[bus_label] = {}
-                    obs_name = v_trace.get("name", f"Bus_{k}")
-                    vsi_ij[bus_label][obs_name] = vsi
-
-                # 计算平均VSI
-                if vsi_values:
-                    vsi_i[bus_label] = sum(vsi_values) / len(vsi_values)
-                else:
-                    unsupported_buses.append(bus_label)
-
-            return {"vsi_i": vsi_i, "vsi_ij": vsi_ij, "unsupported_buses": unsupported_buses}
+            return compute_vsi_from_voltage_channels(
+                result,
+                test_buses=test_buses,
+                measurement_channels=measurement_channels,
+                q_base=q_base,
+                start_time=start_time,
+                interval=interval,
+                duration=duration,
+            )
 
         except (KeyError, AttributeError, ZeroDivisionError) as e:
             logger.error(f"计算VSI失败: {e}")

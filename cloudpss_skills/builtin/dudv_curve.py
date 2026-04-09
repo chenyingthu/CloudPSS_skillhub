@@ -130,7 +130,6 @@ class DUDVCurveSkill(SkillBase):
     def run(self, config: Dict[str, Any]) -> SkillResult:
         """执行DUDV曲线分析"""
         from datetime import datetime
-        from cloudpss import Model
         import matplotlib
         matplotlib.use('Agg')  # 非交互式后端
         import matplotlib.pyplot as plt

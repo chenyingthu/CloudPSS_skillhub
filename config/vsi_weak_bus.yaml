@@ -12,7 +12,7 @@ model:
 vsi_setup:
   bus_filter:
     v_min: 0.6        # 母线最小电压筛选(kV)
-    v_max: 300        # 母线最大电压筛选(kV)
+    v_max: 600        # 母线最大电压筛选(kV)。IEEE3/IEEE39含高压母线时不要保留300默认值
     # name_keywords: ["Bus"]  # 可选：只测试包含关键字的母线
 
   injection:

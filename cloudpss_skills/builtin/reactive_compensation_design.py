@@ -16,20 +16,25 @@ Reactive Compensation Design Skill
 
 import json
 import logging
+import math
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as np
 from cloudpss import Model
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.auth_utils import fetch_model_by_rid, run_emt
 from cloudpss_skills.core.utils import (
+    fetch_job_with_result,
     get_bus_components,
-    get_time_index,
-    calculate_voltage_average,
     clean_component_key
 )
+from cloudpss_skills.core.emt_measurement_core import (
+    add_bus_voltage_measurements,
+    compute_windowed_dv_metrics,
+)
+from cloudpss_skills.core import sync_support_core as sync_core
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +53,14 @@ def _matches_bus_identifier(candidate: str, target: str) -> bool:
     candidate_digits = "".join(ch for ch in candidate_norm if ch.isdigit())
     target_digits = "".join(ch for ch in target_norm if ch.isdigit())
     return bool(candidate_digits and target_digits and candidate_digits == target_digits)
+
+
+def _as_numeric(value: Any, default: float = 0.0) -> float:
+    return sync_core.as_numeric(value, default=default)
+
+
+def _resolve_model_numeric(model: Model, value: Any, default: float = 0.0) -> float:
+    return sync_core.resolve_model_numeric(model, value, default=default)
 
 
 @register
@@ -185,7 +198,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
             logger.info(f"无功补偿设计开始 - 模型: {model_rid}")
             logs.append(LogEntry(timestamp=datetime.now(), level="INFO", message=f"加载模型: {model_rid}"))
 
-            model = Model.fetch(model_rid)
+            model = fetch_model_by_rid(model_rid, config)
 
             # 2. 确定补偿目标母线
             target_buses = self._get_target_buses(model, config)
@@ -223,6 +236,12 @@ class ReactiveCompensationDesignSkill(SkillBase):
                 if not sync_ids:
                     raise RuntimeError("未成功添加任何调相机，无法开展补偿设计")
 
+                measurement_channels = self._ensure_voltage_measurements(
+                    model,
+                    target_buses,
+                    freq=2000,
+                )
+
                 # 迭代优化
                 iteration_config = config.get("iteration", {})
                 iteration_result = self._iterative_optimize(
@@ -230,6 +249,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
                     target_buses,
                     sync_ids,
                     tran_ids,
+                    measurement_channels,
                     config,
                     max_iterations=iteration_config.get("max_iterations", 20),
                     convergence_threshold=iteration_config.get("convergence_threshold", 0.5),
@@ -422,7 +442,8 @@ class ReactiveCompensationDesignSkill(SkillBase):
                         "key": key,
                         "label": label,
                         "name": bus_name,
-                        "voltage": float(data.get("args", {}).get("V", 1)) * float(data.get("args", {}).get("VBase", 1))
+                        "voltage": _resolve_model_numeric(model, data.get("args", {}).get("V", 1), 1.0)
+                        * _resolve_model_numeric(model, data.get("args", {}).get("VBase", 1), 1.0)
                     })
             return target_buses
 
@@ -452,7 +473,8 @@ class ReactiveCompensationDesignSkill(SkillBase):
                             "key": key,
                             "label": current_label,
                             "name": bus_name,
-                            "voltage": float(data.get("args", {}).get("V", 1)) * float(data.get("args", {}).get("VBase", 1)),
+                            "voltage": _resolve_model_numeric(model, data.get("args", {}).get("V", 1), 1.0)
+                            * _resolve_model_numeric(model, data.get("args", {}).get("VBase", 1), 1.0),
                             "vsi": bus_info.get("vsi", 0)
                         })
                         break
@@ -464,7 +486,10 @@ class ReactiveCompensationDesignSkill(SkillBase):
         bus_list = []
         for key, data in buses.items():
             try:
-                v = float(data.get("args", {}).get("V", 1)) * float(data.get("args", {}).get("VBase", 1))
+                v = (
+                    _resolve_model_numeric(model, data.get("args", {}).get("V", 1), 1.0)
+                    * _resolve_model_numeric(model, data.get("args", {}).get("VBase", 1), 1.0)
+                )
                 bus_list.append({"key": key, "label": data.get("label"), "voltage": v})
             except Exception as e:
                 continue
@@ -474,6 +499,37 @@ class ReactiveCompensationDesignSkill(SkillBase):
         max_buses = vsi_input.get("max_buses", 5)
         return bus_list[:max_buses]
 
+    def _find_diagram_edges_for_component(self, model: Model, component_id: str) -> List[Any]:
+        return sync_core.find_diagram_edges_for_component(model, component_id)
+
+    def _select_sync_template(self, model: Model, target_bus: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        return sync_core.select_sync_template(model, target_bus=target_bus)
+
+    def _clone_sync_template_chain(
+        self,
+        model: Model,
+        target_bus: Dict[str, Any],
+        initial_capacity: float,
+    ) -> Optional[Tuple[str, str]]:
+        return sync_core.clone_sync_template_chain(model, target_bus, initial_capacity)
+
+    def _configure_fault_scenario(
+        self,
+        model: Model,
+        *,
+        fault_bus_label: Optional[str],
+        fault_time: float,
+        fault_duration: float,
+        chg: float = 0.01,
+    ) -> Optional[str]:
+        return sync_core.configure_fault_scenario(
+            model,
+            fault_bus_label=fault_bus_label,
+            fault_time=fault_time,
+            fault_duration=fault_duration,
+            chg=chg,
+        )
+
     def _add_sync_compensators(
         self,
         model: Model,
@@ -482,7 +538,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
         avr_k: float = 30,
         avr_ka: float = 14.2
     ) -> Tuple[List[str], List[str]]:
-        """批量添加同步调相机"""
+        """批量添加同步调相机。优先复用模型内已验证同步机控制模板。"""
         sync_ids = []
         tran_ids = []
         canvas_id = "canvas_Reactive_Comp"
@@ -494,11 +550,19 @@ class ReactiveCompensationDesignSkill(SkillBase):
             logger.warning(f"画布 {canvas_id} 可能已存在")
 
         for i, bus in enumerate(target_buses):
-            bus_key = bus["key"]
-            bus_voltage = bus["voltage"]
-
             try:
-                # 添加调相机
+                cloned = self._clone_sync_template_chain(model, bus, initial_capacity)
+                if cloned is not None:
+                    sync_id, tran_id = cloned
+                    sync_ids.append(sync_id)
+                    tran_ids.append(tran_id)
+                    logger.info("已基于现有同步机模板为 %s 克隆调相机控制链", bus["label"])
+                    continue
+
+                logger.info("模型中未找到可复用同步机控制模板，回退到简化调相机链路: %s", bus["label"])
+                bus_key = bus["key"]
+                bus_voltage = bus["voltage"]
+
                 sync_id = f"SyncComp_{i}"
                 sync_name = f"调相机_{bus['label']}"
 
@@ -530,10 +594,8 @@ class ReactiveCompensationDesignSkill(SkillBase):
                 )
                 sync_ids.append(sync_comp.id)
 
-                # 添加变压器
                 tran_id = f"Tran_{i}"
                 tran_name = f"变压器_{bus['label']}"
-
                 tran_args = {
                     "Name": tran_name,
                     "Tmva": str(initial_capacity),
@@ -542,43 +604,19 @@ class ReactiveCompensationDesignSkill(SkillBase):
                     "R": "0.01",
                     "X": "0.1"
                 }
-
-                # 获取母线引脚
                 try:
                     bus_component = model.getComponentByKey(bus_key)
                     bus_pin = bus_component.pins.get("0", bus_key)
-                except Exception as e:
+                except Exception:
                     bus_pin = bus_key
-
-                tran_pins = {"0": bus_pin, "1": f"CompBus_{i}"}
 
                 transformer = model.addComponent(
                     "model/CloudPSS/_newTransformer_3p2w",
                     tran_id,
                     tran_args,
-                    tran_pins
+                    {"0": bus_pin, "1": f"CompBus_{i}"}
                 )
                 tran_ids.append(transformer.id)
-
-                # 添加AVR调压器
-                avr_id = f"AVR_{i}"
-                avr_name = f"AVR_{bus['label']}"
-
-                avr_args = {
-                    "Name": avr_name,
-                    "K": str(avr_k),
-                    "KA": str(avr_ka),
-                    "TA": "0.01"
-                }
-
-                avr_pins = {"0": f"CompBus_{i}"}
-
-                model.addComponent(
-                    "model/CloudPSS/_PSASP_AVR_11to12",
-                    avr_id,
-                    avr_args,
-                    avr_pins
-                )
 
             except (AttributeError, TypeError) as e:
                 logger.warning(f"为母线 {bus['label']} 添加调相机失败: {e}")
@@ -789,6 +827,7 @@ class ReactiveCompensationDesignSkill(SkillBase):
         target_buses: List[Dict],
         sync_ids: List[str],
         tran_ids: List[str],
+        measurement_channels: List[Dict[str, Any]],
         config: Dict[str, Any],
         max_iterations: int = 20,
         convergence_threshold: float = 0.5,
@@ -799,6 +838,23 @@ class ReactiveCompensationDesignSkill(SkillBase):
         # 初始容量
         comp_config = config.get("compensation", {})
         capacities = [comp_config.get("initial_capacity", 100)] * len(target_buses)
+        sim_config = config.get("simulation", {})
+        iteration_config = config.get("iteration", {})
+        dv_criteria = iteration_config.get(
+            "dv_judge_criteria",
+            [[0.1, 3.0, 0.75, 1.25], [3.0, 999.0, 0.95, 1.05]],
+        )
+
+        configured_fault_bus = sim_config.get("fault_bus")
+        if not configured_fault_bus and target_buses:
+            configured_fault_bus = target_buses[0].get("name") or target_buses[0].get("label")
+        self._configure_fault_scenario(
+            model,
+            fault_bus_label=configured_fault_bus,
+            fault_time=sim_config.get("fault_time", 4.0),
+            fault_duration=sim_config.get("fault_duration", 0.1),
+            chg=sim_config.get("chg", 0.01),
+        )
 
         iteration_history = []
         dv_results_history = []
@@ -823,11 +879,10 @@ class ReactiveCompensationDesignSkill(SkillBase):
                     logger.debug(f"忽略预期异常: {e}")
 
             # 运行EMT仿真
-            sim_config = config.get("simulation", {})
             try:
                 # 注意: 当前SDK不接受 endTime/step kwargs
                 # 使用默认参数调用
-                job = model.runEMT()
+                job = run_emt(model, config)
 
                 # 等待完成
                 import time
@@ -841,7 +896,10 @@ class ReactiveCompensationDesignSkill(SkillBase):
                     logger.error("EMT仿真失败")
                     break
 
-                emt_result = job.result
+                _job, emt_result = fetch_job_with_result(job.id, config)
+                if emt_result is None:
+                    logger.error("EMT结果为空")
+                    break
 
             except (KeyError, AttributeError, ConnectionError, TypeError) as e:
                 logger.error(f"EMT仿真失败: {e}")
@@ -852,6 +910,9 @@ class ReactiveCompensationDesignSkill(SkillBase):
                 dv_result = self._calculate_dv_from_result(
                     emt_result,
                     sim_config.get("fault_time", 4.0)
+                    ,
+                    measurement_channels,
+                    dv_criteria,
                 )
 
                 dv_up_list = dv_result.get("dv_up", [])
@@ -930,49 +991,38 @@ class ReactiveCompensationDesignSkill(SkillBase):
             "dv_results": dv_results_history
         }
 
-    def _calculate_dv_from_result(self, result: Any, disturbance_time: float) -> Dict[str, Any]:
+    def _calculate_dv_from_result(
+        self,
+        result: Any,
+        disturbance_time: float,
+        measurement_channels: List[Dict[str, Any]],
+        dv_judge_criteria: Optional[List[List[float]]] = None,
+    ) -> Dict[str, Any]:
         """从EMT结果计算DV"""
         try:
-            plots = list(result.getPlots())
-            if not plots:
+            if not measurement_channels:
                 return {"dv_up": [], "dv_down": []}
-
-            # 假设第一个图是电压量测
-            voltage_plot = plots[0]
-            traces = voltage_plot.get("data", {}).get("traces", [])
-
-            dv_up_list = []
-            dv_down_list = []
-
-            for trace in traces:
-                vx = trace.get("x", [])
-                vy = trace.get("y", [])
-
-                if not vx or not vy:
-                    continue
-
-                # 计算稳态电压
-                ts = disturbance_time - 0.5
-                te = disturbance_time
-                ms = get_time_index(vx, ts)
-                me = get_time_index(vx, te)
-                v_steady = calculate_voltage_average(vy, ms, me)
-
-                # 计算电压裕度
-                v_max = max(vy)
-                v_min = min(vy)
-
-                dv_up = 1.05 * v_steady - v_max
-                dv_down = v_min - 0.95 * v_steady
-
-                dv_up_list.append(dv_up)
-                dv_down_list.append(dv_down)
-
-            return {"dv_up": dv_up_list, "dv_down": dv_down_list}
+            return compute_windowed_dv_metrics(
+                result,
+                disturbance_time=disturbance_time,
+                measurement_channels=measurement_channels,
+                dv_judge_criteria=dv_judge_criteria,
+            )
 
         except (KeyError, AttributeError) as e:
             logger.error(f"计算DV失败: {e}")
             return {"dv_up": [], "dv_down": []}
+
+    def _ensure_voltage_measurements(self, model: Model, target_buses: List[Dict], freq: int) -> List[Dict[str, Any]]:
+        return add_bus_voltage_measurements(
+            model,
+            buses=target_buses,
+            sampling_freq=freq,
+            signal_name_builder=lambda bus: f"#{bus['name'] or bus['label']}.VSI_V",
+            channel_name_builder=lambda bus: f"vac_{bus['name'] or bus['label']}",
+            meter_label_builder=lambda bus: f"VSI_Meter_{bus['label']}",
+            channel_label_builder=lambda bus: f"VSI_Channel_{bus['label']}",
+        )
 
     def _calculate_adjustments(
         self,

@@ -71,11 +71,11 @@ config = {
         "rid": "model/holdme/IEEE39",
         "source": "cloud"
     },
-    "vsi_setup": {
-        "bus_filter": {
-            "v_min": 0.6,
-            "v_max": 300
-        },
+        "vsi_setup": {
+            "bus_filter": {
+                "v_min": 0.6,
+                "v_max": 600
+            },
         "injection": {
             "q_base": 100,
             "start_time": 8.0,
@@ -120,7 +120,7 @@ model:
 vsi_setup:
   bus_filter:
     v_min: 0.6          # 最小电压筛选(kV)
-    v_max: 300          # 最大电压筛选(kV)
+    v_max: 600          # 最大电压筛选(kV)
   injection:
     q_base: 100         # 注入无功(MVar)
     start_time: 8.0     # 开始时间(s)
@@ -183,7 +183,12 @@ output:                               # 输出配置
 | `model.rid` | string | 是 | - | 模型RID或本地YAML路径 |
 | `model.source` | enum | 否 | cloud | 模型来源：cloud(云端) / local(本地) |
 | `vsi_setup.bus_filter.v_min` | number | 否 | 0.6 | 母线最小电压筛选(kV) |
-| `vsi_setup.bus_filter.v_max` | number | 否 | 300 | 母线最大电压筛选(kV) |
+| `vsi_setup.bus_filter.v_max` | number | 否 | 300 | 母线最大电压筛选(kV)。高压模型常需调高到500~600 |
+
+## 使用注意
+
+- `vsi_setup.bus_filter.v_max` 会直接影响母线是否进入测试集合。对 `IEEE3/IEEE39` 这类含高压母线的算例，保留 `300` 可能会把目标母线全部筛掉。
+- 当前实现已经统一到公共 EMT 量测 helper，电压变化来自真实量测通道，而不是占位结果。
 | `vsi_setup.injection.q_base` | number | 否 | 100 | 注入无功功率(MVar) |
 | `vsi_setup.injection.start_time` | number | 否 | 8.0 | 无功注入开始时间(s) |
 | `vsi_setup.injection.interval` | number | 否 | 1.5 | 每个母线测试时长(s) |

@@ -36,7 +36,7 @@ compensation:
 simulation:
   fault_bus: "Bus_16"            # 故障母线
   fault_type: three_phase        # 故障类型
-  fault_time: 4.0                # 故障时间(s)
+  fault_time: 4.0                # 故障时间(s)。应与模型内实际故障元件时刻一致
   fault_duration: 0.1            # 故障持续时间(s)
   simulation_time: 10.0          # 仿真时间(s)
   step_time: 0.0001              # 仿真步长(s)
@@ -46,7 +46,7 @@ iteration:
   max_iterations: 20             # 最大迭代次数
   convergence_threshold: 0.5     # 收敛阈值(MVar)
   speed_ratio: 0.2               # 迭代加速比
-  dv_judge_criteria:             # DV判断条件
+  dv_judge_criteria:             # DV判断条件: [窗口起点, 窗口终点, 电压下限倍率, 电压上限倍率]
     - [0.1, 3.0, 0.75, 1.25]
     - [3.0, 999.0, 0.95, 1.05]
 
