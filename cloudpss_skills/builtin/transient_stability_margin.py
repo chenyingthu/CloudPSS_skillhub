@@ -17,7 +17,8 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult
-from cloudpss_skills.core.auth_utils import setup_auth, DEFAULT_TIMEOUT
+from cloudpss_skills.core.auth_utils import setup_auth, DEFAULT_TIMEOUT, fetch_model_by_rid
+from cloudpss_skills.core.emt_fault_core import clone_model, find_fault_component, apply_fault_parameters, run_emt_and_wait, find_trace, trace_rms
 from cloudpss_skills.core.registry import register
 
 logger = logging.getLogger(__name__)
@@ -109,15 +110,38 @@ class TransientStabilityMarginSkill(SkillBase):
                 "items": {"type": "string"},
                 "description": "需要监控的发电机列表"
             },
-            "analysis": {
-                "type": "object",
-                "properties": {
-                    "compute_cct": {"type": "boolean", "default": True},
-                    "compute_margin": {"type": "boolean", "default": True},
-                    "margin_baseline": {"type": "number", "default": 0.5},
-                    "cct_tolerance": {"type": "number", "default": 0.001}
-                }
-            },
+                "analysis": {
+                    "type": "object",
+                    "properties": {
+                        "compute_cct": {"type": "boolean", "default": True},
+                        "compute_margin": {"type": "boolean", "default": True},
+                        "margin_baseline": {"type": "number", "default": 0.5},
+                        "cct_initial_upper_bound": {"type": "number", "default": 1.0},
+                        "cct_search_upper_bound": {"type": "number", "default": 5.0},
+                        "cct_bound_expansion_factor": {"type": "number", "default": 2.0},
+                        "cct_tolerance": {"type": "number", "default": 0.001},
+                        "max_iterations": {"type": "integer", "default": 20},
+                        "emt_timeout": {"type": "number", "default": 300.0},
+                        "stability_trace_name": {"type": "string", "default": "vac:0"},
+                        "postfault_min_ratio": {"type": "number", "default": 0.9},
+                        "late_recovery_min_ratio": {"type": "number", "default": 0.95},
+                        "prefault_window_offset": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                            "default": [-0.08, -0.06],
+                        },
+                        "postfault_window_offset": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                            "default": [0.22, 0.24],
+                        },
+                        "late_recovery_window_offset": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                            "default": [0.46, 0.48],
+                        }
+                    }
+                },
             "output": {
                 "type": "object",
                 "properties": {
@@ -198,13 +222,19 @@ class TransientStabilityMarginSkill(SkillBase):
             )
 
         except (KeyError, AttributeError, ConnectionError, RuntimeError, TimeoutError, FileNotFoundError, ValueError, TypeError, Exception) as e:
+            error_message = str(e)
+            if isinstance(e, TimeoutError):
+                error_message = (
+                    f"{error_message}。当前 CCT 搜索需要多次 EMT 仿真，"
+                    "可尝试增大 analysis.emt_timeout，或先减小 analysis.max_iterations / 放宽 analysis.cct_tolerance。"
+                )
             logger.error(f"暂态稳定裕度评估失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                error=str(e)
+                error=error_message
             )
 
     def _analyze_scenario(self, model_rid: str, scenario: Dict, config: Dict) -> Dict:
@@ -223,7 +253,7 @@ class TransientStabilityMarginSkill(SkillBase):
         # 1. 计算临界切除时间(CCT)
         if analysis_config.get("compute_cct", True):
             logger.info(f"  计算CCT...")
-            cct = self._compute_cct(model_rid, location, fault_type, config)
+            cct = self._compute_cct(model_rid, scenario, config)
             result["cct"] = cct
 
         # 2. 计算稳定裕度
@@ -235,7 +265,7 @@ class TransientStabilityMarginSkill(SkillBase):
 
         return result
 
-    def _compute_cct(self, model_rid: str, location: str, fault_type: str, config: Dict) -> Dict:
+    def _compute_cct(self, model_rid: str, scenario: Dict, config: Dict) -> Dict:
         """
         计算临界切除时间(Critical Clearing Time)
 
@@ -244,26 +274,68 @@ class TransientStabilityMarginSkill(SkillBase):
         2. 二分查找直到收敛
         3. 返回精确的CCT值
         """
-        from cloudpss import Model
-        import time
-
-        model = Model.fetch(model_rid)
+        base_model = fetch_model_by_rid(model_rid, config)
+        location = scenario["location"]
+        fault_type = scenario.get("type", "three_phase")
 
         # 初始范围
         t_min = 0.0  # 肯定稳定
-        t_max = 1.0  # 肯定不稳定（假设）
+        analysis = config.get("analysis", {})
+        t_max = float(analysis.get("cct_initial_upper_bound", 1.0))
+        search_upper_bound = float(analysis.get("cct_search_upper_bound", 5.0))
+        bound_expansion_factor = float(analysis.get("cct_bound_expansion_factor", 2.0))
 
-        tolerance = config.get("analysis", {}).get("cct_tolerance", 0.001)
-        max_iterations = 20
+        tolerance = analysis.get("cct_tolerance", 0.001)
+        max_iterations = analysis.get("max_iterations", 20)
 
         logger.info(f"    二分法搜索CCT...")
 
-        iterations = 0
+        lower_stable = t_min
+        upper_unstable = None
+        bound_iterations = 0
+        upper_bound_evidence = None
+
+        while t_max <= search_upper_bound:
+            stable_at_upper, upper_bound_evidence = self._check_stability(base_model, scenario, t_max, config)
+            if not stable_at_upper:
+                upper_unstable = t_max
+                break
+            lower_stable = t_max
+            bound_iterations += 1
+            if t_max >= search_upper_bound:
+                break
+            expanded = t_max * bound_expansion_factor if t_max > 0 else max(tolerance, 0.1)
+            if expanded <= t_max:
+                expanded = t_max + max(tolerance, 0.1)
+            t_max = min(search_upper_bound, expanded)
+            if t_max == lower_stable:
+                break
+
+        if upper_unstable is None:
+            return {
+                "cct_seconds": round(lower_stable, 4),
+                "cct_relation": ">=",
+                "iterations": bound_iterations,
+                "tolerance": tolerance,
+                "method": "bound-search",
+                "bounded": False,
+                "search_upper_bound": search_upper_bound,
+                "verified": False,
+                "criterion": upper_bound_evidence or {"stable": True},
+                "limitation": (
+                    "在给定 cct_search_upper_bound 内未找到不稳定上界，当前结果仅能说明 "
+                    f"CCT >= {lower_stable:.4f}s。"
+                ),
+            }
+
+        t_min = lower_stable
+        t_max = upper_unstable
+        iterations = bound_iterations
         while t_max - t_min > tolerance and iterations < max_iterations:
             t_mid = (t_min + t_max) / 2
 
             # 仿真检查稳定性
-            stable = self._check_stability(model, location, fault_type, t_mid)
+            stable, evidence = self._check_stability(base_model, scenario, t_mid, config)
 
             if stable:
                 t_min = t_mid
@@ -273,50 +345,76 @@ class TransientStabilityMarginSkill(SkillBase):
             iterations += 1
 
         cct = (t_min + t_max) / 2
+        stable_at_cct, evidence = self._check_stability(base_model, scenario, cct, config)
 
         return {
             "cct_seconds": round(cct, 4),
+            "cct_relation": "=",
             "iterations": iterations,
             "tolerance": tolerance,
             "method": "bisection",
+            "bounded": True,
+            "search_upper_bound": search_upper_bound,
             "verified": False,
-            "limitation": "当前CCT判据仍基于 smoke 级 EMT 提交和简化稳定性判别，不能替代真实功角/转速稳定校核",
+            "criterion": evidence,
+            "limitation": "当前CCT基于真实电压恢复波形的近似判据，而非正式功角/转速暂稳判据，不能替代完整暂态稳定校核",
         }
 
-    def _check_stability(self, model, location: str, fault_type: str, clearing_time: float) -> bool:
+    def _check_stability(self, base_model, scenario: Dict, clearing_time: float, config: Dict) -> Tuple[bool, Dict[str, Any]]:
         """
         检查给定切除时间下的稳定性
 
-        简化实现：实际应运行EMT仿真并分析功角曲线
+        基于真实EMT波形的电压恢复判据：
+        - 故障后窗口电压恢复到 prefault 的一定比例以上
+        - 晚恢复窗口进一步恢复到更高比例
         """
-        import time
-
         try:
-            # 提交EMT仿真（使用SDK支持的参数）
-            job = model.runEMT()
+            analysis = config.get("analysis", {})
+            trace_name = analysis.get("stability_trace_name", "vac:0")
+            postfault_min_ratio = analysis.get("postfault_min_ratio", 0.9)
+            late_recovery_min_ratio = analysis.get("late_recovery_min_ratio", 0.95)
+            emt_timeout = analysis.get("emt_timeout", 300.0)
+            prefault_offset = analysis.get("prefault_window_offset", [-0.08, -0.06])
+            postfault_offset = analysis.get("postfault_window_offset", [0.22, 0.24])
+            late_offset = analysis.get("late_recovery_window_offset", [0.46, 0.48])
 
-            max_wait = 60
-            start = time.time()
-            while time.time() - start < max_wait:
-                status = job.status()
-                if status == 1:
-                    break
-                if status == 2:
-                    return False  # 仿真失败，认为不稳定
-                time.sleep(1)
+            working_model = clone_model(base_model)
+            fault = find_fault_component(working_model)
+            fault_args = getattr(fault, "args", {}) or {}
+            fs = float((fault_args.get("fs", {}) or {}).get("source", scenario.get("fault_time", 3.0)))
+            chg = float((fault_args.get("chg", {}) or {}).get("source", 0.01))
+            fe = fs + clearing_time
+            apply_fault_parameters(working_model, fs, fe, chg)
 
-            # 获取结果
+            job = run_emt_and_wait(working_model, timeout=int(emt_timeout), config=config)
             result = job.result
+            _, trace = find_trace(result, trace_name)
 
-            # 简化判断：假设切除时间小于0.3秒为稳定
-            # 实际应分析功角曲线是否发散
-            assumed_stable = clearing_time < 0.3
+            prefault_rms = trace_rms(trace, fs + prefault_offset[0], fs + prefault_offset[1])
+            postfault_rms = trace_rms(trace, fe + postfault_offset[0], fe + postfault_offset[1])
+            late_rms = trace_rms(trace, fe + late_offset[0], fe + late_offset[1])
 
-            return assumed_stable
+            postfault_ratio = postfault_rms / prefault_rms if prefault_rms else 0.0
+            late_ratio = late_rms / prefault_rms if prefault_rms else 0.0
+            stable = postfault_ratio >= postfault_min_ratio and late_ratio >= late_recovery_min_ratio
 
-        except (AttributeError, ConnectionError, RuntimeError, TypeError) as e:
+            return stable, {
+                "trace_name": trace_name,
+                "fault_start": fs,
+                "fault_end": fe,
+                "prefault_rms": round(prefault_rms, 4),
+                "postfault_rms": round(postfault_rms, 4),
+                "late_recovery_rms": round(late_rms, 4),
+                "postfault_ratio": round(postfault_ratio, 4),
+                "late_recovery_ratio": round(late_ratio, 4),
+                "postfault_min_ratio": postfault_min_ratio,
+                "late_recovery_min_ratio": late_recovery_min_ratio,
+                "stable": stable,
+            }
+
+        except (AttributeError, ConnectionError, RuntimeError, TypeError, TimeoutError) as e:
             logger.warning(f"稳定性检查失败: {e}")
-            return False
+            return False, {"stable": False, "error": str(e)}
 
     def _compute_margin(self, cct_result: Dict, baseline: float) -> Dict:
         """
@@ -327,6 +425,7 @@ class TransientStabilityMarginSkill(SkillBase):
         裕度 = (CCT - 基准时间) / CCT * 100%
         """
         cct = cct_result.get("cct_seconds", 0)
+        bounded = cct_result.get("bounded", True)
 
         if cct <= 0:
             return {"error": "CCT计算无效"}
@@ -347,16 +446,22 @@ class TransientStabilityMarginSkill(SkillBase):
 
         return {
             "cct": round(cct, 4),
+            "cct_relation": cct_result.get("cct_relation", "="),
+            "bounded": bounded,
             "baseline": baseline,
             "margin_seconds": round(margin_seconds, 4),
             "margin_percent": round(margin_percent, 2),
             "stability_status": status,
-            "assessment": self._margin_assessment(margin_percent),
+            "assessment": self._margin_assessment(margin_percent, bounded=bounded),
             "verified": False,
         }
 
-    def _margin_assessment(self, margin_percent: float) -> str:
+    def _margin_assessment(self, margin_percent: float, *, bounded: bool = True) -> str:
         """裕度评估结论"""
+        if not bounded:
+            if margin_percent >= 0:
+                return "当前仅得到稳定裕度下界，实际裕度可能更高"
+            return "当前仅得到稳定裕度下界，不能据此排除不稳定风险"
         if margin_percent >= 30:
             return "系统暂态稳定裕度充足，可承受较大扰动"
         elif margin_percent >= 10:
@@ -459,7 +564,9 @@ class TransientStabilityMarginSkill(SkillBase):
         for scenario in report["scenarios"]:
             lines.append(f"\n场景: {scenario['fault_location']}")
             if "cct" in scenario:
-                lines.append(f"  CCT: {scenario['cct']['cct_seconds']:.4f} s")
+                cct = scenario["cct"]
+                relation = cct.get("cct_relation", "=")
+                lines.append(f"  CCT: {relation} {cct['cct_seconds']:.4f} s")
             if "margin" in scenario:
                 m = scenario['margin']
                 lines.append(f"  裕度: {m['margin_percent']:.2f}% ({m['stability_status']})")
