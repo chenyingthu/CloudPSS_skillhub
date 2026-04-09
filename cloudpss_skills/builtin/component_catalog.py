@@ -21,6 +21,7 @@ import json
 from pathlib import Path
 
 from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult
+from cloudpss_skills.core.auth_utils import get_cloudpss_kwargs
 from cloudpss_skills.core.registry import register
 
 logger = logging.getLogger(__name__)
@@ -184,7 +185,7 @@ class ComponentCatalogSkill(SkillBase):
             # 获取详细信息（可选）
             if config.get("options", {}).get("include_details", True):
                 logger.info(f"获取 {len(filtered)} 个组件的详细信息...")
-                filtered = self._enrich_components(filtered)
+                filtered = self._enrich_components(filtered, config)
 
             # 限制结果数量
             max_results = config.get("options", {}).get("max_results")
@@ -263,7 +264,7 @@ class ComponentCatalogSkill(SkillBase):
 
         try:
             # 使用 fetchMany 获取所有模型
-            models = Model.fetchMany(pageSize=page_size, owner=owner)
+            models = Model.fetchMany(pageSize=page_size, owner=owner, **get_cloudpss_kwargs(config))
             logger.info(f"获取到 {len(models)} 个模型")
         except (KeyError, AttributeError) as e:
             logger.error(f"获取模型列表失败: {e}")
@@ -311,7 +312,7 @@ class ComponentCatalogSkill(SkillBase):
 
         return result
 
-    def _enrich_components(self, components: List[ComponentInfo]) -> List[ComponentInfo]:
+    def _enrich_components(self, components: List[ComponentInfo], config: Dict) -> List[ComponentInfo]:
         """获取组件详细信息"""
         from cloudpss import Model
 
@@ -319,7 +320,7 @@ class ComponentCatalogSkill(SkillBase):
         for comp in components:
             try:
                 # 尝试获取模型详细信息
-                model = Model.fetch(comp.rid)
+                model = Model.fetch(comp.rid, **get_cloudpss_kwargs(config))
                 # 获取拓扑信息
                 topology = model.fetchTopology()
                 if hasattr(topology, "components"):

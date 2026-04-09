@@ -173,7 +173,7 @@ class VisualizeSkill(SkillBase):
                 setToken(token)
 
                 job_id = source_config["job_id"]
-                _job, result = fetch_job_with_result(job_id)
+                _job, result = fetch_job_with_result(job_id, config)
 
                 if result is None:
                     raise RuntimeError("任务结果为空")

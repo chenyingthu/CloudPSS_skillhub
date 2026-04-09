@@ -18,6 +18,7 @@ from copy import deepcopy
 import itertools
 
 from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult
+from cloudpss_skills.core.auth_utils import get_cloudpss_kwargs
 from cloudpss_skills.core.registry import register
 from cloudpss_skills.metadata.integration import get_metadata_integration
 
@@ -276,6 +277,7 @@ class ModelBuilderSkill(SkillBase):
         start_time = datetime.now()
         try:
             config = self._resolve_workflow_config(config)
+            self._active_config = config
             self._setup_auth(config)
 
             # 获取基础模型
@@ -354,6 +356,8 @@ class ModelBuilderSkill(SkillBase):
                 end_time=datetime.now(),
                 error=str(e)
             )
+        finally:
+            self._active_config = None
 
     def _resolve_workflow_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """把高级工作流配置展开成基础模型和具体修改操作。"""
@@ -1013,4 +1017,4 @@ class ModelBuilderSkill(SkillBase):
     def _fetch_model(self, rid: str):
         """获取模型"""
         from cloudpss import Model
-        return Model.fetch(rid)
+        return Model.fetch(rid, **get_cloudpss_kwargs(getattr(self, "_active_config", None) or {}))

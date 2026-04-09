@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_emt
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +161,7 @@ class HarmonicAnalysisSkill(SkillBase):
             if model_config.get("source") == "local":
                 base_model = Model.load(model_config["rid"])
             else:
-                base_model = Model.fetch(model_config["rid"])
+                base_model = load_or_fetch_model(model_config, config)
             log("INFO", f"模型: {base_model.name}")
 
             analysis_config = config.get("analysis", {})
@@ -189,7 +190,7 @@ class HarmonicAnalysisSkill(SkillBase):
 
             # 运行EMT仿真
             log("INFO", f"运行EMT仿真 (时长: {emt_duration}s)...")
-            job = working_model.runEMT()
+            job = run_emt(working_model, config)
             log("INFO", f"Job ID: {job.id}")
 
             import time

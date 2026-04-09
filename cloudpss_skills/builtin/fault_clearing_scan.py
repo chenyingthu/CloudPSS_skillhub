@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.auth_utils import load_or_fetch_model
 from cloudpss_skills.core.emt_fault_core import (
     apply_fault_parameters,
     clone_model,
@@ -147,7 +148,7 @@ class FaultClearingScanSkill(SkillBase):
             if model_config.get("source") == "local":
                 base_model = Model.load(model_config["rid"])
             else:
-                base_model = Model.fetch(model_config["rid"])
+                base_model = load_or_fetch_model(model_config, config)
             log("INFO", f"模型: {base_model.name}")
 
             scan_config = config["scan"]
@@ -169,7 +170,7 @@ class FaultClearingScanSkill(SkillBase):
                 apply_fault_parameters(working_model, fs, fe, chg)
 
                 # 运行EMT
-                job = run_emt_and_wait(working_model, timeout=300)
+                job = run_emt_and_wait(working_model, timeout=300, config=config)
 
                 # 提取结果
                 result = job.result

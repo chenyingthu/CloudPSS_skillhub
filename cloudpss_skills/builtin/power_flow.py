@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_powerflow
 from cloudpss_skills.core.utils import parse_cloudpss_table
 
 logger = logging.getLogger(__name__)
@@ -128,13 +129,13 @@ class PowerFlowSkill(SkillBase):
             if model_config.get("source") == "local":
                 model = Model.load(model_rid)
             else:
-                model = Model.fetch(model_rid)
+                model = load_or_fetch_model(model_config, config)
 
             log("INFO", f"模型: {model.name} ({model.rid})")
 
             # 3. 运行潮流
             log("INFO", "运行潮流计算...")
-            job = model.runPowerFlow()
+            job = run_powerflow(model, config)
             log("INFO", f"任务已创建: {job.id}")
 
             # 4. 等待完成

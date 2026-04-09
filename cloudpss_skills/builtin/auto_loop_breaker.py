@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.auth_utils import load_or_fetch_model, get_cloudpss_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +168,7 @@ class AutoLoopBreakerSkill(SkillBase):
             log("INFO", f"加载模型: {rid}")
 
             if source == "cloud":
-                model = Model.fetch(rid)
+                model = load_or_fetch_model(model_config, config)
             else:
                 model = Model.load(rid)
 
@@ -354,7 +355,7 @@ class AutoLoopBreakerSkill(SkillBase):
                     continue
                 # 获取元件定义
                 try:
-                    defn = model.__class__.fetch(comp.definition)
+                    defn = model.__class__.fetch(comp.definition, **get_cloudpss_kwargs(config))
                     r = defn.revision
                     dict_pin[comp.definition] = {r.pins[k]['key']: r.pins[k] for k in range(len(r.pins))}
                 except (KeyError, AttributeError, Exception) as e:

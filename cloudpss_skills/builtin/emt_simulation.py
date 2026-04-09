@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_emt
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +147,7 @@ class EmtSimulationSkill(SkillBase):
             if model_config.get("source") == "local":
                 model = Model.load(model_rid)
             else:
-                model = Model.fetch(model_rid)
+                model = load_or_fetch_model(model_config, config)
 
             log("INFO", f"模型名称: {model.name}")
             log("INFO", f"模型RID: {model.rid}")
@@ -164,7 +165,7 @@ class EmtSimulationSkill(SkillBase):
 
             # 4. 运行仿真
             log("INFO", "启动EMT仿真...")
-            job = model.runEMT()
+            job = run_emt(model, config)
             log("INFO", f"任务已创建，ID: {job.id}")
 
             # 5. 等待完成

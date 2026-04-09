@@ -1,7 +1,7 @@
 """
 认证工具模块
 
-提供统一的 CloudPSS 认证功能。
+提供统一的 CloudPSS 认证功能与可选 baseUrl 路由支持。
 """
 
 import logging
@@ -61,6 +61,62 @@ def setup_auth(config: Dict) -> str:
     setToken(token)
     logger.debug("认证成功")
     return token
+
+
+def get_base_url_from_config(config: Dict) -> Optional[str]:
+    """
+    从配置中获取备用 CloudPSS 服务地址。
+
+    支持:
+    - auth.base_url
+    - auth.baseUrl
+    """
+    auth = config.get("auth", {})
+    return auth.get("base_url") or auth.get("baseUrl")
+
+
+def get_cloudpss_kwargs(config: Optional[Dict] = None) -> Dict[str, str]:
+    """构造 CloudPSS SDK 调用参数。"""
+    if not config:
+        return {}
+
+    base_url = get_base_url_from_config(config)
+    if base_url:
+        return {"baseUrl": base_url}
+    return {}
+
+
+def load_or_fetch_model(model_config: Dict, config: Optional[Dict] = None):
+    """统一处理本地/云端模型获取，并透传可选 baseUrl。"""
+    from cloudpss import Model
+
+    if model_config.get("source") == "local":
+        return Model.load(model_config["rid"])
+    return Model.fetch(model_config["rid"], **get_cloudpss_kwargs(config))
+
+
+def fetch_model_by_rid(rid: str, config: Optional[Dict] = None):
+    """按 RID 获取云端模型，并透传可选 baseUrl。"""
+    from cloudpss import Model
+
+    return Model.fetch(rid, **get_cloudpss_kwargs(config))
+
+
+def fetch_job_by_id(job_id: str, config: Optional[Dict] = None):
+    """按 job id 获取任务，并透传可选 baseUrl。"""
+    from cloudpss import Job
+
+    return Job.fetch(job_id, **get_cloudpss_kwargs(config))
+
+
+def run_powerflow(model, config: Optional[Dict] = None, **kwargs):
+    """统一运行潮流，并透传可选 baseUrl。"""
+    return model.runPowerFlow(**get_cloudpss_kwargs(config), **kwargs)
+
+
+def run_emt(model, config: Optional[Dict] = None, **kwargs):
+    """统一运行 EMT，并透传可选 baseUrl。"""
+    return model.runEMT(**get_cloudpss_kwargs(config), **kwargs)
 
 
 def get_token_from_config(config: Dict, token_file: Optional[str] = None) -> str:

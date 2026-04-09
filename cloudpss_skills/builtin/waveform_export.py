@@ -149,7 +149,7 @@ class WaveformExportSkill(SkillBase):
             # 2. 获取任务
             job_id = source_config["job_id"]
             log("INFO", f"获取任务: {job_id}")
-            job, result = fetch_job_with_result(job_id)
+            job, result = fetch_job_with_result(job_id, {"auth": auth})
 
             # 3. 检查结果
             if job.status() != 1:

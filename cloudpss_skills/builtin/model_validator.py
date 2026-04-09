@@ -18,7 +18,7 @@ from datetime import datetime
 from enum import Enum
 
 from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult, LogEntry, Artifact
-from cloudpss_skills.core.auth_utils import setup_auth, DEFAULT_TIMEOUT, DEFAULT_POWERFLOW_TOLERANCE
+from cloudpss_skills.core.auth_utils import setup_auth, DEFAULT_TIMEOUT, DEFAULT_POWERFLOW_TOLERANCE, fetch_model_by_rid, run_powerflow, run_emt
 from cloudpss_skills.core.registry import register
 from cloudpss_skills.metadata.integration import get_metadata_integration
 
@@ -417,7 +417,7 @@ class ModelValidatorSkill(SkillBase):
 
         try:
             rid = model_info["rid"]
-            model = Model.fetch(rid)
+            model = fetch_model_by_rid(rid, config)
             components = model.getAllComponents()
 
             result["details"]["total_components"] = len(components)
@@ -579,7 +579,7 @@ class ModelValidatorSkill(SkillBase):
             model = Model.fetch(rid)
             logger.info("  提交潮流计算任务...")
 
-            job = model.runPowerFlow()
+            job = run_powerflow(model, config)
             result["details"]["job_id"] = job.id
 
             # 等待完成
@@ -712,7 +712,7 @@ class ModelValidatorSkill(SkillBase):
         }
 
         try:
-            model = Model.fetch(rid)
+            model = fetch_model_by_rid(rid, config)
 
             # 首先检查EMT拓扑
             logger.info("  检查EMT拓扑...")
@@ -729,7 +729,7 @@ class ModelValidatorSkill(SkillBase):
 
             # 当前 SDK 的 runEMT 不稳定接受 simuTime 透传，这里先使用模型现有 EMT 配置做 smoke gate。
             logger.info(f"  提交EMT仿真（使用模型既有配置，目标 smoke 时长 {duration}s）...")
-            job = model.runEMT()
+            job = run_emt(model, config)
             result["details"]["job_id"] = job.id
 
             # 等待完成
@@ -836,8 +836,8 @@ class ModelValidatorSkill(SkillBase):
         }
 
         try:
-            model = Model.fetch(rid)
-            base_model = Model.fetch(base_rid)
+            model = fetch_model_by_rid(rid, config)
+            base_model = fetch_model_by_rid(base_rid, config)
 
             # 获取拓扑对比
             components = model.getAllComponents()

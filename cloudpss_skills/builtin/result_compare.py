@@ -171,7 +171,7 @@ class ResultCompareSkill(SkillBase):
                 log("INFO", f"获取任务: {label} ({job_id})")
 
                 try:
-                    job, result = fetch_job_with_result(job_id)
+                    job, result = fetch_job_with_result(job_id, config)
 
                     if result is None:
                         log("WARNING", f"  -> 任务 {label} 结果为空")

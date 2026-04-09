@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.auth_utils import load_or_fetch_model
 from cloudpss_skills.core.emt_fault_core import (
     configure_channel_sampling,
     run_emt_and_wait,
@@ -239,7 +240,7 @@ class EmtFaultStudySkill(SkillBase):
             if model_config.get("source") == "local":
                 base_model = Model.load(model_rid)
             else:
-                base_model = Model.fetch(model_rid)
+                base_model = load_or_fetch_model(model_config, config)
 
             log("INFO", f"模型: {base_model.name} ({base_model.rid})")
 
@@ -282,7 +283,7 @@ class EmtFaultStudySkill(SkillBase):
                 )
 
                 # 运行EMT
-                job = run_emt_and_wait(working_model, timeout=300, log_func=log)
+                job = run_emt_and_wait(working_model, timeout=300, log_func=log, config=config)
                 log("INFO", f"  Job ID: {job.id}")
 
                 # 提取结果

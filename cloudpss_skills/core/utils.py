@@ -9,11 +9,12 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
+from cloudpss_skills.core.auth_utils import get_cloudpss_kwargs
 
 logger = logging.getLogger(__name__)
 
 
-def fetch_job_with_result(job_id: str):
+def fetch_job_with_result(job_id: str, config: Optional[Dict] = None):
     """
     获取任务及其结果。
 
@@ -23,7 +24,7 @@ def fetch_job_with_result(job_id: str):
     """
     from cloudpss import Job
 
-    job = Job.fetch(job_id)
+    job = Job.fetch(job_id, **get_cloudpss_kwargs(config))
     result = job.result
 
     if result is None:

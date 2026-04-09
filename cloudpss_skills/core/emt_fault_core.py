@@ -4,6 +4,7 @@ Shared helpers for EMT fault-study style skills.
 
 from copy import deepcopy
 from typing import Any, Dict, Optional, Tuple
+from cloudpss_skills.core.auth_utils import get_cloudpss_kwargs
 
 
 FAULT_DEFINITION = "model/CloudPSS/_newFaultResistor_3p"
@@ -66,10 +67,10 @@ def configure_channel_sampling(model, channel_name: str, sampling_freq: int):
     return channel
 
 
-def run_emt_and_wait(model, timeout: int = 300, poll_seconds: int = 3, log_func=None):
+def run_emt_and_wait(model, timeout: int = 300, poll_seconds: int = 3, log_func=None, config: Optional[Dict] = None):
     import time
 
-    job = model.runEMT()
+    job = model.runEMT(**get_cloudpss_kwargs(config))
     start_time = time.time()
     while True:
         status = job.status()

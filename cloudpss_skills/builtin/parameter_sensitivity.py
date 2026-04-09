@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple, Optional
 
 from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_emt, run_powerflow
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +156,7 @@ class ParameterSensitivitySkill(SkillBase):
             if model_config.get("source") == "local":
                 base_model = Model.load(model_config["rid"])
             else:
-                base_model = Model.fetch(model_config["rid"])
+                base_model = load_or_fetch_model(model_config, config)
             log("INFO", f"模型: {base_model.name}")
 
             scan_config = config["scan"]
@@ -180,7 +181,7 @@ class ParameterSensitivitySkill(SkillBase):
 
             # 基线计算
             log("INFO", "计算基线...")
-            base_result = self._run_simulation(base_model, sim_type)
+            base_result = self._run_simulation(base_model, sim_type, config)
             base_metrics = self._extract_metrics(base_result, metrics_config, sim_type)
             log("INFO", f"基线指标: {base_metrics}")
 
@@ -200,7 +201,7 @@ class ParameterSensitivitySkill(SkillBase):
 
                 # 运行仿真
                 try:
-                    result = self._run_simulation(working_model, sim_type)
+                    result = self._run_simulation(working_model, sim_type, config)
                     metrics = self._extract_metrics(result, metrics_config, sim_type)
                 except (RuntimeError, ValueError, TypeError, AttributeError, ConnectionError) as e:
                     msg = str(e)
@@ -368,14 +369,14 @@ class ParameterSensitivitySkill(SkillBase):
                 return True
         return False
 
-    def _run_simulation(self, model, sim_type: str):
+    def _run_simulation(self, model, sim_type: str, config: Optional[Dict] = None):
         """运行仿真"""
         import time
 
         if sim_type == "power_flow":
-            job = model.runPowerFlow()
+            job = run_powerflow(model, config)
         else:
-            job = model.runEMT()
+            job = run_emt(model, config)
 
         while True:
             status = job.status()
