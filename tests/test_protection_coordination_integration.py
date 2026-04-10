@@ -20,7 +20,9 @@ import json
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from cloudpss_skills.builtin.protection_coordination import (
-    ProtectionCoordinationSkill, ProtectionType, RelaySettings
+    ProtectionCoordinationSkill,
+    ProtectionType,
+    RelaySettings,
 )
 from cloudpss_skills.core.base import SkillStatus
 
@@ -42,48 +44,24 @@ class TestProtectionCoordinationSkill:
     def valid_config(self):
         """有效配置"""
         return {
-            "model": {
-                "rid": "model/holdme/substation_110"
-            },
-            "auth": {
-                "token_file": ".cloudpss_token"
-            },
+            "model": {"rid": "model/chenying/substation_110"},
+            "auth": {"server": "internal"},
             "analysis": {
-                "distance_protection": {
-                    "enabled": True,
-                    "check_zones": [1, 2, 3]
-                },
+                "distance_protection": {"enabled": True, "check_zones": [1, 2, 3]},
                 "overcurrent_protection": {
                     "enabled": True,
                     "check_coordination": True,
-                    "time_margin": 0.3
+                    "time_margin": 0.3,
                 },
-                "differential_protection": {
-                    "enabled": True
-                },
-                "zero_sequence_protection": {
-                    "enabled": True
-                },
-                "reclosing": {
-                    "enabled": True
-                },
+                "differential_protection": {"enabled": True},
+                "zero_sequence_protection": {"enabled": True},
+                "reclosing": {"enabled": True},
                 "fault_scenarios": [
-                    {
-                        "type": "three_phase",
-                        "location": "110kV_L1",
-                        "duration": 0.1
-                    },
-                    {
-                        "type": "single_ground",
-                        "location": "10kV_L1",
-                        "duration": 0.15
-                    }
-                ]
+                    {"type": "three_phase", "location": "110kV_L1", "duration": 0.1},
+                    {"type": "single_ground", "location": "10kV_L1", "duration": 0.15},
+                ],
             },
-            "output": {
-                "format": "json",
-                "generate_tcc_curves": True
-            }
+            "output": {"format": "json", "generate_tcc_curves": True},
         }
 
     def test_skill_registration(self, skill):
@@ -110,10 +88,7 @@ class TestProtectionCoordinationSkill:
 
     def test_validation_with_missing_rid(self, skill):
         """测试4: 缺少RID的配置验证"""
-        invalid_config = {
-            "model": {},
-            "analysis": {}
-        }
+        invalid_config = {"model": {}, "analysis": {}}
         result = skill.validate(invalid_config)
         assert result.valid is False
         assert any("RID" in err for err in result.errors)
@@ -124,10 +99,8 @@ class TestProtectionCoordinationSkill:
         invalid_config = {
             "model": {"rid": "test"},
             "analysis": {
-                "fault_scenarios": [
-                    {"type": "invalid_type", "location": "test"}
-                ]
-            }
+                "fault_scenarios": [{"type": "invalid_type", "location": "test"}]
+            },
         }
         # 注：当前validate不检查具体值，只检查结构
         # 这个测试展示了如何扩展验证
@@ -226,7 +199,7 @@ class TestProtectionCoordinationSkill:
 
             print(f"   故障: {scenario['fault_type']} @ {scenario['location']}")
             print(f"   动作保护: {len(scenario['operating_relays'])}个")
-            print(f"   预期清除时间: {scenario['expected_clearing_time']*1000:.1f}ms")
+            print(f"   预期清除时间: {scenario['expected_clearing_time'] * 1000:.1f}ms")
 
         print("✅ 故障场景分析验证通过")
 
@@ -293,7 +266,7 @@ class TestRelaySettings:
             zone3_reach=200.0,
             zone1_time=0.0,
             zone2_time=0.3,
-            zone3_time=0.6
+            zone3_time=0.6,
         )
 
         assert settings.relay_type == ProtectionType.DISTANCE

@@ -312,7 +312,7 @@ class RenewableIntegrationSkill(SkillBase):
         renewable_config = config.get("renewable", {})
         renewable_bus = renewable_config.get("bus", "")
 
-        model = load_or_fetch_model(model_rid, config)
+        model = load_or_fetch_model({"rid": model_rid}, config)
         zth_result = compute_positive_sequence_zth(model, renewable_bus)
         if not zth_result.verified:
             return {
@@ -416,7 +416,7 @@ class RenewableIntegrationSkill(SkillBase):
         对比新能源接入前后的电压变化
         """
 
-        model_with_renewable = load_or_fetch_model(model_rid, config)
+        model_with_renewable = load_or_fetch_model({"rid": model_rid}, config)
         renewable_components = self._find_renewable_components(
             model_with_renewable, config
         )
@@ -604,7 +604,7 @@ class RenewableIntegrationSkill(SkillBase):
             config.get("analysis", {}).get("lvrt_compliance", {}).get("standard", "gb")
         )
 
-        model = load_or_fetch_model(model_rid, config)
+        model = load_or_fetch_model({"rid": model_rid}, config)
         capability = self._detect_lvrt_capability(model, config)
 
         # LVRT要求曲线（简化）
@@ -863,7 +863,7 @@ class RenewableIntegrationSkill(SkillBase):
     def _assess_stability_impact(self, model_rid: str, config: Dict) -> Dict:
         """评估稳定性影响"""
 
-        model_with = load_or_fetch_model(model_rid, config)
+        model_with = load_or_fetch_model({"rid": model_rid}, config)
         renewable_components = self._find_renewable_components(model_with, config)
         if not renewable_components:
             return {

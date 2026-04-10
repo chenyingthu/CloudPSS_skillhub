@@ -1,5 +1,8 @@
-from pathlib import Path
 import os
+
+os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
+
+from pathlib import Path
 import time
 import uuid
 
@@ -8,10 +11,13 @@ import pytest
 from cloudpss import Model, setToken
 
 
-DEFAULT_TEST_MODEL_RID = os.environ.get("TEST_MODEL_RID", "model/holdme/IEEE39")
+DEFAULT_TEST_MODEL_RID = os.environ.get("TEST_MODEL_RID", "model/chenying/IEEE39")
 
 
 def load_token():
+    token_path = Path(".cloudpss_token_internal")
+    if token_path.exists():
+        return token_path.read_text().strip()
     token_path = Path(".cloudpss_token")
     if token_path.exists():
         return token_path.read_text().strip()
@@ -55,7 +61,7 @@ def integration_model(live_auth):
 
 @pytest.fixture(scope="session")
 def integration_ieee3_model(live_auth):
-    return Model.fetch("model/holdme/IEEE3")
+    return Model.fetch("model/chenying/IEEE3")
 
 
 @pytest.fixture(scope="session")

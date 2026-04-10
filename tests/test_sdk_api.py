@@ -174,7 +174,9 @@ class TestLocalModelBehavior:
                 }
             }
 
-        monkeypatch.setattr("cloudpss.model.model.graphql_request", fake_graphql_request)
+        monkeypatch.setattr(
+            "cloudpss.model.model.graphql_request", fake_graphql_request
+        )
         monkeypatch.setattr("cloudpss.model.model.userName", lambda: "holdme")
 
         result = Model.fetchMany(
@@ -197,7 +199,9 @@ class TestLocalModelBehavior:
         def fake_graphql_request(query, variables, **kwargs):
             return {"errors": [{"message": "permission denied"}]}
 
-        monkeypatch.setattr("cloudpss.model.model.graphql_request", fake_graphql_request)
+        monkeypatch.setattr(
+            "cloudpss.model.model.graphql_request", fake_graphql_request
+        )
         monkeypatch.setattr("cloudpss.model.model.userName", lambda: "holdme")
 
         with pytest.raises(Exception, match="permission denied"):
@@ -230,7 +234,9 @@ class TestLocalModelBehavior:
             captured["kwargs"] = kwargs
             return {"data": {"createModelRevision": {"hash": "created-hash"}}}
 
-        monkeypatch.setattr("cloudpss.model.revision.graphql_request", fake_graphql_request)
+        monkeypatch.setattr(
+            "cloudpss.model.revision.graphql_request", fake_graphql_request
+        )
 
         created = ModelRevision.create(
             revision,
@@ -242,7 +248,10 @@ class TestLocalModelBehavior:
         assert "createModelRevision" in captured["query"]
         assert captured["variables"]["a"]["parent"] == "parent-hash"
         assert "hash" not in captured["variables"]["a"]
-        assert captured["variables"]["a"]["implements"]["diagram"]["canvas"][0]["key"] == "canvas_0"
+        assert (
+            captured["variables"]["a"]["implements"]["diagram"]["canvas"][0]["key"]
+            == "canvas_0"
+        )
         assert captured["kwargs"]["baseUrl"] == "https://example.test"
 
     def test_model_revision_run_creates_revision_then_job(self, monkeypatch):
@@ -527,7 +536,7 @@ class TestLocalModelBehavior:
 class TestLiveCloudPSSModelAndJob:
     def test_fetch_model_returns_expected_rid(self, integration_model):
         assert integration_model.rid == os.environ.get(
-            "TEST_MODEL_RID", "model/holdme/IEEE39"
+            "TEST_MODEL_RID", "model/chenying/IEEE39"
         )
         assert integration_model.name
         assert integration_model.jobs
@@ -539,7 +548,7 @@ class TestLiveCloudPSSModelAndJob:
 
     def test_fetch_many_filters_by_owner_and_name(self, integration_model):
         matches = Model.fetchMany(
-            owner="holdme",
+            owner="chenying",
             name="IEEE39",
             pageSize=10,
         )
@@ -547,8 +556,11 @@ class TestLiveCloudPSSModelAndJob:
         assert isinstance(matches, list)
         assert matches
         assert integration_model.rid in {item["rid"] for item in matches}
-        assert all(item["owner"] == "holdme" for item in matches)
-        assert all({"rid", "name", "owner", "description", "tags", "updatedAt"} <= item.keys() for item in matches)
+        assert all(item["owner"] == "chenying" for item in matches)
+        assert all(
+            {"rid", "name", "owner", "description", "tags", "updatedAt"} <= item.keys()
+            for item in matches
+        )
 
     def test_run_emt_job_can_be_fetched(self, integration_model):
         job = integration_model.runEMT()
@@ -603,8 +615,7 @@ class TestLiveEMTPreparationStructure:
         output_channels = [
             component
             for component in components.values()
-            if getattr(component, "definition", None)
-            == "model/CloudPSS/_newChannel"
+            if getattr(component, "definition", None) == "model/CloudPSS/_newChannel"
         ]
         matching_channels = [
             component
@@ -640,8 +651,7 @@ class TestLiveEMTPreparationStructure:
         voltage_channel = next(
             component
             for component in components.values()
-            if getattr(component, "definition", None)
-            == "model/CloudPSS/_newChannel"
+            if getattr(component, "definition", None) == "model/CloudPSS/_newChannel"
             and component.args.get("Name") == "vac"
         )
 
@@ -660,9 +670,7 @@ class TestLiveEMTPreparationStructure:
         updated_fault = working_model.getComponentByKey(fault.id)
         updated_channel = working_model.getComponentByKey(voltage_channel.id)
         emt_job = next(
-            job
-            for job in working_model.jobs
-            if job["rid"] == "function/CloudPSS/emtps"
+            job for job in working_model.jobs if job["rid"] == "function/CloudPSS/emtps"
         )
         emt_job["args"]["output_channels"][0]["1"] = 2000
         emt_job["args"]["output_curve"][0]["1"] = "oscilloscope"
@@ -692,7 +700,9 @@ class TestLiveComponentWorkflow:
 
         updated_resistors = working_model.getComponentsByRid("model/CloudPSS/resistor")
         assert len(updated_resistors) == len(original_resistors) + 1
-        assert working_model.getComponentByKey(component.id).label == "R_codex_integration"
+        assert (
+            working_model.getComponentByKey(component.id).label == "R_codex_integration"
+        )
 
         working_model.updateComponent(component.id, args={"resistance": 50})
         assert working_model.getComponentByKey(component.id).args["resistance"] == 50
