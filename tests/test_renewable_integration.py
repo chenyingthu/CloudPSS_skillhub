@@ -25,21 +25,17 @@ class TestRenewableIntegrationSkill:
         """基础配置"""
         return {
             "skill": "renewable_integration",
-            "auth": {"token": live_auth},
-            "model": {"rid": "model/holdme/IEEE39", "source": "cloud"},
-            "renewable": {
-                "type": "pv",
-                "bus": "BUS_10",
-                "capacity": 100
-            },
+            "auth": {"server": "internal"},
+            "model": {"rid": "model/chenying/IEEE39", "source": "cloud"},
+            "renewable": {"type": "pv", "bus": "BUS_10", "capacity": 100},
             "analysis": {
                 "scr": {"enabled": True, "threshold": 3.0},
                 "voltage_variation": {"enabled": True, "tolerance": 0.05},
                 "harmonic_injection": {"enabled": True, "limits": {"thd": 0.05}},
                 "lvrt_compliance": {"enabled": True, "standard": "gb"},
-                "stability_impact": {"enabled": True}
+                "stability_impact": {"enabled": True},
             },
-            "output": {"format": "json", "path": "./test_renewable_report.json"}
+            "output": {"format": "json", "path": "./test_renewable_report.json"},
         }
 
     def test_skill_initialization(self, skill):
@@ -66,7 +62,9 @@ class TestRenewableIntegrationSkill:
         result = skill.run(base_config)
 
         # 验证执行结果
-        assert result.status.value == "failed", "包含未真实验证分析项的全量评估不应返回success"
+        assert result.status.value == "failed", (
+            "包含未真实验证分析项的全量评估不应返回success"
+        )
         assert "不能作为已验证的新能源接入评估结论" in (result.error or "")
         assert result.data is not None
 
@@ -105,17 +103,15 @@ class TestRenewableIntegrationSkill:
         assert summary["assessment"] == "仅供初步评估"
         assert summary["certifiable"] is False
 
-        print(f"\n✅ 新能源接入评估完成: {summary['passed']}/{summary['total_analysis']} 项满足当前规则")
+        print(
+            f"\n✅ 新能源接入评估完成: {summary['passed']}/{summary['total_analysis']} 项满足当前规则"
+        )
         print(f"   SCR: {scr['scr']}, 电网强度: {scr['grid_strength']}")
         print(f"   总体评估: {summary['assessment']}")
 
     def test_pv_analysis(self, skill, base_config):
         """测试光伏接入分析"""
-        base_config["renewable"] = {
-            "type": "pv",
-            "bus": "BUS_10",
-            "capacity": 50
-        }
+        base_config["renewable"] = {"type": "pv", "bus": "BUS_10", "capacity": 50}
 
         result = skill.run(base_config)
         assert result.status.value == "failed"
@@ -129,11 +125,7 @@ class TestRenewableIntegrationSkill:
 
     def test_wind_analysis(self, skill, base_config):
         """测试风电接入分析"""
-        base_config["renewable"] = {
-            "type": "wind",
-            "bus": "BUS_10",
-            "capacity": 80
-        }
+        base_config["renewable"] = {"type": "wind", "bus": "BUS_10", "capacity": 80}
 
         result = skill.run(base_config)
         assert result.status.value == "failed"
@@ -212,7 +204,8 @@ class TestRenewableIntegrationSkill:
 
         # 验证文件内容
         import json
-        with open(output_path, 'r', encoding='utf-8') as f:
+
+        with open(output_path, "r", encoding="utf-8") as f:
             data = json.load(f)
             assert "model_rid" in data
             assert "analysis_results" in data
@@ -244,14 +237,21 @@ class TestRenewableIntegrationSkill:
         """测试基于专用风机LVRT算例的真实低电压穿越验证"""
         config = {
             "skill": "renewable_integration",
-            "auth": {"token": live_auth},
-            "model": {"rid": "model/holdme/codex_lvrt_case_fix_20260405_114928", "source": "cloud"},
+            "auth": {"server": "internal"},
+            "model": {
+                "rid": "model/chenying/codex_test_open_cloudpss_lvrt_workflow_e2e",
+                "source": "cloud",
+            },
             "renewable": {"type": "wind", "bus": "PCC", "capacity": 50},
             "analysis": {
                 "scr": {"enabled": False},
                 "voltage_variation": {"enabled": False},
                 "harmonic_injection": {"enabled": False},
-                "lvrt_compliance": {"enabled": True, "standard": "gb", "fault_mode": "1"},
+                "lvrt_compliance": {
+                    "enabled": True,
+                    "standard": "gb",
+                    "fault_mode": "1",
+                },
                 "stability_impact": {"enabled": False},
             },
             "output": {"format": "json", "path": "./test_renewable_lvrt_verified.json"},
@@ -273,4 +273,6 @@ class TestRenewableIntegrationSkill:
         assert summary["certifiable"] is True
         assert summary["overall_verified"] is True
 
-        print(f"\n✅ LVRT真实验证完成: job={lvrt['job_id']} state={lvrt['state_summary']}")
+        print(
+            f"\n✅ LVRT真实验证完成: job={lvrt['job_id']} state={lvrt['state_summary']}"
+        )
