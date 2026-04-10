@@ -167,7 +167,7 @@ class VoltageStabilitySkill(SkillBase):
             log("INFO", "认证成功")
 
             model_config = config["model"]
-            base_model = load_or_fetch_model(model_config)
+            base_model = load_or_fetch_model(model_config, config)
             log("INFO", f"模型: {base_model.name}")
 
             scan_config = config.get("scan", {})
