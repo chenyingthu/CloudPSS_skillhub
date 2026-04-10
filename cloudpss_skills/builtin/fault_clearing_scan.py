@@ -13,8 +13,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
-from cloudpss_skills.core.auth_utils import load_or_fetch_model
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import load_or_fetch_model, setup_auth
 from cloudpss_skills.core.emt_fault_core import (
     apply_fault_parameters,
     clone_model,
@@ -128,10 +136,14 @@ class FaultClearingScanSkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(timestamp=datetime.now(), level=level, message=message))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
+            setup_auth(config)
+
             log("INFO", "加载认证...")
             auth = config.get("auth", {})
             token = auth.get("token")
@@ -165,7 +177,7 @@ class FaultClearingScanSkill(SkillBase):
 
             results = []
             for i, fe in enumerate(fe_values):
-                log("INFO", f"[{i+1}/{len(fe_values)}] fe={fe}")
+                log("INFO", f"[{i + 1}/{len(fe_values)}] fe={fe}")
                 working_model = clone_model(base_model)
                 apply_fault_parameters(working_model, fs, fe, chg)
 
@@ -174,18 +186,24 @@ class FaultClearingScanSkill(SkillBase):
 
                 # 提取结果
                 result = job.result
-                voltage_at_study = self._extract_voltage_at_time(result, trace_name, study_time)
+                voltage_at_study = self._extract_voltage_at_time(
+                    result, trace_name, study_time
+                )
 
-                results.append({
-                    "fe": fe,
-                    "voltage_at_study": voltage_at_study,
-                    "job_id": job.id,
-                })
+                results.append(
+                    {
+                        "fe": fe,
+                        "voltage_at_study": voltage_at_study,
+                        "job_id": job.id,
+                    }
+                )
                 log("INFO", f"  -> 研究时刻电压: {voltage_at_study:.3f}")
 
             # 分析趋势
-            is_monotonic = all(results[i]["voltage_at_study"] >= results[i+1]["voltage_at_study"]
-                              for i in range(len(results)-1))
+            is_monotonic = all(
+                results[i]["voltage_at_study"] >= results[i + 1]["voltage_at_study"]
+                for i in range(len(results) - 1)
+            )
 
             # 导出
             output_path = Path(output_config.get("path", "./results/"))
@@ -202,18 +220,34 @@ class FaultClearingScanSkill(SkillBase):
 
             # JSON
             json_path = output_path / f"{prefix}_{timestamp}.json"
-            with open(json_path, 'w') as f:
+            with open(json_path, "w") as f:
                 json.dump(result_data, f, indent=2)
-            artifacts.append(Artifact(type="json", path=str(json_path), size=json_path.stat().st_size, description="清除时间扫描结果"))
+            artifacts.append(
+                Artifact(
+                    type="json",
+                    path=str(json_path),
+                    size=json_path.stat().st_size,
+                    description="清除时间扫描结果",
+                )
+            )
 
             # CSV
             csv_path = output_path / f"{prefix}_{timestamp}.csv"
-            with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            with open(csv_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow(["fe", "voltage_at_study", "job_id"])
                 for r in results:
-                    writer.writerow([r["fe"], f"{r['voltage_at_study']:.4f}", r["job_id"]])
-            artifacts.append(Artifact(type="csv", path=str(csv_path), size=csv_path.stat().st_size, description="清除时间扫描CSV"))
+                    writer.writerow(
+                        [r["fe"], f"{r['voltage_at_study']:.4f}", r["job_id"]]
+                    )
+            artifacts.append(
+                Artifact(
+                    type="csv",
+                    path=str(csv_path),
+                    size=csv_path.stat().st_size,
+                    description="清除时间扫描CSV",
+                )
+            )
 
             # Report
             if output_config.get("generate_report", True):
@@ -233,7 +267,14 @@ class FaultClearingScanSkill(SkillBase):
                 if is_monotonic:
                     lines.append("**结论**: 清除时间越晚，研究时刻电压越低，恢复越差。")
                 report_path.write_text("\n".join(lines), encoding="utf-8")
-                artifacts.append(Artifact(type="markdown", path=str(report_path), size=report_path.stat().st_size, description="清除时间扫描报告"))
+                artifacts.append(
+                    Artifact(
+                        type="markdown",
+                        path=str(report_path),
+                        size=report_path.stat().st_size,
+                        description="清除时间扫描报告",
+                    )
+                )
 
             return SkillResult(
                 skill_name=self.name,
@@ -245,7 +286,17 @@ class FaultClearingScanSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError, TypeError, ConnectionError, Exception) as e:
+        except (
+            KeyError,
+            AttributeError,
+            ZeroDivisionError,
+            RuntimeError,
+            FileNotFoundError,
+            ValueError,
+            TypeError,
+            ConnectionError,
+            Exception,
+        ) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

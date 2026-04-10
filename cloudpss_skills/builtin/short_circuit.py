@@ -24,7 +24,7 @@ from cloudpss_skills.core import (
     ValidationResult,
     register,
 )
-from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_emt
+from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_emt, setup_auth
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +184,7 @@ class ShortCircuitSkill(SkillBase):
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
+            setup_auth(config)
             model_config = config["model"]
             base_model = load_or_fetch_model(model_config, config)
             log("INFO", f"模型: {base_model.name}")

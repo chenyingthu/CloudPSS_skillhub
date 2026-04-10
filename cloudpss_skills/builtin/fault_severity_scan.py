@@ -13,9 +13,23 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
-from cloudpss_skills.core.auth_utils import load_or_fetch_model
-from cloudpss_skills.core.emt_fault_core import apply_fault_parameters, clone_model, run_emt_and_wait, find_trace, trace_rms
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import load_or_fetch_model, setup_auth
+from cloudpss_skills.core.emt_fault_core import (
+    apply_fault_parameters,
+    clone_model,
+    run_emt_and_wait,
+    find_trace,
+    trace_rms,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -74,9 +88,21 @@ class FaultSeverityScanSkill(SkillBase):
                         "time_windows": {
                             "type": "object",
                             "properties": {
-                                "prefault": {"type": "array", "items": {"type": "number"}, "default": [2.42, 2.44]},
-                                "fault": {"type": "array", "items": {"type": "number"}, "default": [2.56, 2.58]},
-                                "postfault": {"type": "array", "items": {"type": "number"}, "default": [2.92, 2.94]},
+                                "prefault": {
+                                    "type": "array",
+                                    "items": {"type": "number"},
+                                    "default": [2.42, 2.44],
+                                },
+                                "fault": {
+                                    "type": "array",
+                                    "items": {"type": "number"},
+                                    "default": [2.56, 2.58],
+                                },
+                                "postfault": {
+                                    "type": "array",
+                                    "items": {"type": "number"},
+                                    "default": [2.92, 2.94],
+                                },
                             },
                         },
                     },
@@ -123,10 +149,14 @@ class FaultSeverityScanSkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(timestamp=datetime.now(), level=level, message=message))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
+            setup_auth(config)
+
             log("INFO", "加载认证...")
             auth = config.get("auth", {})
             token = auth.get("token")
@@ -154,17 +184,20 @@ class FaultSeverityScanSkill(SkillBase):
             fs = scan_config.get("fs", 2.5)
             fe = scan_config.get("fe", 2.7)
             trace_name = assessment_config.get("trace_name", "vac:0")
-            time_windows = assessment_config.get("time_windows", {
-                "prefault": (2.42, 2.44),
-                "fault": (2.56, 2.58),
-                "postfault": (2.92, 2.94),
-            })
+            time_windows = assessment_config.get(
+                "time_windows",
+                {
+                    "prefault": (2.42, 2.44),
+                    "fault": (2.56, 2.58),
+                    "postfault": (2.92, 2.94),
+                },
+            )
 
             log("INFO", f"扫描 {len(chg_values)} 个故障电阻值: {chg_values}")
 
             results = []
             for i, chg in enumerate(chg_values):
-                log("INFO", f"[{i+1}/{len(chg_values)}] chg={chg}")
+                log("INFO", f"[{i + 1}/{len(chg_values)}] chg={chg}")
                 working_model = clone_model(base_model)
                 apply_fault_parameters(working_model, fs, fe, chg)
 
@@ -173,16 +206,22 @@ class FaultSeverityScanSkill(SkillBase):
                 result = job.result
                 metrics = self._extract_metrics(result, trace_name, time_windows)
 
-                results.append({
-                    "chg": chg,
-                    "prefault_rms": metrics["prefault_rms"],
-                    "fault_rms": metrics["fault_rms"],
-                    "postfault_rms": metrics["postfault_rms"],
-                    "fault_drop": metrics["prefault_rms"] - metrics["fault_rms"],
-                    "postfault_gap": metrics["prefault_rms"] - metrics["postfault_rms"],
-                    "job_id": job.id,
-                })
-                log("INFO", f"  -> 故障跌落: {results[-1]['fault_drop']:.3f}, 恢复缺口: {results[-1]['postfault_gap']:.3f}")
+                results.append(
+                    {
+                        "chg": chg,
+                        "prefault_rms": metrics["prefault_rms"],
+                        "fault_rms": metrics["fault_rms"],
+                        "postfault_rms": metrics["postfault_rms"],
+                        "fault_drop": metrics["prefault_rms"] - metrics["fault_rms"],
+                        "postfault_gap": metrics["prefault_rms"]
+                        - metrics["postfault_rms"],
+                        "job_id": job.id,
+                    }
+                )
+                log(
+                    "INFO",
+                    f"  -> 故障跌落: {results[-1]['fault_drop']:.3f}, 恢复缺口: {results[-1]['postfault_gap']:.3f}",
+                )
 
             # 排序
             results_sorted = sorted(results, key=lambda r: r["chg"])
@@ -190,8 +229,21 @@ class FaultSeverityScanSkill(SkillBase):
             # 分析趋势
             fault_drops = [r["fault_drop"] for r in results_sorted]
             post_gaps = [r["postfault_gap"] for r in results_sorted]
-            fault_trend = "decreasing" if all(fault_drops[i] >= fault_drops[i+1] for i in range(len(fault_drops)-1)) else "mixed"
-            gap_trend = "decreasing" if all(post_gaps[i] >= post_gaps[i+1] for i in range(len(post_gaps)-1)) else "mixed"
+            fault_trend = (
+                "decreasing"
+                if all(
+                    fault_drops[i] >= fault_drops[i + 1]
+                    for i in range(len(fault_drops) - 1)
+                )
+                else "mixed"
+            )
+            gap_trend = (
+                "decreasing"
+                if all(
+                    post_gaps[i] >= post_gaps[i + 1] for i in range(len(post_gaps) - 1)
+                )
+                else "mixed"
+            )
 
             # 导出
             output_path = Path(output_config.get("path", "./results/"))
@@ -207,20 +259,49 @@ class FaultSeverityScanSkill(SkillBase):
             }
 
             json_path = output_path / f"{prefix}_{timestamp}.json"
-            with open(json_path, 'w') as f:
+            with open(json_path, "w") as f:
                 json.dump(result_data, f, indent=2)
-            artifacts.append(Artifact(type="json", path=str(json_path), size=json_path.stat().st_size, description="严重度扫描结果"))
+            artifacts.append(
+                Artifact(
+                    type="json",
+                    path=str(json_path),
+                    size=json_path.stat().st_size,
+                    description="严重度扫描结果",
+                )
+            )
 
             csv_path = output_path / f"{prefix}_{timestamp}.csv"
-            with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            with open(csv_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                writer.writerow(["chg", "prefault_rms", "fault_rms", "postfault_rms", "fault_drop", "postfault_gap"])
+                writer.writerow(
+                    [
+                        "chg",
+                        "prefault_rms",
+                        "fault_rms",
+                        "postfault_rms",
+                        "fault_drop",
+                        "postfault_gap",
+                    ]
+                )
                 for r in results_sorted:
-                    writer.writerow([
-                        r["chg"], f"{r['prefault_rms']:.4f}", f"{r['fault_rms']:.4f}",
-                        f"{r['postfault_rms']:.4f}", f"{r['fault_drop']:.4f}", f"{r['postfault_gap']:.4f}"
-                    ])
-            artifacts.append(Artifact(type="csv", path=str(csv_path), size=csv_path.stat().st_size, description="严重度扫描CSV"))
+                    writer.writerow(
+                        [
+                            r["chg"],
+                            f"{r['prefault_rms']:.4f}",
+                            f"{r['fault_rms']:.4f}",
+                            f"{r['postfault_rms']:.4f}",
+                            f"{r['fault_drop']:.4f}",
+                            f"{r['postfault_gap']:.4f}",
+                        ]
+                    )
+            artifacts.append(
+                Artifact(
+                    type="csv",
+                    path=str(csv_path),
+                    size=csv_path.stat().st_size,
+                    description="严重度扫描CSV",
+                )
+            )
 
             if output_config.get("generate_report", True):
                 report_path = output_path / f"{prefix}_report_{timestamp}.md"
@@ -234,13 +315,24 @@ class FaultSeverityScanSkill(SkillBase):
                     "|-----|-----------|---------|-----------|------|------|",
                 ]
                 for r in results_sorted:
-                    lines.append(f"| {r['chg']} | {r['prefault_rms']:.3f} | {r['fault_rms']:.3f} | "
-                               f"{r['postfault_rms']:.3f} | {r['fault_drop']:.3f} | {r['postfault_gap']:.3f} |")
+                    lines.append(
+                        f"| {r['chg']} | {r['prefault_rms']:.3f} | {r['fault_rms']:.3f} | "
+                        f"{r['postfault_rms']:.3f} | {r['fault_drop']:.3f} | {r['postfault_gap']:.3f} |"
+                    )
                 lines.append("")
                 if fault_trend == "decreasing" and gap_trend == "decreasing":
-                    lines.append("**结论**: 故障电阻越大（故障越轻），故障跌落越小，恢复越好。")
+                    lines.append(
+                        "**结论**: 故障电阻越大（故障越轻），故障跌落越小，恢复越好。"
+                    )
                 report_path.write_text("\n".join(lines), encoding="utf-8")
-                artifacts.append(Artifact(type="markdown", path=str(report_path), size=report_path.stat().st_size, description="严重度扫描报告"))
+                artifacts.append(
+                    Artifact(
+                        type="markdown",
+                        path=str(report_path),
+                        size=report_path.stat().st_size,
+                        description="严重度扫描报告",
+                    )
+                )
 
             return SkillResult(
                 skill_name=self.name,
@@ -252,7 +344,17 @@ class FaultSeverityScanSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError, TypeError, ConnectionError, Exception) as e:
+        except (
+            KeyError,
+            AttributeError,
+            ZeroDivisionError,
+            RuntimeError,
+            FileNotFoundError,
+            ValueError,
+            TypeError,
+            ConnectionError,
+            Exception,
+        ) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

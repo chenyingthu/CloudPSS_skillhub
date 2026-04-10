@@ -13,8 +13,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
-from cloudpss_skills.core.auth_utils import load_or_fetch_model, get_cloudpss_kwargs
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import (
+    get_cloudpss_kwargs,
+    load_or_fetch_model,
+    setup_auth,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -67,24 +79,55 @@ class AutoLoopBreakerSkill(SkillBase):
                 "algorithm": {
                     "type": "object",
                     "properties": {
-                        "max_iterations": {"type": "integer", "default": 500, "description": "最大迭代次数"},
-                        "strategy": {"enum": ["degree", "random", "hybrid"], "default": "degree", "description": "节点选择策略"},
-                        "random_seed": {"type": "integer", "description": "随机种子（用于随机策略）"},
+                        "max_iterations": {
+                            "type": "integer",
+                            "default": 500,
+                            "description": "最大迭代次数",
+                        },
+                        "strategy": {
+                            "enum": ["degree", "random", "hybrid"],
+                            "default": "degree",
+                            "description": "节点选择策略",
+                        },
+                        "random_seed": {
+                            "type": "integer",
+                            "description": "随机种子（用于随机策略）",
+                        },
                     },
                 },
                 "loop_node": {
                     "type": "object",
                     "properties": {
-                        "init_value": {"type": "string", "default": "0", "description": "解环点初始值"},
-                        "name_prefix": {"type": "string", "default": "LoopBreaker", "description": "解环点名称前缀"},
+                        "init_value": {
+                            "type": "string",
+                            "default": "0",
+                            "description": "解环点初始值",
+                        },
+                        "name_prefix": {
+                            "type": "string",
+                            "default": "LoopBreaker",
+                            "description": "解环点名称前缀",
+                        },
                     },
                 },
                 "output": {
                     "type": "object",
                     "properties": {
-                        "save_model": {"type": "boolean", "default": False, "description": "是否保存修改后的模型"},
-                        "dry_run": {"type": "boolean", "default": False, "description": "仅预览不修改"},
-                        "new_name_suffix": {"type": "string", "default": "_unloop", "description": "新模型名称后缀"},
+                        "save_model": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": "是否保存修改后的模型",
+                        },
+                        "dry_run": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": "仅预览不修改",
+                        },
+                        "new_name_suffix": {
+                            "type": "string",
+                            "default": "_unloop",
+                            "description": "新模型名称后缀",
+                        },
                     },
                 },
             },
@@ -138,14 +181,14 @@ class AutoLoopBreakerSkill(SkillBase):
         broken_loops = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(
-                timestamp=datetime.now(),
-                level=level,
-                message=message
-            ))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
+            setup_auth(config)
+
             # 1. 认证
             log("INFO", "加载认证信息...")
             auth = config.get("auth", {})
@@ -197,8 +240,11 @@ class AutoLoopBreakerSkill(SkillBase):
             log("INFO", "分析模型拓扑...")
             try:
                 topo_graph, topo_pin_dict, comp_list = self._build_topology_graph(model)
-                log("INFO", f"  -> 发现 {len(topo_graph.nodes)} 个信号节点，{len(topo_graph.edges)} 条连接")
-            except (AttributeError) as e:
+                log(
+                    "INFO",
+                    f"  -> 发现 {len(topo_graph.nodes)} 个信号节点，{len(topo_graph.edges)} 条连接",
+                )
+            except AttributeError as e:
                 log("ERROR", f"拓扑分析失败: {e}")
                 raise
 
@@ -206,6 +252,7 @@ class AutoLoopBreakerSkill(SkillBase):
             log("INFO", "检测控制环路...")
             try:
                 import networkx as nx
+
                 has_loops = not nx.is_directed_acyclic_graph(topo_graph)
             except ImportError as e:
                 log("ERROR", f"环路检测失败: {e}")
@@ -234,9 +281,11 @@ class AutoLoopBreakerSkill(SkillBase):
 
             # 6. 计算反馈顶点集
             try:
-                fvs_nodes = self._compute_fvs(topo_graph, max_iter, strategy, random_seed)
+                fvs_nodes = self._compute_fvs(
+                    topo_graph, max_iter, strategy, random_seed
+                )
                 log("INFO", f"  -> 需要打破 {len(fvs_nodes)} 个环路节点")
-            except (AttributeError) as e:
+            except AttributeError as e:
                 log("ERROR", f"FVS计算失败: {e}")
                 raise
 
@@ -244,15 +293,22 @@ class AutoLoopBreakerSkill(SkillBase):
                 log("INFO", "【试运行模式】解环方案预览:")
                 for node in fvs_nodes:
                     node_info = topo_pin_dict.get(node, [["unknown", "unknown"]])
-                    log("INFO", f"  - 将在 {node_info[0][0]}.{node_info[0][1]} 插入解环点")
+                    log(
+                        "INFO",
+                        f"  - 将在 {node_info[0][0]}.{node_info[0][1]} 插入解环点",
+                    )
 
             # 7. 执行解环
             if not dry_run:
                 log("INFO", "执行解环操作...")
                 try:
                     broken_loops = self._break_loops(
-                        model, fvs_nodes, topo_pin_dict, comp_list,
-                        init_value, name_prefix
+                        model,
+                        fvs_nodes,
+                        topo_pin_dict,
+                        comp_list,
+                        init_value,
+                        name_prefix,
                     )
                     log("INFO", f"  -> 成功插入 {len(broken_loops)} 个解环点")
                 except AttributeError as e:
@@ -265,7 +321,7 @@ class AutoLoopBreakerSkill(SkillBase):
                 try:
                     new_name = model.name + new_name_suffix
                     # 提取模型key
-                    match = re.match(r'.*?/.*?/(.*)', model.rid)
+                    match = re.match(r".*?/.*?/(.*)", model.rid)
                     if match:
                         new_key = match.group(1) + new_name_suffix
                         model.save(new_key)
@@ -279,18 +335,29 @@ class AutoLoopBreakerSkill(SkillBase):
             # 9. 生成报告
             log("INFO", "生成解环报告...")
             try:
-                report = self._generate_report(fvs_nodes, topo_pin_dict, broken_loops, dry_run)
+                report = self._generate_report(
+                    fvs_nodes, topo_pin_dict, broken_loops, dry_run
+                )
                 report_path = Path("./results/auto_loop_breaker_report.json")
                 report_path.parent.mkdir(parents=True, exist_ok=True)
                 report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False))
 
-                artifacts.append(Artifact(
-                    type="json",
-                    path=str(report_path),
-                    size=report_path.stat().st_size,
-                    description="解环分析报告"
-                ))
-            except (AttributeError, ZeroDivisionError, json.JSONDecodeError, RuntimeError, ValueError, TypeError) as e:
+                artifacts.append(
+                    Artifact(
+                        type="json",
+                        path=str(report_path),
+                        size=report_path.stat().st_size,
+                        description="解环分析报告",
+                    )
+                )
+            except (
+                AttributeError,
+                ZeroDivisionError,
+                json.JSONDecodeError,
+                RuntimeError,
+                ValueError,
+                TypeError,
+            ) as e:
                 log("ERROR", f"生成报告失败: {e}")
                 # 报告生成失败不中断整体流程
                 pass  # 继续执行
@@ -317,9 +384,21 @@ class AutoLoopBreakerSkill(SkillBase):
                 logs=logs,
             )
 
-        except (AttributeError, ZeroDivisionError, json.JSONDecodeError, RuntimeError, ValueError, TypeError, KeyError, FileNotFoundError, ConnectionError, Exception) as e:
+        except (
+            AttributeError,
+            ZeroDivisionError,
+            json.JSONDecodeError,
+            RuntimeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            FileNotFoundError,
+            ConnectionError,
+            Exception,
+        ) as e:
             log("ERROR", f"执行失败: {e}")
             import traceback
+
             log("DEBUG", traceback.format_exc())
             return SkillResult(
                 skill_name=self.name,
@@ -349,22 +428,30 @@ class AutoLoopBreakerSkill(SkillBase):
             dict_pin = {}
             definition_fetch_failures = []
             for comp_key, comp in model.getAllComponents().items():
-                if 'diagram-component' not in getattr(comp, 'shape', ''):
+                if "diagram-component" not in getattr(comp, "shape", ""):
                     continue
                 if comp.definition in dict_pin:
                     continue
                 # 获取元件定义
                 try:
-                    defn = model.__class__.fetch(comp.definition, **get_cloudpss_kwargs(config))
+                    defn = model.__class__.fetch(
+                        comp.definition, **get_cloudpss_kwargs(config)
+                    )
                     r = defn.revision
-                    dict_pin[comp.definition] = {r.pins[k]['key']: r.pins[k] for k in range(len(r.pins))}
+                    dict_pin[comp.definition] = {
+                        r.pins[k]["key"]: r.pins[k] for k in range(len(r.pins))
+                    }
                 except (KeyError, AttributeError, Exception) as e:
                     definition_fetch_failures.append((comp.definition, str(e)))
                     logger.debug(f"获取元件定义失败 {comp.definition}: {e}")
                     continue
 
             if not dict_pin:
-                sample = definition_fetch_failures[0] if definition_fetch_failures else ("unknown", "unknown")
+                sample = (
+                    definition_fetch_failures[0]
+                    if definition_fetch_failures
+                    else ("unknown", "unknown")
+                )
                 raise RuntimeError(
                     "无法读取组件定义，auto_loop_breaker 需要访问组件 definition/revision 才能识别信号方向。"
                     f" 当前示例失败: {sample[0]} -> {sample[1]}"
@@ -375,10 +462,10 @@ class AutoLoopBreakerSkill(SkillBase):
             topo_pin_dict = {}
             comp_list = {}
 
-            for comp_key, comp_data in topo.get('components', {}).items():
+            for comp_key, comp_data in topo.get("components", {}).items():
                 innodes = []
                 outnodes = []
-                definition = comp_data.get('definition', '')
+                definition = comp_data.get("definition", "")
 
                 # 跳过特定元件
                 if definition in [
@@ -388,7 +475,7 @@ class AutoLoopBreakerSkill(SkillBase):
                 ]:
                     continue
 
-                pins = comp_data.get('pins', {})
+                pins = comp_data.get("pins", {})
 
                 # 处理ChannelDeMerge
                 if definition == self.COMPONENT_RIDS["channel_demerge"]:
@@ -399,7 +486,7 @@ class AutoLoopBreakerSkill(SkillBase):
                         if pin_id_int not in topo_pin_dict:
                             topo_pin_dict[pin_id_int] = []
                         topo_pin_dict[pin_id_int].append([comp_key, pin_name, 0])
-                        if pin_name == 'InName':
+                        if pin_name == "InName":
                             innodes.append(pin_id_int)
                         else:
                             outnodes.append(pin_id_int)
@@ -413,7 +500,7 @@ class AutoLoopBreakerSkill(SkillBase):
                         if pin_id_int not in topo_pin_dict:
                             topo_pin_dict[pin_id_int] = []
                         topo_pin_dict[pin_id_int].append([comp_key, pin_name, 0])
-                        if pin_name == 'OutName':
+                        if pin_name == "OutName":
                             outnodes.append(pin_id_int)
                         else:
                             innodes.append(pin_id_int)
@@ -426,21 +513,21 @@ class AutoLoopBreakerSkill(SkillBase):
                         if not pin_id:
                             continue
                         pin_info = dict_pin[definition].get(pin_name, {})
-                        if pin_info.get('connection') == 'electrical':
+                        if pin_info.get("connection") == "electrical":
                             continue
                         pin_id_int = int(pin_id)
                         if pin_id_int not in topo_pin_dict:
                             topo_pin_dict[pin_id_int] = []
                         topo_pin_dict[pin_id_int].append([comp_key, pin_name, 0])
-                        if pin_info.get('connection') == 'input':
+                        if pin_info.get("connection") == "input":
                             innodes.append(pin_id_int)
-                        elif pin_info.get('connection') == 'output':
+                        elif pin_info.get("connection") == "output":
                             outnodes.append(pin_id_int)
 
                 innodes = list(set(innodes))
                 outnodes = list(set(outnodes))
                 if comp_key not in comp_list:
-                    comp_list[comp_key] = {'in': innodes, 'out': outnodes}
+                    comp_list[comp_key] = {"in": innodes, "out": outnodes}
 
             # 添加节点和边
             nodelist = list(topo_pin_dict.keys())
@@ -448,18 +535,27 @@ class AutoLoopBreakerSkill(SkillBase):
 
             edgelist = []
             for comp_key, comp_info in comp_list.items():
-                for ink in comp_info['in']:
-                    for outk in comp_info['out']:
+                for ink in comp_info["in"]:
+                    for outk in comp_info["out"]:
                         edgelist.append((ink, outk))
             g.add_edges_from(edgelist)
 
             return g, topo_pin_dict, comp_list
 
-        except (KeyError, AttributeError, ConnectionError, RuntimeError, ValueError, TypeError) as e:
+        except (
+            KeyError,
+            AttributeError,
+            ConnectionError,
+            RuntimeError,
+            ValueError,
+            TypeError,
+        ) as e:
             logger.error(f"构建拓扑图失败: {e}")
             raise RuntimeError(f"构建模型拓扑图失败: {e}") from e
 
-    def _compute_fvs(self, g: Any, max_iter: int, strategy: str, random_seed: Optional[int]) -> List[int]:
+    def _compute_fvs(
+        self, g: Any, max_iter: int, strategy: str, random_seed: Optional[int]
+    ) -> List[int]:
         """计算反馈顶点集"""
         import networkx as nx
         import random
@@ -488,7 +584,9 @@ class AutoLoopBreakerSkill(SkillBase):
 
             # 根据策略选择节点
             if strategy == "degree":
-                scores = {n: g_copy.in_degree(n) + g_copy.out_degree(n) for n in nodes_in_scc}
+                scores = {
+                    n: g_copy.in_degree(n) + g_copy.out_degree(n) for n in nodes_in_scc
+                }
                 top_node = max(nodes_in_scc, key=lambda x: scores[x])
             elif strategy == "random":
                 top_node = random.choice(nodes_in_scc)
@@ -496,10 +594,15 @@ class AutoLoopBreakerSkill(SkillBase):
                 if iteration % 5 == 0 and len(nodes_in_scc) >= 5:
                     top_node = random.choice(nodes_in_scc)
                 else:
-                    scores = {n: g_copy.in_degree(n) + g_copy.out_degree(n) for n in nodes_in_scc}
+                    scores = {
+                        n: g_copy.in_degree(n) + g_copy.out_degree(n)
+                        for n in nodes_in_scc
+                    }
                     top_node = max(nodes_in_scc, key=lambda x: scores[x])
             else:
-                scores = {n: g_copy.in_degree(n) + g_copy.out_degree(n) for n in nodes_in_scc}
+                scores = {
+                    n: g_copy.in_degree(n) + g_copy.out_degree(n) for n in nodes_in_scc
+                }
                 top_node = max(nodes_in_scc, key=lambda x: scores[x])
 
             fvs.add(top_node)
@@ -515,14 +618,14 @@ class AutoLoopBreakerSkill(SkillBase):
         topo_pin_dict: Dict,
         comp_list: Dict,
         init_value: str,
-        name_prefix: str
+        name_prefix: str,
     ) -> List[Dict]:
         """执行解环操作"""
         from cloudpss.model.implements.component import Component
 
         broken_loops = []
         count = 1
-        edge_id = f'edge_unloop_{time.strftime("%Y%m%d%H%M%S", time.localtime())}{random.randint(100,999)}'
+        edge_id = f"edge_unloop_{time.strftime('%Y%m%d%H%M%S', time.localtime())}{random.randint(100, 999)}"
 
         for node in fvs_nodes:
             node_info = topo_pin_dict.get(node, [])
@@ -541,71 +644,89 @@ class AutoLoopBreakerSkill(SkillBase):
 
             # 确定解环点类型
             try:
-                if (comp.definition == self.COMPONENT_RIDS["channel_demerge"] and pin_name == 'InName'):
-                    dim = comp.args.get('InDimX', '1')
+                if (
+                    comp.definition == self.COMPONENT_RIDS["channel_demerge"]
+                    and pin_name == "InName"
+                ):
+                    dim = comp.args.get("InDimX", "1")
                     loop_node = model.addComponent(
                         self.COMPONENT_RIDS["loop_node_multi"],
-                        '多维解环点',
-                        {'Name': f"{name_prefix}_{count}", 'Init': init_value, 'dim': str(dim)},
-                        {'0': ''},
+                        "多维解环点",
+                        {
+                            "Name": f"{name_prefix}_{count}",
+                            "Init": init_value,
+                            "dim": str(dim),
+                        },
+                        {"0": ""},
                         comp.canvas,
-                        comp.position
+                        comp.position,
                     )
-                    target_port = 'Input'
-                elif (comp.definition == self.COMPONENT_RIDS["channel_merge"] and pin_name == 'OutName'):
-                    dim = comp.args.get('OutDimX', '1')
+                    target_port = "Input"
+                elif (
+                    comp.definition == self.COMPONENT_RIDS["channel_merge"]
+                    and pin_name == "OutName"
+                ):
+                    dim = comp.args.get("OutDimX", "1")
                     loop_node = model.addComponent(
                         self.COMPONENT_RIDS["loop_node_multi"],
-                        '多维解环点',
-                        {'Name': f"{name_prefix}_{count}", 'Init': init_value, 'dim': str(dim)},
-                        {'0': ''},
+                        "多维解环点",
+                        {
+                            "Name": f"{name_prefix}_{count}",
+                            "Init": init_value,
+                            "dim": str(dim),
+                        },
+                        {"0": ""},
                         comp.canvas,
-                        comp.position
+                        comp.position,
                     )
-                    target_port = 'Input'
+                    target_port = "Input"
                 else:
                     loop_node = model.addComponent(
                         self.COMPONENT_RIDS["loop_node"],
-                        '解环点',
-                        {'Name': f"{name_prefix}_{count}", 'Init': init_value},
-                        {'0': ''},
+                        "解环点",
+                        {"Name": f"{name_prefix}_{count}", "Init": init_value},
+                        {"0": ""},
                         comp.canvas,
-                        comp.position
+                        comp.position,
                     )
-                    target_port = '0'
+                    target_port = "0"
             except (AttributeError, TypeError) as e:
                 logger.warning(f"创建解环点失败 ({comp_key}.{pin_name}): {e}")
                 continue
 
             # 创建连接
             try:
-                edge = Component({
-                    'attrs': {
-                        'root': {
-                            'style': {
-                                '--stroke': 'var(--edge-electrical-stroke,var(--edge-stroke))',
-                                '--stroke-width': 'calc(2*var(--rpx,1))'
+                edge = Component(
+                    {
+                        "attrs": {
+                            "root": {
+                                "style": {
+                                    "--stroke": "var(--edge-electrical-stroke,var(--edge-stroke))",
+                                    "--stroke-width": "calc(2*var(--rpx,1))",
+                                }
                             }
-                        }
-                    },
-                    'canvas': comp.canvas,
-                    'id': edge_id + str(count),
-                    'shape': 'diagram-edge',
-                    'source': {'cell': comp.id, 'port': pin_name},
-                    'target': {'cell': loop_node.id, 'port': target_port}
-                })
+                        },
+                        "canvas": comp.canvas,
+                        "id": edge_id + str(count),
+                        "shape": "diagram-edge",
+                        "source": {"cell": comp.id, "port": pin_name},
+                        "target": {"cell": loop_node.id, "port": target_port},
+                    }
+                )
 
                 model.revision.implements.diagram.cells[edge_id + str(count)] = edge
             except (KeyError, AttributeError) as e:
                 logger.warning(f"创建连接失败 ({comp_key}.{pin_name}): {e}")
                 continue
 
-            broken_loops.append({
-                'component': comp_key,
-                'pin': pin_name,
-                'loop_node_id': loop_node.id,
-                'loop_node_name': f"{name_prefix}_{count}",
-            })
+            broken_loops.append(
+                {
+                    "component": comp_key,
+                    "pin": pin_name,
+                    "loop_node_id": loop_node.id,
+                    "loop_node_name": f"{name_prefix}_{count}",
+                }
+            )
 
             count += 1
 
@@ -616,17 +737,19 @@ class AutoLoopBreakerSkill(SkillBase):
         fvs_nodes: List[int],
         topo_pin_dict: Dict,
         broken_loops: List[Dict],
-        dry_run: bool
+        dry_run: bool,
     ) -> Dict:
         """生成解环报告"""
         loop_details = []
         for node in fvs_nodes:
             node_info = topo_pin_dict.get(node, [["unknown", "unknown"]])
-            loop_details.append({
-                "node_id": node,
-                "component": node_info[0][0],
-                "pin": node_info[0][1],
-            })
+            loop_details.append(
+                {
+                    "node_id": node,
+                    "component": node_info[0][0],
+                    "pin": node_info[0][1],
+                }
+            )
 
         return {
             "summary": {

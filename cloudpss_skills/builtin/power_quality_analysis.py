@@ -24,7 +24,7 @@ from cloudpss_skills.core import (
     ValidationResult,
     register,
 )
-from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_emt
+from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_emt, setup_auth
 
 logger = logging.getLogger(__name__)
 
@@ -229,6 +229,8 @@ class PowerQualityAnalysisSkill(SkillBase):
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
+            setup_auth(config)
+
             log("INFO", "加载认证...")
             auth = config.get("auth", {})
             token = auth.get("token")

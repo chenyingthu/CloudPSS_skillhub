@@ -14,8 +14,21 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Tuple, Optional
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
-from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_emt, run_powerflow
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import (
+    load_or_fetch_model,
+    run_emt,
+    run_powerflow,
+    setup_auth,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,14 +76,23 @@ class ParameterSensitivitySkill(SkillBase):
                     "type": "object",
                     "required": ["target", "values"],
                     "properties": {
-                        "target": {"type": "string", "description": "目标参数 (e.g., Gen2.pf_P, line_1.X)"},
+                        "target": {
+                            "type": "string",
+                            "description": "目标参数 (e.g., Gen2.pf_P, line_1.X)",
+                        },
                         "values": {
                             "type": "array",
                             "items": {"type": "number"},
                             "description": "参数扫描值列表",
                         },
-                        "reference": {"type": "number", "description": "参考值，用于计算相对变化"},
-                        "simulation_type": {"enum": ["power_flow", "emt"], "default": "power_flow"},
+                        "reference": {
+                            "type": "number",
+                            "description": "参考值，用于计算相对变化",
+                        },
+                        "simulation_type": {
+                            "enum": ["power_flow", "emt"],
+                            "default": "power_flow",
+                        },
                     },
                 },
                 "metrics": {
@@ -98,7 +120,10 @@ class ParameterSensitivitySkill(SkillBase):
                     "properties": {
                         "format": {"enum": ["json", "csv"], "default": "json"},
                         "path": {"type": "string", "default": "./results/"},
-                        "prefix": {"type": "string", "default": "parameter_sensitivity"},
+                        "prefix": {
+                            "type": "string",
+                            "default": "parameter_sensitivity",
+                        },
                         "generate_report": {"type": "boolean", "default": True},
                     },
                 },
@@ -136,10 +161,14 @@ class ParameterSensitivitySkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(timestamp=datetime.now(), level=level, message=message))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
+            setup_auth(config)
+
             log("INFO", "加载认证...")
             auth = config.get("auth", {})
             token = auth.get("token")
@@ -189,7 +218,7 @@ class ParameterSensitivitySkill(SkillBase):
             results = []
             failed_points = []
             for i, val in enumerate(values):
-                log("INFO", f"[{i+1}/{len(values)}] 参数值={val}")
+                log("INFO", f"[{i + 1}/{len(values)}] 参数值={val}")
                 working_model = Model(deepcopy(base_model.toJSON()))
 
                 # 修改参数
@@ -203,7 +232,13 @@ class ParameterSensitivitySkill(SkillBase):
                 try:
                     result = self._run_simulation(working_model, sim_type, config)
                     metrics = self._extract_metrics(result, metrics_config, sim_type)
-                except (RuntimeError, ValueError, TypeError, AttributeError, ConnectionError) as e:
+                except (
+                    RuntimeError,
+                    ValueError,
+                    TypeError,
+                    AttributeError,
+                    ConnectionError,
+                ) as e:
                     msg = str(e)
                     log("WARNING", f"  仿真/指标提取失败: {msg}")
                     failed_points.append({"parameter_value": val, "error": msg})
@@ -224,11 +259,13 @@ class ParameterSensitivitySkill(SkillBase):
                     else:
                         relative_changes[key] = metrics[key]
 
-                results.append({
-                    "parameter_value": val,
-                    "metrics": metrics,
-                    "relative_changes": relative_changes,
-                })
+                results.append(
+                    {
+                        "parameter_value": val,
+                        "metrics": metrics,
+                        "relative_changes": relative_changes,
+                    }
+                )
 
                 log("INFO", f"  -> 指标变化: {relative_changes}")
 
@@ -257,33 +294,64 @@ class ParameterSensitivitySkill(SkillBase):
 
             # JSON输出
             json_path = output_path / f"{prefix}_{timestamp}.json"
-            with open(json_path, 'w') as f:
+            with open(json_path, "w") as f:
                 json.dump(result_data, f, indent=2)
-            artifacts.append(Artifact(type="json", path=str(json_path), size=json_path.stat().st_size, description="参数灵敏度分析结果"))
+            artifacts.append(
+                Artifact(
+                    type="json",
+                    path=str(json_path),
+                    size=json_path.stat().st_size,
+                    description="参数灵敏度分析结果",
+                )
+            )
 
             # CSV输出
             csv_path = output_path / f"{prefix}_{timestamp}.csv"
-            with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            with open(csv_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                writer.writerow(["parameter", "metric", "sensitivity", "sensitivity_rank"])
-                for s in sorted(sensitivities, key=lambda x: abs(x["sensitivity"]), reverse=True):
-                    writer.writerow([
-                        s["parameter"],
-                        s["metric"],
-                        f"{s['sensitivity']:.6f}",
-                        s["rank"],
-                    ])
-            artifacts.append(Artifact(type="csv", path=str(csv_path), size=csv_path.stat().st_size, description="灵敏度分析CSV"))
+                writer.writerow(
+                    ["parameter", "metric", "sensitivity", "sensitivity_rank"]
+                )
+                for s in sorted(
+                    sensitivities, key=lambda x: abs(x["sensitivity"]), reverse=True
+                ):
+                    writer.writerow(
+                        [
+                            s["parameter"],
+                            s["metric"],
+                            f"{s['sensitivity']:.6f}",
+                            s["rank"],
+                        ]
+                    )
+            artifacts.append(
+                Artifact(
+                    type="csv",
+                    path=str(csv_path),
+                    size=csv_path.stat().st_size,
+                    description="灵敏度分析CSV",
+                )
+            )
 
             # 生成报告
             if output_config.get("generate_report", True):
                 report_path = output_path / f"{prefix}_report_{timestamp}.md"
                 self._generate_report(result_data, report_path)
-                artifacts.append(Artifact(type="markdown", path=str(report_path), size=report_path.stat().st_size, description="灵敏度分析报告"))
+                artifacts.append(
+                    Artifact(
+                        type="markdown",
+                        path=str(report_path),
+                        size=report_path.stat().st_size,
+                        description="灵敏度分析报告",
+                    )
+                )
 
-            final_status = SkillStatus.SUCCESS if not failed_points else SkillStatus.FAILED
-            final_error = None if final_status == SkillStatus.SUCCESS else (
-                f"共有 {len(failed_points)} 个扫描点失败，参数灵敏度结果不完整"
+            final_status = (
+                SkillStatus.SUCCESS if not failed_points else SkillStatus.FAILED
+            )
+            final_error = (
+                None
+                if final_status == SkillStatus.SUCCESS
+                else (f"共有 {len(failed_points)} 个扫描点失败，参数灵敏度结果不完整")
             )
 
             return SkillResult(
@@ -297,7 +365,17 @@ class ParameterSensitivitySkill(SkillBase):
                 error=final_error,
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError, TypeError, ConnectionError, Exception) as e:
+        except (
+            KeyError,
+            AttributeError,
+            ZeroDivisionError,
+            RuntimeError,
+            FileNotFoundError,
+            ValueError,
+            TypeError,
+            ConnectionError,
+            Exception,
+        ) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
@@ -318,7 +396,9 @@ class ParameterSensitivitySkill(SkillBase):
             return {
                 "component": parts[0],
                 "arg": parts[1],
-                "type": "generator_arg" if parts[1].startswith("pf_") else "component_arg",
+                "type": "generator_arg"
+                if parts[1].startswith("pf_")
+                else "component_arg",
             }
         return {"component": target, "arg": None, "type": "unknown"}
 
@@ -332,7 +412,7 @@ class ParameterSensitivitySkill(SkillBase):
         # 查找组件 - 只找有args属性的真正组件
         target_comp_key = None
         for key, comp in components.items():
-            if not hasattr(comp, 'args'):
+            if not hasattr(comp, "args"):
                 continue  # Skip edges/shapes
             if self._component_matches(comp, key, comp_id):
                 target_comp_key = key
@@ -348,7 +428,9 @@ class ParameterSensitivitySkill(SkillBase):
             model.updateComponent(target_comp_key, args=args)
         else:
             # 修改整个组件参数（如R、X等）
-            model.updateComponent(target_comp_key, args={"value": {"source": str(value), "ɵexp": ""}})
+            model.updateComponent(
+                target_comp_key, args={"value": {"source": str(value), "ɵexp": ""}}
+            )
 
         return True
 
@@ -362,7 +444,9 @@ class ParameterSensitivitySkill(SkillBase):
             key,
             getattr(comp, "label", ""),
             getattr(comp, "name", ""),
-            getattr(comp, "args", {}).get("Name", "") if hasattr(comp, "args") and comp.args else "",
+            getattr(comp, "args", {}).get("Name", "")
+            if hasattr(comp, "args") and comp.args
+            else "",
         ]
         for candidate in candidates:
             if self._normalize_component_identifier(candidate) == target_norm:
@@ -388,7 +472,9 @@ class ParameterSensitivitySkill(SkillBase):
 
         return job.result
 
-    def _extract_metrics(self, result, metrics_config: Dict, sim_type: str) -> Dict[str, float]:
+    def _extract_metrics(
+        self, result, metrics_config: Dict, sim_type: str
+    ) -> Dict[str, float]:
         """提取指标"""
         metrics = {}
 
@@ -419,7 +505,11 @@ class ParameterSensitivitySkill(SkillBase):
                         metrics["min_Vm"] = min(vm_data) if vm_data else 1.0
 
             # 解析支路数据
-            if branches_data and isinstance(branches_data, list) and len(branches_data) > 0:
+            if (
+                branches_data
+                and isinstance(branches_data, list)
+                and len(branches_data) > 0
+            ):
                 branch_table = branches_data[0]
                 if branch_table.get("type") == "table":
                     columns = branch_table.get("data", {}).get("columns", [])
@@ -427,7 +517,9 @@ class ParameterSensitivitySkill(SkillBase):
 
                     p_ij_data = col_data.get("<i>P</i><sub>ij</sub> / MW", [])
                     if p_ij_data:
-                        metrics["max_P_transfer"] = max(abs(p) for p in p_ij_data if p is not None)
+                        metrics["max_P_transfer"] = max(
+                            abs(p) for p in p_ij_data if p is not None
+                        )
 
         else:
             # EMT结果 - 提取最后时间点的值
@@ -441,7 +533,9 @@ class ParameterSensitivitySkill(SkillBase):
 
         return metrics
 
-    def _calculate_sensitivities(self, results: List[Dict], target: str, reference: float) -> List[Dict]:
+    def _calculate_sensitivities(
+        self, results: List[Dict], target: str, reference: float
+    ) -> List[Dict]:
         """计算灵敏度"""
         if not results or len(results) < 2:
             return []
@@ -455,7 +549,9 @@ class ParameterSensitivitySkill(SkillBase):
 
         for metric in all_metrics:
             # 收集 (参数值, 指标值) 对
-            points = [(r["parameter_value"], r["metrics"].get(metric, 0)) for r in results]
+            points = [
+                (r["parameter_value"], r["metrics"].get(metric, 0)) for r in results
+            ]
             points.sort(key=lambda x: x[0])
 
             # 线性回归求灵敏度 (dy/dx)
@@ -483,13 +579,15 @@ class ParameterSensitivitySkill(SkillBase):
             else:
                 normalized_sens = sensitivity
 
-            sensitivities.append({
-                "parameter": target,
-                "metric": metric,
-                "sensitivity": sensitivity,
-                "normalized_sensitivity": normalized_sens,
-                "rank": 0,  # 稍后排序
-            })
+            sensitivities.append(
+                {
+                    "parameter": target,
+                    "metric": metric,
+                    "sensitivity": sensitivity,
+                    "normalized_sensitivity": normalized_sens,
+                    "rank": 0,  # 稍后排序
+                }
+            )
 
         # 排序并分配rank
         sensitivities.sort(key=lambda x: abs(x["sensitivity"]), reverse=True)
@@ -519,31 +617,45 @@ class ParameterSensitivitySkill(SkillBase):
                 f"| {s['rank']} | {s['metric']} | {s['sensitivity']:.6f} | {s.get('normalized_sensitivity', 0):.6f} |"
             )
 
-        lines.extend([
-            "",
-            "## 扫描结果",
-            "",
-            "| 参数值 | " + " | ".join(data.get("results", [{}])[0].get("metrics", {}).keys()) + " |",
-            "|--------|" + "|".join(["--------"] * len(data.get("results", [{}])[0].get("metrics", {}))) + "|",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 扫描结果",
+                "",
+                "| 参数值 | "
+                + " | ".join(data.get("results", [{}])[0].get("metrics", {}).keys())
+                + " |",
+                "|--------|"
+                + "|".join(
+                    ["--------"] * len(data.get("results", [{}])[0].get("metrics", {}))
+                )
+                + "|",
+            ]
+        )
 
         for r in data.get("results", []):
             metrics_str = " | ".join(f"{v:.4f}" for v in r.get("metrics", {}).values())
             lines.append(f"| {r['parameter_value']} | {metrics_str} |")
 
-        lines.extend([
-            "",
-            "## 结论",
-            "",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 结论",
+                "",
+            ]
+        )
 
         top_sens = data.get("sensitivities", [])[:3]
         if top_sens:
-            lines.append(f"**最敏感指标**: {top_sens[0]['metric']} (灵敏度={top_sens[0]['sensitivity']:.6f})")
+            lines.append(
+                f"**最敏感指标**: {top_sens[0]['metric']} (灵敏度={top_sens[0]['sensitivity']:.6f})"
+            )
             lines.append("")
             lines.append("**关键发现**:")
             for s in top_sens:
-                direction = "增加" if s['sensitivity'] > 0 else "减少"
-                lines.append(f"- {s['metric']}: 随{data['target_parameter']}增加而{direction}")
+                direction = "增加" if s["sensitivity"] > 0 else "减少"
+                lines.append(
+                    f"- {s['metric']}: 随{data['target_parameter']}增加而{direction}"
+                )
 
         path.write_text("\n".join(lines), encoding="utf-8")

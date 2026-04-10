@@ -59,7 +59,7 @@ class TestSmallSignalStabilitySkillIntegration:
         """Test validation fails when model.rid is missing"""
         config = {
             "skill": "small_signal_stability",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
         }
         result = self.skill.validate(config)
         # Should fail or have warnings about missing rid
@@ -69,11 +69,11 @@ class TestSmallSignalStabilitySkillIntegration:
         """Test small signal stability on IEEE39 model"""
         import os
 
-        os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
+        server: "internal"
 
         config = {
             "skill": "small_signal_stability",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/chenying/IEEE39"},
             "analysis": {
                 "damping_threshold": 0.05,

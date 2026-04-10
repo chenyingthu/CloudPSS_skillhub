@@ -74,29 +74,23 @@ class TestEmtSimulationSkillIntegration:
         """Test IEEE3 model EMT simulation"""
         config = {
             "skill": "emt_simulation",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/chenying/IEEE3"},
             "simulation": {
                 "duration": 0.1,
             },
-            "output": {"format": "csv", "path": "/tmp", "prefix": "emt_test"},
         }
 
         result = self.skill.run(config)
-        # May succeed or fail depending on model state
         assert result is not None
-        assert result.status in [
-            SkillStatus.SUCCESS,
-            SkillStatus.FAILED,
-            SkillStatus.PENDING,
-        ]
+        assert result.status in [SkillStatus.SUCCESS, SkillStatus.FAILED]
 
     @pytest.mark.integration
     def test_integration_result_has_plots(self, auth_token):
         """Test result has expected plot data"""
         config = {
             "skill": "emt_simulation",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/chenying/IEEE3"},
             "simulation": {
                 "duration": 0.1,
@@ -115,7 +109,7 @@ class TestEmtSimulationSkillIntegration:
         """Test longer EMT simulation"""
         config = {
             "skill": "emt_simulation",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/chenying/IEEE3"},
             "simulation": {
                 "duration": 1.0,

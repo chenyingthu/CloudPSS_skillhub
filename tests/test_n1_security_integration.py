@@ -72,11 +72,11 @@ class TestN1SecuritySkillIntegration:
         """Test N-1 screening on IEEE3 model (requires multiple power flow runs)"""
         import os
 
-        os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
+        server: "internal"
 
         config = {
             "skill": "n1_security",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/chenying/IEEE3"},
             "analysis": {
                 "branch_types": ["TransmissionLine", "_newTransformer_3p2w"],
@@ -95,11 +95,11 @@ class TestN1SecuritySkillIntegration:
         """Test result has expected data structure (requires multiple power flow runs)"""
         import os
 
-        os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
+        server: "internal"
 
         config = {
             "skill": "n1_security",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/chenying/IEEE3"},
             "analysis": {
                 "max_outages": 2,
@@ -116,11 +116,11 @@ class TestN1SecuritySkillIntegration:
         """Test single branch outage analysis (requires power flow runs)"""
         import os
 
-        os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
+        server: "internal"
 
         config = {
             "skill": "n1_security",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/chenying/IEEE3"},
             "analysis": {
                 "max_outages": 1,

@@ -13,8 +13,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
-from cloudpss_skills.core.auth_utils import load_or_fetch_model
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import load_or_fetch_model, setup_auth
 from cloudpss_skills.core.emt_fault_core import (
     configure_channel_sampling,
     run_emt_and_wait,
@@ -67,7 +75,10 @@ class EmtFaultStudySkill(SkillBase):
                     "type": "object",
                     "required": ["rid"],
                     "properties": {
-                        "rid": {"type": "string", "description": "模型RID或本地文件路径"},
+                        "rid": {
+                            "type": "string",
+                            "description": "模型RID或本地文件路径",
+                        },
                         "source": {"enum": ["cloud", "local"], "default": "cloud"},
                     },
                 },
@@ -81,7 +92,10 @@ class EmtFaultStudySkill(SkillBase):
                                 "fs": {"type": "number", "default": 2.5},
                                 "fe": {"type": "number", "default": 2.7},
                                 "chg": {"type": "number", "default": 0.01},
-                                "description": {"type": "string", "default": "基线故障"},
+                                "description": {
+                                    "type": "string",
+                                    "default": "基线故障",
+                                },
                             },
                         },
                         "delayed_clearing": {
@@ -91,7 +105,10 @@ class EmtFaultStudySkill(SkillBase):
                                 "fs": {"type": "number", "default": 2.5},
                                 "fe": {"type": "number", "default": 2.9},
                                 "chg": {"type": "number", "default": 0.01},
-                                "description": {"type": "string", "default": "延长故障切除时间"},
+                                "description": {
+                                    "type": "string",
+                                    "default": "延长故障切除时间",
+                                },
                             },
                         },
                         "mild_fault": {
@@ -101,7 +118,10 @@ class EmtFaultStudySkill(SkillBase):
                                 "fs": {"type": "number", "default": 2.5},
                                 "fe": {"type": "number", "default": 2.7},
                                 "chg": {"type": "number", "default": 1e4},
-                                "description": {"type": "string", "default": "较轻故障"},
+                                "description": {
+                                    "type": "string",
+                                    "default": "较轻故障",
+                                },
                             },
                         },
                     },
@@ -209,14 +229,14 @@ class EmtFaultStudySkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(
-                timestamp=datetime.now(),
-                level=level,
-                message=message
-            ))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
+            setup_auth(config)
+
             # 1. 认证
             log("INFO", "加载认证信息...")
             auth = config.get("auth", {})
@@ -253,13 +273,15 @@ class EmtFaultStudySkill(SkillBase):
             for name in ["baseline", "delayed_clearing", "mild_fault"]:
                 scenario_cfg = scenarios_config.get(name, {})
                 if scenario_cfg.get("enabled", True):
-                    scenarios.append({
-                        "name": name,
-                        "description": scenario_cfg.get("description", name),
-                        "fs": str(scenario_cfg.get("fs", 2.5)),
-                        "fe": str(scenario_cfg.get("fe", 2.7)),
-                        "chg": str(scenario_cfg.get("chg", 0.01)),
-                    })
+                    scenarios.append(
+                        {
+                            "name": name,
+                            "description": scenario_cfg.get("description", name),
+                            "fs": str(scenario_cfg.get("fs", 2.5)),
+                            "fe": str(scenario_cfg.get("fe", 2.7)),
+                            "chg": str(scenario_cfg.get("chg", 0.01)),
+                        }
+                    )
 
             if not scenarios:
                 raise ValueError("至少需要一个启用的工况")
@@ -273,37 +295,50 @@ class EmtFaultStudySkill(SkillBase):
             time_windows = analysis_config.get("time_windows", DEFAULT_WINDOWS)
 
             for i, scenario in enumerate(scenarios):
-                log("INFO", f"[{i+1}/{len(scenarios)}] 工况: {scenario['name']} - {scenario['description']}")
-                log("INFO", f"  故障参数: fs={scenario['fs']}, fe={scenario['fe']}, chg={scenario['chg']}")
+                log(
+                    "INFO",
+                    f"[{i + 1}/{len(scenarios)}] 工况: {scenario['name']} - {scenario['description']}",
+                )
+                log(
+                    "INFO",
+                    f"  故障参数: fs={scenario['fs']}, fe={scenario['fe']}, chg={scenario['chg']}",
+                )
 
                 # 准备模型
-                voltage_channel_name = analysis_config.get("voltage_channel_name", VOLTAGE_CHANNEL_NAME)
+                voltage_channel_name = analysis_config.get(
+                    "voltage_channel_name", VOLTAGE_CHANNEL_NAME
+                )
                 working_model = self._prepare_model(
                     base_model, scenario, sampling_freq, voltage_channel_name, log
                 )
 
                 # 运行EMT
-                job = run_emt_and_wait(working_model, timeout=300, log_func=log, config=config)
+                job = run_emt_and_wait(
+                    working_model, timeout=300, log_func=log, config=config
+                )
                 log("INFO", f"  Job ID: {job.id}")
 
                 # 提取结果
                 result = job.result
-                metrics = self._extract_metrics(
-                    result, trace_name, time_windows, log
+                metrics = self._extract_metrics(result, trace_name, time_windows, log)
+
+                study_results.append(
+                    {
+                        "name": scenario["name"],
+                        "description": scenario["description"],
+                        "fault_end_time": scenario["fe"],
+                        "fault_chg": scenario["chg"],
+                        "job_id": job.id,
+                        "metrics": metrics,
+                    }
                 )
 
-                study_results.append({
-                    "name": scenario["name"],
-                    "description": scenario["description"],
-                    "fault_end_time": scenario["fe"],
-                    "fault_chg": scenario["chg"],
-                    "job_id": job.id,
-                    "metrics": metrics,
-                })
-
-                log("INFO", f"  完成: 点数={metrics['point_count']}, "
+                log(
+                    "INFO",
+                    f"  完成: 点数={metrics['point_count']}, "
                     f"故障前RMS={metrics['prefault_rms']:.2f}, "
-                    f"故障RMS={metrics['fault_rms']:.2f}")
+                    f"故障RMS={metrics['fault_rms']:.2f}",
+                )
 
             # 5. 生成汇总
             log("INFO", "生成结果汇总...")
@@ -318,10 +353,14 @@ class EmtFaultStudySkill(SkillBase):
             export_waveforms = output_config.get("export_waveforms", True)
             generate_report = output_config.get("generate_report", True)
 
-            timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S") if use_timestamp else ""
+            timestamp_str = (
+                datetime.now().strftime("%Y%m%d_%H%M%S") if use_timestamp else ""
+            )
 
             # 导出JSON汇总
-            json_filename = f"{prefix}_{timestamp_str}.json" if timestamp_str else f"{prefix}.json"
+            json_filename = (
+                f"{prefix}_{timestamp_str}.json" if timestamp_str else f"{prefix}.json"
+            )
             json_path = output_path / json_filename
 
             result_data = {
@@ -332,57 +371,75 @@ class EmtFaultStudySkill(SkillBase):
                 "summary": self._build_conclusion_report(summary_rows),
             }
 
-            with open(json_path, 'w', encoding='utf-8') as f:
+            with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(result_data, f, indent=2, ensure_ascii=False)
 
-            artifacts.append(Artifact(
-                type="json",
-                path=str(json_path),
-                size=json_path.stat().st_size,
-                description="故障研究汇总结果"
-            ))
+            artifacts.append(
+                Artifact(
+                    type="json",
+                    path=str(json_path),
+                    size=json_path.stat().st_size,
+                    description="故障研究汇总结果",
+                )
+            )
             log("INFO", f"JSON结果: {json_path}")
 
             # 导出CSV汇总
-            csv_filename = f"{prefix}_{timestamp_str}.csv" if timestamp_str else f"{prefix}.csv"
+            csv_filename = (
+                f"{prefix}_{timestamp_str}.csv" if timestamp_str else f"{prefix}.csv"
+            )
             csv_path = output_path / csv_filename
             self._export_summary_csv(summary_rows, csv_path)
 
-            artifacts.append(Artifact(
-                type="csv",
-                path=str(csv_path),
-                size=csv_path.stat().st_size,
-                description="故障研究CSV汇总"
-            ))
+            artifacts.append(
+                Artifact(
+                    type="csv",
+                    path=str(csv_path),
+                    size=csv_path.stat().st_size,
+                    description="故障研究CSV汇总",
+                )
+            )
             log("INFO", f"CSV结果: {csv_path}")
 
             # 导出波形对比
             if export_waveforms:
-                waveform_filename = f"{prefix}_waveforms_{timestamp_str}.csv" if timestamp_str else f"{prefix}_waveforms.csv"
+                waveform_filename = (
+                    f"{prefix}_waveforms_{timestamp_str}.csv"
+                    if timestamp_str
+                    else f"{prefix}_waveforms.csv"
+                )
                 waveform_path = output_path / waveform_filename
                 waveform_window = output_config.get("waveform_window")
                 self._export_waveform_csv(study_results, waveform_path, waveform_window)
 
-                artifacts.append(Artifact(
-                    type="csv",
-                    path=str(waveform_path),
-                    size=waveform_path.stat().st_size,
-                    description="波形对比数据"
-                ))
+                artifacts.append(
+                    Artifact(
+                        type="csv",
+                        path=str(waveform_path),
+                        size=waveform_path.stat().st_size,
+                        description="波形对比数据",
+                    )
+                )
                 log("INFO", f"波形数据: {waveform_path}")
 
             # 生成Markdown报告
             if generate_report:
-                report_filename = f"{prefix}_report_{timestamp_str}.md" if timestamp_str else f"{prefix}_report.md"
+                report_filename = (
+                    f"{prefix}_report_{timestamp_str}.md"
+                    if timestamp_str
+                    else f"{prefix}_report.md"
+                )
                 report_path = output_path / report_filename
                 self._generate_report(study_results, summary_rows, report_path)
 
-                artifacts.append(Artifact(
-                    type="markdown",
-                    path=str(report_path),
-                    size=report_path.stat().st_size,
-                    description="故障研究报告"
-                ))
+                artifacts.append(
+                    Artifact(
+                        type="markdown",
+                        path=str(report_path),
+                        size=report_path.stat().st_size,
+                        description="故障研究报告",
+                    )
+                )
                 log("INFO", f"研究报告: {report_path}")
 
             return SkillResult(
@@ -412,14 +469,25 @@ class EmtFaultStudySkill(SkillBase):
                 error=str(e),
             )
 
-    def _prepare_model(self, base_model, scenario: Dict, sampling_freq: int, voltage_channel_name: str, log_func) -> Any:
+    def _prepare_model(
+        self,
+        base_model,
+        scenario: Dict,
+        sampling_freq: int,
+        voltage_channel_name: str,
+        log_func,
+    ) -> Any:
         """准备工况模型"""
         working_model = clone_model(base_model)
-        apply_fault_parameters(working_model, scenario["fs"], scenario["fe"], scenario["chg"])
+        apply_fault_parameters(
+            working_model, scenario["fs"], scenario["fe"], scenario["chg"]
+        )
         configure_channel_sampling(working_model, voltage_channel_name, sampling_freq)
         return working_model
 
-    def _extract_metrics(self, result, trace_name: str, time_windows: Dict, log_func) -> Dict:
+    def _extract_metrics(
+        self, result, trace_name: str, time_windows: Dict, log_func
+    ) -> Dict:
         """提取指标"""
         plot_index, trace = find_trace(result, trace_name)
         time_step = trace["x"][1] - trace["x"][0] if len(trace["x"]) > 1 else None
@@ -454,23 +522,25 @@ class EmtFaultStudySkill(SkillBase):
             elif result["name"] == "mild_fault":
                 observation = "shallower sag, stronger post-fault recovery"
 
-            rows.append({
-                "scenario": result["name"],
-                "description": result["description"],
-                "fault_end_time": result["fault_end_time"],
-                "fault_chg": result["fault_chg"],
-                "point_count": str(metrics["point_count"]),
-                "prefault_rms": f"{metrics['prefault_rms']:.3f}",
-                "fault_rms": f"{metrics['fault_rms']:.3f}",
-                "postfault_rms": f"{metrics['postfault_rms']:.3f}",
-                "late_recovery_rms": f"{metrics['late_recovery_rms']:.3f}",
-                "fault_drop_vs_prefault": f"{fault_drop:.3f}",
-                "postfault_gap_vs_prefault": f"{postfault_gap:.3f}",
-                "late_recovery_gap_vs_prefault": f"{late_gap:.3f}",
-                "delta_fault_rms_vs_baseline": f"{metrics['fault_rms'] - baseline_metrics['fault_rms']:.3f}",
-                "delta_postfault_rms_vs_baseline": f"{metrics['postfault_rms'] - baseline_metrics['postfault_rms']:.3f}",
-                "observation": observation,
-            })
+            rows.append(
+                {
+                    "scenario": result["name"],
+                    "description": result["description"],
+                    "fault_end_time": result["fault_end_time"],
+                    "fault_chg": result["fault_chg"],
+                    "point_count": str(metrics["point_count"]),
+                    "prefault_rms": f"{metrics['prefault_rms']:.3f}",
+                    "fault_rms": f"{metrics['fault_rms']:.3f}",
+                    "postfault_rms": f"{metrics['postfault_rms']:.3f}",
+                    "late_recovery_rms": f"{metrics['late_recovery_rms']:.3f}",
+                    "fault_drop_vs_prefault": f"{fault_drop:.3f}",
+                    "postfault_gap_vs_prefault": f"{postfault_gap:.3f}",
+                    "late_recovery_gap_vs_prefault": f"{late_gap:.3f}",
+                    "delta_fault_rms_vs_baseline": f"{metrics['fault_rms'] - baseline_metrics['fault_rms']:.3f}",
+                    "delta_postfault_rms_vs_baseline": f"{metrics['postfault_rms'] - baseline_metrics['postfault_rms']:.3f}",
+                    "observation": observation,
+                }
+            )
 
         return rows
 
@@ -491,11 +561,14 @@ class EmtFaultStudySkill(SkillBase):
             delayed_post_gap = float(delayed["postfault_gap_vs_prefault"])
             baseline_post_gap = float(baseline["postfault_gap_vs_prefault"])
 
-            findings.append({
-                "title": "延迟切除主要恶化故障后恢复，而不是改变故障深度",
-                "supported": abs(delayed_fault_delta) <= 0.1 and delayed_post_gap > baseline_post_gap,
-                "evidence": f"delta_fault_rms={delayed_fault_delta:.3f}, post_gap: {baseline_post_gap:.3f} -> {delayed_post_gap:.3f}",
-            })
+            findings.append(
+                {
+                    "title": "延迟切除主要恶化故障后恢复，而不是改变故障深度",
+                    "supported": abs(delayed_fault_delta) <= 0.1
+                    and delayed_post_gap > baseline_post_gap,
+                    "evidence": f"delta_fault_rms={delayed_fault_delta:.3f}, post_gap: {baseline_post_gap:.3f} -> {delayed_post_gap:.3f}",
+                }
+            )
 
         if "mild_fault" in rows_by_name:
             mild = rows_by_name["mild_fault"]
@@ -504,11 +577,14 @@ class EmtFaultStudySkill(SkillBase):
             baseline_post_gap = float(baseline["postfault_gap_vs_prefault"])
             mild_post_gap = float(mild["postfault_gap_vs_prefault"])
 
-            findings.append({
-                "title": "较轻故障显著减小故障跌落，并把恢复缺口压回接近零",
-                "supported": baseline_fault_drop - mild_fault_drop > 100 and baseline_post_gap - mild_post_gap > 3,
-                "evidence": f"fault_drop: {baseline_fault_drop:.3f} -> {mild_fault_drop:.3f}, post_gap: {baseline_post_gap:.3f} -> {mild_post_gap:.3f}",
-            })
+            findings.append(
+                {
+                    "title": "较轻故障显著减小故障跌落，并把恢复缺口压回接近零",
+                    "supported": baseline_fault_drop - mild_fault_drop > 100
+                    and baseline_post_gap - mild_post_gap > 3,
+                    "evidence": f"fault_drop: {baseline_fault_drop:.3f} -> {mild_fault_drop:.3f}, post_gap: {baseline_post_gap:.3f} -> {mild_post_gap:.3f}",
+                }
+            )
 
         return {
             "research_question": "在同一故障模型上，延迟切除与降低故障严重度如何影响故障深度和恢复缺口？",
@@ -518,17 +594,30 @@ class EmtFaultStudySkill(SkillBase):
     def _export_summary_csv(self, rows: List[Dict], path: Path):
         """导出CSV汇总"""
         fieldnames = [
-            "scenario", "description", "fault_end_time", "fault_chg",
-            "point_count", "prefault_rms", "fault_rms", "postfault_rms", "late_recovery_rms",
-            "fault_drop_vs_prefault", "postfault_gap_vs_prefault", "late_recovery_gap_vs_prefault",
-            "delta_fault_rms_vs_baseline", "delta_postfault_rms_vs_baseline", "observation",
+            "scenario",
+            "description",
+            "fault_end_time",
+            "fault_chg",
+            "point_count",
+            "prefault_rms",
+            "fault_rms",
+            "postfault_rms",
+            "late_recovery_rms",
+            "fault_drop_vs_prefault",
+            "postfault_gap_vs_prefault",
+            "late_recovery_gap_vs_prefault",
+            "delta_fault_rms_vs_baseline",
+            "delta_postfault_rms_vs_baseline",
+            "observation",
         ]
         with open(path, "w", encoding="utf-8", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(rows)
 
-    def _export_waveform_csv(self, study_results: List[Dict], path: Path, time_window=None):
+    def _export_waveform_csv(
+        self, study_results: List[Dict], path: Path, time_window=None
+    ):
         """导出波形对比CSV"""
         if not study_results:
             return
@@ -555,7 +644,9 @@ class EmtFaultStudySkill(SkillBase):
             writer.writeheader()
             writer.writerows(rows)
 
-    def _generate_report(self, study_results: List[Dict], summary_rows: List[Dict], path: Path):
+    def _generate_report(
+        self, study_results: List[Dict], summary_rows: List[Dict], path: Path
+    ):
         """生成Markdown研究报告"""
         lines = [
             "# EMT 故障研究分析报告",
@@ -583,56 +674,68 @@ class EmtFaultStudySkill(SkillBase):
                 f"{row['postfault_rms']} | {row['postfault_gap_vs_prefault']} |"
             )
 
-        lines.extend([
-            "",
-            "## 关键发现",
-            "",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 关键发现",
+                "",
+            ]
+        )
 
         # 添加结论
         conclusion = self._build_conclusion_report(summary_rows)
         for finding in conclusion.get("findings", []):
             status = "✓ 支持" if finding["supported"] else "✗ 未满足"
-            lines.extend([
-                f"### {finding['title']}",
-                "",
-                f"**结论**: {status}",
-                "",
-                f"**证据**: {finding['evidence']}",
-                "",
-            ])
+            lines.extend(
+                [
+                    f"### {finding['title']}",
+                    "",
+                    f"**结论**: {status}",
+                    "",
+                    f"**证据**: {finding['evidence']}",
+                    "",
+                ]
+            )
 
-        lines.extend([
-            "",
-            "## 详细指标",
-            "",
-            "### 相对故障前缺口",
-            "",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 详细指标",
+                "",
+                "### 相对故障前缺口",
+                "",
+            ]
+        )
 
         for row in summary_rows:
-            lines.extend([
-                f"**{row['scenario']}**:",
-                f"- 故障跌落: {row['fault_drop_vs_prefault']} V",
-                f"- 故障后缺口: {row['postfault_gap_vs_prefault']} V",
-                f"- 恢复缺口: {row['late_recovery_gap_vs_prefault']} V",
-                "",
-            ])
+            lines.extend(
+                [
+                    f"**{row['scenario']}**:",
+                    f"- 故障跌落: {row['fault_drop_vs_prefault']} V",
+                    f"- 故障后缺口: {row['postfault_gap_vs_prefault']} V",
+                    f"- 恢复缺口: {row['late_recovery_gap_vs_prefault']} V",
+                    "",
+                ]
+            )
 
-        lines.extend([
-            "",
-            "## 工况定义",
-            "",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 工况定义",
+                "",
+            ]
+        )
 
         for result in study_results:
-            lines.extend([
-                f"### {result['name']}",
-                f"- 描述: {result['description']}",
-                f"- 故障结束时间 (fe): {result['fault_end_time']}",
-                f"- 故障电阻 (chg): {result['fault_chg']}",
-                f"- Job ID: {result['job_id']}",
-                "",
-            ])
+            lines.extend(
+                [
+                    f"### {result['name']}",
+                    f"- 描述: {result['description']}",
+                    f"- 故障结束时间 (fe): {result['fault_end_time']}",
+                    f"- 故障电阻 (chg): {result['fault_chg']}",
+                    f"- Job ID: {result['job_id']}",
+                    "",
+                ]
+            )
 
         path.write_text("\n".join(lines), encoding="utf-8")

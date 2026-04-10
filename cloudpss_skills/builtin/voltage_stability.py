@@ -23,7 +23,11 @@ from cloudpss_skills.core import (
     register,
 )
 from cloudpss_skills.core.utils import parse_cloudpss_table
-from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_powerflow
+from cloudpss_skills.core.auth_utils import (
+    load_or_fetch_model,
+    run_powerflow,
+    setup_auth,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +150,8 @@ class VoltageStabilitySkill(SkillBase):
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
+            setup_auth(config)
+
             log("INFO", "加载认证...")
             from cloudpss import setToken
 

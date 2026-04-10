@@ -59,7 +59,7 @@ class TestFaultClearingScanSkillIntegration:
         """Test validation fails when model.rid is missing"""
         config = {
             "skill": "fault_clearing_scan",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
         }
         result = self.skill.validate(config)
         # Should fail or have warnings about missing rid
@@ -69,11 +69,11 @@ class TestFaultClearingScanSkillIntegration:
         """Test fault clearing scan on IEEE3 model"""
         import os
 
-        os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
+        server: "internal"
 
         config = {
             "skill": "fault_clearing_scan",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/chenying/IEEE3"},
             "scan": {
                 "fs": 2.5,

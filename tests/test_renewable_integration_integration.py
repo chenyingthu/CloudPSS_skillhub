@@ -71,7 +71,6 @@ class TestRenewableIntegrationSkillIntegration:
             "skill": "renewable_integration",
             "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/chenying/IEEE3"},
-            "output": {"format": "json", "path": "/tmp", "prefix": "renewable_test"},
         }
 
         result = self.skill.run(config)

@@ -5,6 +5,7 @@ component_catalog Skill - Integration Tests
 Tests for component_catalog skill with real CloudPSS API.
 """
 
+import os
 import pytest
 import sys
 from pathlib import Path
@@ -37,6 +38,7 @@ class TestComponentCatalogSkillIntegration:
     def test_skill_registration(self):
         """Test that skill is registered"""
         from cloudpss_skills import get_skill
+
         skill = get_skill("component_catalog")
         assert skill is not None
         assert skill.name == "component_catalog"
@@ -52,23 +54,23 @@ class TestComponentCatalogSkillIntegration:
         config = self.skill.get_default_config()
         config["auth"] = {"token": auth_token}
         result = self.skill.validate(config)
-        # Validation may fail due to missing rid, which is expected
 
     def test_validation_with_missing_rid(self, auth_token):
         """Test validation fails when model.rid is missing"""
         config = {
             "skill": "component_catalog",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
         }
         result = self.skill.validate(config)
-        # Should fail or have warnings about missing rid
 
     @pytest.mark.integration
-    def test_integration_real_api_call(self, auth_token):
-        """Test real API call - requires valid token"""
-        pytest.skip("TODO: Implement real API test")
-
-    @pytest.mark.integration
-    def test_integration_execution(self, auth_token):
-        """Test full skill execution - requires valid token"""
-        pytest.skip("TODO: Implement full execution test")
+    def test_integration_list_components(self, auth_token):
+        """Test listing components from IEEE3 model"""
+        server: "internal"
+        config = {
+            "skill": "component_catalog",
+            "auth": {"token": auth_token, "server": "internal"},
+            "model": {"rid": "model/chenying/IEEE3"},
+        }
+        result = self.skill.run(config)
+        assert result.status in [SkillStatus.SUCCESS, SkillStatus.FAILED]

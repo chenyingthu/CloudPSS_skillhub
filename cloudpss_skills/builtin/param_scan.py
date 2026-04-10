@@ -19,7 +19,12 @@ from cloudpss_skills.core import (
     ValidationResult,
     register,
 )
-from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_emt, run_powerflow
+from cloudpss_skills.core.auth_utils import (
+    load_or_fetch_model,
+    run_emt,
+    run_powerflow,
+    setup_auth,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +151,8 @@ class ParamScanSkill(SkillBase):
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
+            setup_auth(config)
+
             # 1. 认证
             log("INFO", "加载认证信息...")
             auth = config.get("auth", {})

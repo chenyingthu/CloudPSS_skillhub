@@ -21,7 +21,11 @@ from cloudpss_skills.core import (
     ValidationResult,
     register,
 )
-from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_powerflow
+from cloudpss_skills.core.auth_utils import (
+    load_or_fetch_model,
+    run_powerflow,
+    setup_auth,
+)
 from cloudpss_skills.core.utils import parse_cloudpss_table
 
 logger = logging.getLogger(__name__)
@@ -186,6 +190,8 @@ class ContingencyAnalysisSkill(SkillBase):
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
+            setup_auth(config)
+
             log("INFO", "加载认证...")
             auth = config.get("auth", {})
             token = auth.get("token")

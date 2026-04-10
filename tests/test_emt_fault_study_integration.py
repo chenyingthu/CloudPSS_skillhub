@@ -59,7 +59,7 @@ class TestEmtFaultStudySkillIntegration:
         """Test validation fails when model.rid is missing"""
         config = {
             "skill": "emt_fault_study",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
         }
         result = self.skill.validate(config)
         # Should fail or have warnings about missing rid
@@ -69,11 +69,11 @@ class TestEmtFaultStudySkillIntegration:
         """Test EMT fault study on IEEE3 model"""
         import os
 
-        os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
+        server: "internal"
 
         config = {
             "skill": "emt_fault_study",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/chenying/IEEE3"},
             "output": {"format": "json", "path": "/tmp", "prefix": "fault_study_test"},
         }

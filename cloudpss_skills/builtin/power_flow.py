@@ -10,8 +10,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
-from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_powerflow
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import (
+    load_or_fetch_model,
+    run_powerflow,
+    setup_auth,
+)
 from cloudpss_skills.core.utils import parse_cloudpss_table
 
 logger = logging.getLogger(__name__)
@@ -54,7 +66,10 @@ class PowerFlowSkill(SkillBase):
                 "algorithm": {
                     "type": "object",
                     "properties": {
-                        "type": {"enum": ["newton_raphson", "fast_decoupled"], "default": "newton_raphson"},
+                        "type": {
+                            "enum": ["newton_raphson", "fast_decoupled"],
+                            "default": "newton_raphson",
+                        },
                         "tolerance": {"type": "number", "default": 1e-6},
                         "max_iterations": {"type": "integer", "default": 100},
                     },
@@ -98,14 +113,13 @@ class PowerFlowSkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(
-                timestamp=datetime.now(),
-                level=level,
-                message=message
-            ))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
+            setup_auth(config)
             # 1. 认证
             log("INFO", "加载认证信息...")
             auth = config.get("auth", {})
@@ -140,6 +154,7 @@ class PowerFlowSkill(SkillBase):
 
             # 4. 等待完成
             import time
+
             max_wait = 120
             waited = 0
             status = 0
@@ -194,15 +209,17 @@ class PowerFlowSkill(SkillBase):
                 "timestamp": datetime.now().isoformat(),
             }
 
-            with open(filepath, 'w', encoding='utf-8') as f:
+            with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(result_data, f, indent=2, ensure_ascii=False)
 
-            artifacts.append(Artifact(
-                type="json",
-                path=str(filepath),
-                size=filepath.stat().st_size,
-                description="潮流计算结果"
-            ))
+            artifacts.append(
+                Artifact(
+                    type="json",
+                    path=str(filepath),
+                    size=filepath.stat().st_size,
+                    description="潮流计算结果",
+                )
+            )
 
             return SkillResult(
                 skill_name=self.name,
@@ -214,7 +231,15 @@ class PowerFlowSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError, TypeError) as e:
+        except (
+            KeyError,
+            AttributeError,
+            ZeroDivisionError,
+            RuntimeError,
+            FileNotFoundError,
+            ValueError,
+            TypeError,
+        ) as e:
             log("ERROR", str(e))
             return SkillResult(
                 skill_name=self.name,

@@ -21,7 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
+server: "internal"
 
 from cloudpss import setToken, Model
 from cloudpss_skills.builtin.transient_stability_margin import (
@@ -73,7 +73,7 @@ class TestTransientStabilityMarginSkillIntegration:
         """Test validation handles missing model.rid"""
         config = {
             "skill": "transient_stability_margin",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
         }
         result = self.skill.validate(config)
         assert result.valid or len(result.warnings) > 0 or len(result.errors) > 0
