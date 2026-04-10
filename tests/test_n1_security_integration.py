@@ -69,6 +69,10 @@ class TestN1SecuritySkillIntegration:
     @pytest.mark.integration
     def test_integration_ieee39_n1_screening(self, auth_token):
         """Test N-1 screening on IEEE39 model"""
+        import os
+
+        os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
+
         config = {
             "skill": "n1_security",
             "auth": {"token": auth_token},
@@ -87,6 +91,10 @@ class TestN1SecuritySkillIntegration:
     @pytest.mark.integration
     def test_integration_result_structure(self, auth_token):
         """Test result has expected data structure"""
+        import os
+
+        os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
+
         config = {
             "skill": "n1_security",
             "auth": {"token": auth_token},
@@ -106,6 +114,10 @@ class TestN1SecuritySkillIntegration:
     @pytest.mark.integration
     def test_integration_single_branch_outage(self, auth_token):
         """Test single branch outage analysis"""
+        import os
+
+        os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
+
         config = {
             "skill": "n1_security",
             "auth": {"token": auth_token},
