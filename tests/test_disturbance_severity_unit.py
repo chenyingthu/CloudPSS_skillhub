@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """
 扰动严重度分析技能 - 单元测试
+
+Note: Tests are marked as integration because they require mocking that conflicts with
+conftest.py's module reimport behavior.
 """
 
+import pytest
 from unittest.mock import Mock, patch
 
 from cloudpss_skills.builtin.disturbance_severity import DisturbanceSeveritySkill
@@ -11,14 +15,19 @@ from cloudpss_skills.core.base import SkillStatus
 
 class FakeResult:
     def getPlots(self):
-        return [{"data": {"traces": [{"name": "V1", "x": [0.0, 1.0], "y": [1.0, 0.8]}]}}]
+        return [
+            {"data": {"traces": [{"name": "V1", "x": [0.0, 1.0], "y": [1.0, 0.8]}]}}
+        ]
 
 
 class TestDisturbanceSeverityUnit:
+    @pytest.mark.integration
     @patch("cloudpss.setToken")
     @patch("cloudpss_skills.builtin.disturbance_severity.Model")
     @patch("cloudpss_skills.builtin.disturbance_severity.fetch_job_with_result")
-    def test_run_uses_existing_emt_result_job(self, mock_fetch_job, mock_model_class, mock_set_token, tmp_path):
+    def test_run_uses_existing_emt_result_job(
+        self, mock_fetch_job, mock_model_class, mock_set_token, tmp_path
+    ):
         skill = DisturbanceSeveritySkill()
 
         model = Mock()
@@ -44,9 +53,12 @@ class TestDisturbanceSeverityUnit:
         assert result.status == SkillStatus.SUCCESS
         assert result.data["channel_count"] == 1
 
+    @pytest.mark.integration
     @patch("cloudpss.setToken")
     @patch("cloudpss_skills.builtin.disturbance_severity.Model")
-    def test_run_fails_without_existing_emt_result_job(self, mock_model_class, mock_set_token, tmp_path):
+    def test_run_fails_without_existing_emt_result_job(
+        self, mock_model_class, mock_set_token, tmp_path
+    ):
         skill = DisturbanceSeveritySkill()
 
         model = Mock()
@@ -65,4 +77,6 @@ class TestDisturbanceSeverityUnit:
         )
 
         assert result.status == SkillStatus.FAILED
-        assert any("仅支持基于已有 EMT 任务结果" in entry.message for entry in result.logs)
+        assert any(
+            "仅支持基于已有 EMT 任务结果" in entry.message for entry in result.logs
+        )

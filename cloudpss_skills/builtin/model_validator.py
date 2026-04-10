@@ -17,8 +17,22 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
-from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult, LogEntry, Artifact
-from cloudpss_skills.core.auth_utils import setup_auth, DEFAULT_TIMEOUT, DEFAULT_POWERFLOW_TOLERANCE, fetch_model_by_rid, run_powerflow, run_emt
+from cloudpss_skills.core.base import (
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    LogEntry,
+    Artifact,
+)
+from cloudpss_skills.core.auth_utils import (
+    setup_auth,
+    DEFAULT_TIMEOUT,
+    DEFAULT_POWERFLOW_TOLERANCE,
+    fetch_model_by_rid,
+    run_powerflow,
+    run_emt,
+)
 from cloudpss_skills.core.registry import register
 from cloudpss_skills.metadata.integration import get_metadata_integration
 
@@ -53,15 +67,17 @@ def table_rows(table: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 class ValidationPhase(Enum):
     """验证阶段"""
-    TOPOLOGY = "topology"          # 拓扑验证
-    POWERFLOW = "powerflow"        # 潮流验证
-    EMT = "emt"                    # 暂态验证
-    PARAMETER = "parameter"        # 参数验证
+
+    TOPOLOGY = "topology"  # 拓扑验证
+    POWERFLOW = "powerflow"  # 潮流验证
+    EMT = "emt"  # 暂态验证
+    PARAMETER = "parameter"  # 参数验证
 
 
 @dataclass
 class ValidationReport:
     """验证报告"""
+
     model_rid: str
     model_name: str = ""
     phases: Dict[str, Any] = field(default_factory=dict)
@@ -124,8 +140,8 @@ class ModelValidatorSkill(SkillBase):
                 "type": "object",
                 "properties": {
                     "token": {"type": "string"},
-                    "token_file": {"type": "string"}
-                }
+                    "token_file": {"type": "string"},
+                },
             },
             "models": {
                 "type": "array",
@@ -134,10 +150,10 @@ class ModelValidatorSkill(SkillBase):
                     "properties": {
                         "rid": {"type": "string"},
                         "base_rid": {"type": "string"},
-                        "name": {"type": "string"}
+                        "name": {"type": "string"},
                     },
-                    "required": ["rid"]
-                }
+                    "required": ["rid"],
+                },
             },
             "validation": {
                 "type": "object",
@@ -147,22 +163,26 @@ class ModelValidatorSkill(SkillBase):
                         "items": {
                             "enum": ["topology", "powerflow", "emt", "parameter"]
                         },
-                        "default": ["topology", "powerflow"]
+                        "default": ["topology", "powerflow"],
                     },
                     "timeout": {"type": "integer", "default": 300},
                     "powerflow_tolerance": {"type": "number", "default": 1e-6},
-                    "emt_duration": {"type": "number", "default": 1.0}
-                }
+                    "emt_duration": {"type": "number", "default": 1.0},
+                },
             },
             "output": {
                 "type": "object",
                 "properties": {
-                    "format": {"type": "string", "enum": ["json", "console"], "default": "console"},
-                    "path": {"type": "string"}
-                }
-            }
+                    "format": {
+                        "type": "string",
+                        "enum": ["json", "console"],
+                        "default": "console",
+                    },
+                    "path": {"type": "string"},
+                },
+            },
         },
-        "required": ["models"]
+        "required": ["models"],
     }
 
     def __init__(self):
@@ -201,7 +221,9 @@ class ModelValidatorSkill(SkillBase):
 
             reports = []
             for model_info in models:
-                report = self._validate_single_model(model_info, phases, validation_config)
+                report = self._validate_single_model(
+                    model_info, phases, validation_config
+                )
                 reports.append(report)
 
             self.reports = reports
@@ -225,10 +247,10 @@ class ModelValidatorSkill(SkillBase):
                         "passed": r.overall_passed,
                         "phases": r.phases,
                         "issues": r.issues,
-                        "warnings": r.warnings
+                        "warnings": r.warnings,
                     }
                     for r in reports
-                ]
+                ],
             }
 
             logger.info(f"验证完成: {passed}/{total} 通过")
@@ -238,7 +260,7 @@ class ModelValidatorSkill(SkillBase):
                 status=SkillStatus.SUCCESS,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data=result_data
+                data=result_data,
             )
 
         except Exception as e:
@@ -249,20 +271,21 @@ class ModelValidatorSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                error=str(e)
+                error=str(e),
             )
 
-    def _validate_single_model(self, model_info: Dict, phases: List[str],
-                               validation_config: Dict) -> ValidationReport:
+    def _validate_single_model(
+        self, model_info: Dict, phases: List[str], validation_config: Dict
+    ) -> ValidationReport:
         """验证单个模型"""
         rid = model_info["rid"]
         base_rid = model_info.get("base_rid")
         name = model_info.get("name", rid)
 
-        logger.info(f"\n{'='*60}")
+        logger.info(f"\n{'=' * 60}")
         logger.info(f"验证模型: {name}")
         logger.info(f"RID: {rid}")
-        logger.info(f"{'='*60}")
+        logger.info(f"{'=' * 60}")
 
         report = ValidationReport(model_rid=rid, model_name=name)
 
@@ -273,8 +296,7 @@ class ModelValidatorSkill(SkillBase):
         for phase in requested_phases:
             if previous_failed is not None:
                 report.phases[phase] = self._skipped_phase_result(
-                    phase,
-                    f"跳过 {phase}：前序阶段 {previous_failed} 未通过"
+                    phase, f"跳过 {phase}：前序阶段 {previous_failed} 未通过"
                 )
                 continue
 
@@ -283,7 +305,9 @@ class ModelValidatorSkill(SkillBase):
             elif phase == "powerflow":
                 phase_result = self._validate_powerflow(
                     model_info,
-                    validation_config.get("powerflow_tolerance", DEFAULT_POWERFLOW_TOLERANCE),
+                    validation_config.get(
+                        "powerflow_tolerance", DEFAULT_POWERFLOW_TOLERANCE
+                    ),
                     validation_config.get("timeout", DEFAULT_TIMEOUT),
                 )
             elif phase == "emt":
@@ -293,19 +317,19 @@ class ModelValidatorSkill(SkillBase):
             elif phase == "parameter":
                 if not base_rid:
                     phase_result = self._skipped_phase_result(
-                        phase,
-                        "跳过 parameter：未提供 base_rid"
+                        phase, "跳过 parameter：未提供 base_rid"
                     )
                 else:
                     phase_result = self._validate_parameters(rid, base_rid)
             else:
                 phase_result = self._skipped_phase_result(
-                    phase,
-                    f"跳过未知阶段 {phase}"
+                    phase, f"跳过未知阶段 {phase}"
                 )
 
             report.phases[phase] = phase_result
-            if phase_result.get("passed") is False and not phase_result.get("skipped", False):
+            if phase_result.get("passed") is False and not phase_result.get(
+                "skipped", False
+            ):
                 previous_failed = phase
 
         # 汇总结果
@@ -362,7 +386,11 @@ class ModelValidatorSkill(SkillBase):
     @staticmethod
     def _first_connected_pin(pins: Dict[str, Any]) -> Optional[str]:
         for pin_value in (pins or {}).values():
-            if isinstance(pin_value, str) and pin_value and not pin_value.startswith("@"):
+            if (
+                isinstance(pin_value, str)
+                and pin_value
+                and not pin_value.startswith("@")
+            ):
                 return pin_value
         return None
 
@@ -397,7 +425,12 @@ class ModelValidatorSkill(SkillBase):
                 continue
             args = getattr(comp, "args", {}) or {}
             pins = getattr(comp, "pins", {}) or {}
-            for candidate in (comp_id, args.get("Name"), pins.get("0"), getattr(comp, "label", None)):
+            for candidate in (
+                comp_id,
+                args.get("Name"),
+                pins.get("0"),
+                getattr(comp, "label", None),
+            ):
                 if candidate:
                     bus_signals[str(candidate)] = comp_id
         return bus_signals
@@ -412,12 +445,12 @@ class ModelValidatorSkill(SkillBase):
             "passed": True,
             "errors": [],
             "warnings": [],
-            "details": {}
+            "details": {},
         }
 
         try:
             rid = model_info["rid"]
-            model = fetch_model_by_rid(rid, config)
+            model = fetch_model_by_rid(rid, {})
             components = model.getAllComponents()
 
             result["details"]["total_components"] = len(components)
@@ -449,47 +482,59 @@ class ModelValidatorSkill(SkillBase):
                 connected_bus_id = bus_signals.get(connected_pin)
 
                 if not connected_pin:
-                    disconnected_renewables.append({
-                        "id": comp_id,
-                        "label": comp_label,
-                        "type": comp_type,
-                        "reason": "没有任何有效电气引脚连接"
-                    })
+                    disconnected_renewables.append(
+                        {
+                            "id": comp_id,
+                            "label": comp_label,
+                            "type": comp_type,
+                            "reason": "没有任何有效电气引脚连接",
+                        }
+                    )
                 elif not connected_bus_id:
-                    disconnected_renewables.append({
-                        "id": comp_id,
-                        "label": comp_label,
-                        "type": comp_type,
-                        "reason": f"引脚连接 '{connected_pin}' 不是有效母线信号"
-                    })
+                    disconnected_renewables.append(
+                        {
+                            "id": comp_id,
+                            "label": comp_label,
+                            "type": comp_type,
+                            "reason": f"引脚连接 '{connected_pin}' 不是有效母线信号",
+                        }
+                    )
                 else:
-                    verified_connections.append({
-                        "id": comp_id,
-                        "label": comp_label,
-                        "type": comp_type,
-                        "signal": connected_pin,
-                        "bus_id": connected_bus_id,
-                    })
+                    verified_connections.append(
+                        {
+                            "id": comp_id,
+                            "label": comp_label,
+                            "type": comp_type,
+                            "signal": connected_pin,
+                            "bus_id": connected_bus_id,
+                        }
+                    )
 
                 args = getattr(comp, "args", {}) or {}
-                validation = self._metadata_integration.validate_parameters(comp_type, args)
+                validation = self._metadata_integration.validate_parameters(
+                    comp_type, args
+                )
                 if not validation.valid:
-                    metadata_issues.append({
-                        "id": comp_id,
-                        "label": comp_label,
-                        "type": comp_type,
-                        "errors": validation.errors,
-                    })
+                    metadata_issues.append(
+                        {
+                            "id": comp_id,
+                            "label": comp_label,
+                            "type": comp_type,
+                            "errors": validation.errors,
+                        }
+                    )
 
                 required = self._metadata_integration.get_required_parameters(comp_type)
                 missing = [p for p in required if p not in args or args[p] is None]
                 if missing:
-                    metadata_issues.append({
-                        "id": comp_id,
-                        "label": comp_label,
-                        "type": comp_type,
-                        "errors": [f"缺少必需参数: {', '.join(missing)}"],
-                    })
+                    metadata_issues.append(
+                        {
+                            "id": comp_id,
+                            "label": comp_label,
+                            "type": comp_type,
+                            "errors": [f"缺少必需参数: {', '.join(missing)}"],
+                        }
+                    )
 
             if disconnected_renewables:
                 result["passed"] = False
@@ -498,7 +543,9 @@ class ModelValidatorSkill(SkillBase):
                         f"新能源元件 '{dg['label']}' ({dg['type']}) {dg['reason']}"
                     )
                 result["details"]["disconnected_renewables"] = disconnected_renewables
-                logger.error(f"  ❌ {len(disconnected_renewables)} 个新能源元件未正确连接")
+                logger.error(
+                    f"  ❌ {len(disconnected_renewables)} 个新能源元件未正确连接"
+                )
 
             # 检查其他悬空引脚（非电源类）
             dangling = []
@@ -509,13 +556,9 @@ class ModelValidatorSkill(SkillBase):
 
                 pins = getattr(comp, "pins", {})
                 if isinstance(pins, dict):
-                    unconnected = [p for p, v in pins.items()
-                                   if not v or v == ""]
+                    unconnected = [p for p, v in pins.items() if not v or v == ""]
                     if unconnected:
-                        dangling.append({
-                            "id": comp_id,
-                            "unconnected": unconnected
-                        })
+                        dangling.append({"id": comp_id, "unconnected": unconnected})
 
             if dangling:
                 result["details"]["dangling_count"] = len(dangling)
@@ -526,8 +569,7 @@ class ModelValidatorSkill(SkillBase):
             for comp_id, comp in components.items():
                 args = getattr(comp, "args", {})
                 if isinstance(args, dict):
-                    empty = [k for k, v in args.items()
-                             if v is None or v == ""]
+                    empty = [k for k, v in args.items() if v is None or v == ""]
                     if empty:
                         incomplete.append({"id": comp_id, "empty_params": empty})
 
@@ -560,7 +602,9 @@ class ModelValidatorSkill(SkillBase):
 
         return result
 
-    def _validate_powerflow(self, model_info: Dict[str, Any], tolerance: float, timeout: int) -> Dict:
+    def _validate_powerflow(
+        self, model_info: Dict[str, Any], tolerance: float, timeout: int
+    ) -> Dict:
         """潮流验证"""
         logger.info("\n[阶段2] 潮流验证...")
         from cloudpss import Model
@@ -571,7 +615,7 @@ class ModelValidatorSkill(SkillBase):
             "passed": True,
             "errors": [],
             "warnings": [],
-            "details": {}
+            "details": {},
         }
 
         try:
@@ -579,7 +623,7 @@ class ModelValidatorSkill(SkillBase):
             model = Model.fetch(rid)
             logger.info("  提交潮流计算任务...")
 
-            job = run_powerflow(model, config)
+            job = run_powerflow(model, {})
             result["details"]["job_id"] = job.id
 
             # 等待完成
@@ -617,21 +661,24 @@ class ModelValidatorSkill(SkillBase):
             result["details"]["branch_count"] = len(branch_rows)
 
             # 检查电压范围
-            vm_values = [
-                self._coerce_number(row.get(VM_COLUMN))
-                for row in bus_rows
-            ]
+            vm_values = [self._coerce_number(row.get(VM_COLUMN)) for row in bus_rows]
             vm_values = [v for v in vm_values if v is not None]
 
             if vm_values:
-                from cloudpss_skills.core.auth_utils import DEFAULT_VOLTAGE_MIN, DEFAULT_VOLTAGE_MAX
+                from cloudpss_skills.core.auth_utils import (
+                    DEFAULT_VOLTAGE_MIN,
+                    DEFAULT_VOLTAGE_MAX,
+                )
+
                 vm_min, vm_max = min(vm_values), max(vm_values)
                 result["details"]["voltage_min"] = vm_min
                 result["details"]["voltage_max"] = vm_max
                 logger.info(f"  电压范围: {vm_min:.4f} ~ {vm_max:.4f} pu")
 
                 if vm_min < DEFAULT_VOLTAGE_MIN or vm_max > DEFAULT_VOLTAGE_MAX:
-                    result["warnings"].append(f"电压异常: {vm_min:.3f} ~ {vm_max:.3f} pu")
+                    result["warnings"].append(
+                        f"电压异常: {vm_min:.3f} ~ {vm_max:.3f} pu"
+                    )
                     logger.warning("  ⚠️ 电压可能异常")
 
             components = model.getAllComponents()
@@ -641,26 +688,34 @@ class ModelValidatorSkill(SkillBase):
             for comp_id, comp in components.items():
                 if not self._is_renewable_component(comp):
                     continue
-                connected_signal = self._first_connected_pin(getattr(comp, "pins", {}) or {})
+                connected_signal = self._first_connected_pin(
+                    getattr(comp, "pins", {}) or {}
+                )
                 if not connected_signal:
                     continue
                 bus_id = bus_signals.get(connected_signal)
                 if not bus_id:
                     continue
 
-                bus_row = next((row for row in bus_rows if row.get(BUS_COLUMN) == bus_id), None)
+                bus_row = next(
+                    (row for row in bus_rows if row.get(BUS_COLUMN) == bus_id), None
+                )
                 comp_name = self._component_name(comp_id, comp)
                 expected_p = self._expected_active_power(comp)
-                actual_p = self._coerce_number(bus_row.get(P_GEN_COLUMN)) if bus_row else None
+                actual_p = (
+                    self._coerce_number(bus_row.get(P_GEN_COLUMN)) if bus_row else None
+                )
 
-                renewable_rows.append({
-                    "component": comp_name,
-                    "type": getattr(comp, "definition", "unknown"),
-                    "signal": connected_signal,
-                    "bus_id": bus_id,
-                    "expected_p": expected_p,
-                    "actual_p": actual_p,
-                })
+                renewable_rows.append(
+                    {
+                        "component": comp_name,
+                        "type": getattr(comp, "definition", "unknown"),
+                        "signal": connected_signal,
+                        "bus_id": bus_id,
+                        "expected_p": expected_p,
+                        "actual_p": actual_p,
+                    }
+                )
 
                 if bus_row is None:
                     renewable_failures.append(
@@ -683,7 +738,9 @@ class ModelValidatorSkill(SkillBase):
             if renewable_failures:
                 result["passed"] = False
                 result["errors"].extend(renewable_failures)
-                logger.error(f"  ❌ {len(renewable_failures)} 个新能源接入点未真实进入潮流结果")
+                logger.error(
+                    f"  ❌ {len(renewable_failures)} 个新能源接入点未真实进入潮流结果"
+                )
 
             if result["passed"]:
                 logger.info("  ✅ 潮流验证通过")
@@ -708,11 +765,11 @@ class ModelValidatorSkill(SkillBase):
             "passed": True,
             "errors": [],
             "warnings": [],
-            "details": {}
+            "details": {},
         }
 
         try:
-            model = fetch_model_by_rid(rid, config)
+            model = fetch_model_by_rid(rid, {})
 
             # 首先检查EMT拓扑
             logger.info("  检查EMT拓扑...")
@@ -728,8 +785,10 @@ class ModelValidatorSkill(SkillBase):
                 return result
 
             # 当前 SDK 的 runEMT 不稳定接受 simuTime 透传，这里先使用模型现有 EMT 配置做 smoke gate。
-            logger.info(f"  提交EMT仿真（使用模型既有配置，目标 smoke 时长 {duration}s）...")
-            job = run_emt(model, config)
+            logger.info(
+                f"  提交EMT仿真（使用模型既有配置，目标 smoke 时长 {duration}s）..."
+            )
+            job = run_emt(model, {})
             result["details"]["job_id"] = job.id
 
             # 等待完成
@@ -779,7 +838,9 @@ class ModelValidatorSkill(SkillBase):
                         self._coerce_number(value)
                         for value in y_values[: min(len(y_values), 2000)]
                     ]
-                    numeric_samples = [value for value in numeric_samples if value is not None]
+                    numeric_samples = [
+                        value for value in numeric_samples if value is not None
+                    ]
                     if not numeric_samples:
                         continue
 
@@ -832,12 +893,12 @@ class ModelValidatorSkill(SkillBase):
             "passed": True,
             "errors": [],
             "warnings": [],
-            "details": {}
+            "details": {},
         }
 
         try:
-            model = fetch_model_by_rid(rid, config)
-            base_model = fetch_model_by_rid(base_rid, config)
+            model = fetch_model_by_rid(rid, {})
+            base_model = fetch_model_by_rid(base_rid, {})
 
             # 获取拓扑对比
             components = model.getAllComponents()
@@ -898,7 +959,7 @@ class ModelValidatorSkill(SkillBase):
                         lines.append(f"      警告: {w}")
 
         passed = sum(1 for r in reports if r.overall_passed)
-        lines.append(f"\n{'='*80}")
+        lines.append(f"\n{'=' * 80}")
         lines.append(f"总计: {passed}/{len(reports)} 通过")
         lines.append("=" * 80)
 
@@ -917,7 +978,7 @@ class ModelValidatorSkill(SkillBase):
                 "overall_passed": r.overall_passed,
                 "phases": r.phases,
                 "issues": r.issues,
-                "warnings": r.warnings
+                "warnings": r.warnings,
             }
             for r in reports
         ]

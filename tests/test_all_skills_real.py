@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-CloudPSS Skill System - 完整真实测试（所有10个技能）
+CloudPSS Skill System - 完整真实测试（所有10个技能）(Integration Tests)
+Requires valid CloudPSS token to run.
 
 测试所有技能的真实运行情况：
 1. 6个"立即可用"技能：使用默认配置真实运行
@@ -8,6 +9,7 @@ CloudPSS Skill System - 完整真实测试（所有10个技能）
 
 """
 
+import pytest
 import sys
 import time
 import subprocess
@@ -25,8 +27,7 @@ def run_shell_command(cmd, timeout=180):
     """运行shell命令"""
     try:
         result = subprocess.run(
-            cmd, shell=True, capture_output=True,
-            text=True, timeout=timeout
+            cmd, shell=True, capture_output=True, text=True, timeout=timeout
         )
         return result.returncode, result.stdout, result.stderr
     except subprocess.TimeoutExpired:
@@ -35,6 +36,7 @@ def run_shell_command(cmd, timeout=180):
         return -1, "", str(e)
 
 
+@pytest.mark.integration
 def test_skill_config(skill_name):
     """测试技能配置生成和验证"""
     config_path = f"/tmp/test_{skill_name}.yaml"
@@ -56,11 +58,12 @@ def test_skill_config(skill_name):
         return False, "配置验证失败"
 
 
+@pytest.mark.integration
 def test_power_flow_real():
     """真实测试power_flow"""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("[1/10] power_flow - 运行真实潮流计算")
-    print("="*70)
+    print("=" * 70)
 
     # 生成配置
     config = """skill: power_flow
@@ -94,7 +97,7 @@ output:
     # 真实运行
     print("  1.2 运行潮流计算...")
     try:
-        model = Model.fetch('model/holdme/IEEE39')
+        model = Model.fetch("model/holdme/IEEE39")
         job = model.runPowerFlow()
         job_id = job.id
         print(f"    ✓ 仿真已启动: {job_id}")
@@ -104,7 +107,7 @@ output:
         for i in range(30):
             status = job.status()
             if status == 1:
-                print(f"    ✓ 仿真完成 ({i*2}s)")
+                print(f"    ✓ 仿真完成 ({i * 2}s)")
                 return job_id
             elif status == 2:
                 print("    ❌ 仿真失败")
@@ -117,11 +120,12 @@ output:
         return None
 
 
+@pytest.mark.integration
 def test_emt_simulation_real():
     """真实测试emt_simulation"""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("[2/10] emt_simulation - 运行真实EMT仿真")
-    print("="*70)
+    print("=" * 70)
 
     config = """skill: emt_simulation
 auth:
@@ -152,7 +156,7 @@ output:
 
     print("  2.2 运行EMT仿真（这可能需要30-60秒）...")
     try:
-        model = Model.fetch('model/holdme/IEEE3')
+        model = Model.fetch("model/holdme/IEEE3")
         job = model.runEMT()
         job_id = job.id
         print(f"    ✓ 仿真已启动: {job_id}")
@@ -161,7 +165,7 @@ output:
         for i in range(60):
             status = job.status()
             if status == 1:
-                print(f"    ✓ 仿真完成 ({i*2}s)")
+                print(f"    ✓ 仿真完成 ({i * 2}s)")
                 return job_id
             elif status == 2:
                 print("    ❌ 仿真失败")
@@ -174,11 +178,12 @@ output:
         return None
 
 
+@pytest.mark.integration
 def test_n1_security_real():
     """真实测试n1_security"""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("[3/10] n1_security - 运行真实N-1校核")
-    print("="*70)
+    print("=" * 70)
 
     config = """skill: n1_security
 auth:
@@ -214,11 +219,12 @@ output:
     return True, "配置验证通过（未实际运行）"
 
 
+@pytest.mark.integration
 def test_topology_check_real():
     """真实测试topology_check"""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("[4/10] topology_check - 运行真实拓扑检查")
-    print("="*70)
+    print("=" * 70)
 
     config = """skill: topology_check
 auth:
@@ -261,11 +267,12 @@ output:
         return True, "配置验证通过（运行需token）"
 
 
+@pytest.mark.integration
 def test_batch_powerflow_real():
     """真实测试batch_powerflow"""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("[5/10] batch_powerflow - 批量潮流计算")
-    print("="*70)
+    print("=" * 70)
 
     config = """skill: batch_powerflow
 auth:
@@ -300,11 +307,12 @@ output:
     return True, "配置验证通过"
 
 
+@pytest.mark.integration
 def test_ieee3_prep_real():
     """真实测试ieee3_prep"""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("[6/10] ieee3_prep - IEEE3模型准备")
-    print("="*70)
+    print("=" * 70)
 
     config = """skill: ieee3_prep
 auth:
@@ -341,12 +349,13 @@ output:
     return True, "配置验证通过"
 
 
+@pytest.mark.integration
 def test_waveform_export_real(job_id):
     """真实测试waveform_export"""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("[7/10] waveform_export - 波形导出")
     print(f"使用Job ID: {job_id}")
-    print("="*70)
+    print("=" * 70)
 
     config = f"""skill: waveform_export
 source:
@@ -374,12 +383,13 @@ output:
     return True
 
 
+@pytest.mark.integration
 def test_visualize_real(job_id):
     """真实测试visualize"""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("[8/10] visualize - 可视化")
     print(f"使用Job ID: {job_id}")
-    print("="*70)
+    print("=" * 70)
 
     config = f"""skill: visualize
 auth:
@@ -409,12 +419,13 @@ output:
     return True
 
 
+@pytest.mark.integration
 def test_result_compare_real(job_id1, job_id2):
     """真实测试result_compare"""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("[9/10] result_compare - 结果对比")
     print(f"使用Job IDs: {job_id1}, {job_id2}")
-    print("="*70)
+    print("=" * 70)
 
     config = f"""skill: result_compare
 auth:
@@ -445,23 +456,24 @@ output:
     return True
 
 
+@pytest.mark.integration
 def test_param_scan_real():
     """真实测试param_scan"""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("[10/10] param_scan - 参数扫描")
-    print("="*70)
+    print("=" * 70)
 
     # 首先查询IEEE3模型的元件
     print("  10.1 查询IEEE3模型元件...")
     try:
-        model = Model.fetch('model/holdme/IEEE3')
+        model = Model.fetch("model/holdme/IEEE3")
         components = model.getAllComponents()
         print(f"    ✓ 找到 {len(components)} 个元件")
 
         # 查找Load元件
         load_key = None
         for key, comp in components.items():
-            if 'Load' in str(comp) or 'load' in key.lower():
+            if "Load" in str(comp) or "load" in key.lower():
                 load_key = key
                 break
 
@@ -505,10 +517,10 @@ output:
 
 def main():
     """主测试"""
-    print("="*70)
+    print("=" * 70)
     print("CloudPSS Skill System - 完整真实测试（10个技能）")
     print(f"开始时间: {datetime.now()}")
-    print("="*70)
+    print("=" * 70)
 
     # 加载token
     token_path = Path("/home/chenying/researches/cloudpss-api-enhanced/.cloudpss_token")
@@ -524,9 +536,9 @@ def main():
     job_ids = {}
 
     # 测试6个"立即可用"技能
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("阶段1: 测试6个模型执行技能")
-    print("="*70)
+    print("=" * 70)
 
     # 1. power_flow
     job_id = test_power_flow_real()
@@ -557,9 +569,9 @@ def main():
     results["ieee3_prep"] = ok
 
     # 测试4个"需要参数"技能
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("阶段2: 测试4个后处理/参数化技能")
-    print("="*70)
+    print("=" * 70)
 
     # 7. waveform_export（使用power_flow的Job ID）
     if "power_flow" in job_ids:
@@ -588,9 +600,9 @@ def main():
     results["param_scan"] = test_param_scan_real()
 
     # 汇总
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("测试汇总")
-    print("="*70)
+    print("=" * 70)
 
     passed = sum(results.values())
     total = len(results)
@@ -599,20 +611,20 @@ def main():
         status = "✓" if ok else "❌"
         print(f"  [{status}] {skill}")
 
-    print(f"\n总计: {total} | 通过: {passed} ✓ | 失败: {total-passed} ❌")
-    print(f"通过率: {passed/total*100:.1f}%")
+    print(f"\n总计: {total} | 通过: {passed} ✓ | 失败: {total - passed} ❌")
+    print(f"通过率: {passed / total * 100:.1f}%")
 
     # 真实运行的Job IDs
     if job_ids:
-        print("\n" + "="*70)
+        print("\n" + "=" * 70)
         print("真实Job IDs（可用于后续测试）")
-        print("="*70)
+        print("=" * 70)
         for skill, jid in job_ids.items():
             print(f"  {skill}: {jid}")
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("真实性说明")
-    print("="*70)
+    print("=" * 70)
     print("""
 ✅ 使用真实CloudPSS token运行
 ✅ power_flow: 真实运行IEEE39潮流计算

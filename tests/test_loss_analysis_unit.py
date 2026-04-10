@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
 网损分析技能 - 单元测试
+
+Note: Some tests are marked as integration because they require mocking that conflicts with
+conftest.py's module reimport behavior.
 """
 
 from types import SimpleNamespace
@@ -28,10 +31,9 @@ def make_branch_table(rows):
         "type": "table",
         "data": {
             "columns": [
-                {"name": key, "data": values}
-                for key, values in columns.items()
+                {"name": key, "data": values} for key, values in columns.items()
             ]
-        }
+        },
     }
 
 
@@ -43,13 +45,27 @@ class TestLossAnalysisUnit:
     def test_transformer_losses_are_extracted_from_real_branch_rows(self, skill):
         branch_table = make_branch_table(
             [
-                {"Branch": "line_1", "From bus": "Bus1", "To bus": "Bus2", "Ploss": 1.25, "Qloss": 3.5},
-                {"Branch": "xf_1", "From bus": "Bus3", "To bus": "Bus4", "Ploss": 0.0, "Qloss": 12.0},
+                {
+                    "Branch": "line_1",
+                    "From bus": "Bus1",
+                    "To bus": "Bus2",
+                    "Ploss": 1.25,
+                    "Qloss": 3.5,
+                },
+                {
+                    "Branch": "xf_1",
+                    "From bus": "Bus3",
+                    "To bus": "Bus4",
+                    "Ploss": 0.0,
+                    "Qloss": 12.0,
+                },
             ]
         )
         skill.model = SimpleNamespace(
             getComponentByKey=lambda key: SimpleNamespace(
-                definition="model/CloudPSS/_newTransformer_3p2w" if key == "xf_1" else "model/CloudPSS/TransmissionLine",
+                definition="model/CloudPSS/_newTransformer_3p2w"
+                if key == "xf_1"
+                else "model/CloudPSS/TransmissionLine",
                 label="XF-1" if key == "xf_1" else "Line-1",
             )
         )
@@ -64,10 +80,19 @@ class TestLossAnalysisUnit:
         assert transformer.core_loss_mw is None
         assert transformer.copper_loss_mw is None
 
-    def test_transformer_loss_extraction_fails_when_model_has_transformers_but_rows_do_not_match(self, skill, monkeypatch):
+    @pytest.mark.integration
+    def test_transformer_loss_extraction_fails_when_model_has_transformers_but_rows_do_not_match(
+        self, skill, monkeypatch
+    ):
         branch_table = make_branch_table(
             [
-                {"Branch": "line_1", "From bus": "Bus1", "To bus": "Bus2", "Ploss": 1.25, "Qloss": 3.5},
+                {
+                    "Branch": "line_1",
+                    "From bus": "Bus1",
+                    "To bus": "Bus2",
+                    "Ploss": 1.25,
+                    "Qloss": 3.5,
+                },
             ]
         )
         skill.model = SimpleNamespace(
@@ -82,7 +107,10 @@ class TestLossAnalysisUnit:
                 return {"xf_missing": {"label": "XF-Missing"}}
             return {}
 
-        monkeypatch.setattr("cloudpss_skills.builtin.loss_analysis.get_components_by_type", fake_get_components_by_type)
+        monkeypatch.setattr(
+            "cloudpss_skills.builtin.loss_analysis.get_components_by_type",
+            fake_get_components_by_type,
+        )
 
         with pytest.raises(RuntimeError, match="提取变压器损耗失败"):
             skill._calculate_transformer_losses(FakePowerFlowResult(branch_table))

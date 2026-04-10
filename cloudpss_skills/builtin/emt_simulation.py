@@ -12,7 +12,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
 from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_emt
 
 logger = logging.getLogger(__name__)
@@ -55,9 +63,22 @@ class EmtSimulationSkill(SkillBase):
                 "simulation": {
                     "type": "object",
                     "properties": {
-                        "duration": {"type": "number", "minimum": 0, "description": "仿真时长（秒）"},
-                        "step_size": {"type": "number", "minimum": 0, "description": "仿真步长"},
-                        "timeout": {"type": "integer", "minimum": 0, "default": 300, "description": "超时时间（秒）"},
+                        "duration": {
+                            "type": "number",
+                            "minimum": 0,
+                            "description": "仿真时长（秒）",
+                        },
+                        "step_size": {
+                            "type": "number",
+                            "minimum": 0,
+                            "description": "仿真步长",
+                        },
+                        "timeout": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 300,
+                            "description": "超时时间（秒）",
+                        },
                     },
                 },
                 "output": {
@@ -70,7 +91,7 @@ class EmtSimulationSkill(SkillBase):
                         "channels": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "要导出的通道列表，*表示全部"
+                            "description": "要导出的通道列表，*表示全部",
                         },
                     },
                 },
@@ -95,6 +116,11 @@ class EmtSimulationSkill(SkillBase):
     def validate(self, config: Dict[str, Any]) -> ValidationResult:
         result = super().validate(config)
 
+        # 检查model.rid
+        model = config.get("model", {})
+        if not model.get("rid"):
+            result.add_error("必须提供 model.rid")
+
         # 检查token
         auth = config.get("auth", {})
         if not auth.get("token") and not auth.get("token_file"):
@@ -116,11 +142,9 @@ class EmtSimulationSkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(
-                timestamp=datetime.now(),
-                level=level,
-                message=message
-            ))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
@@ -215,24 +239,30 @@ class EmtSimulationSkill(SkillBase):
                 # 根据格式导出
                 if output_format == "csv":
                     filepath = self._export_csv(
-                        result, i, channel_names,
-                        output_path / f"{filename_base}_{plot_key}.csv"
+                        result,
+                        i,
+                        channel_names,
+                        output_path / f"{filename_base}_{plot_key}.csv",
                     )
                     exported_files.append(filepath)
                 elif output_format == "json":
                     filepath = self._export_json(
-                        result, i, channel_names,
-                        output_path / f"{filename_base}_{plot_key}.json"
+                        result,
+                        i,
+                        channel_names,
+                        output_path / f"{filename_base}_{plot_key}.json",
                     )
                     exported_files.append(filepath)
 
             for filepath in exported_files:
-                artifacts.append(Artifact(
-                    type=output_format,
-                    path=str(filepath),
-                    size=filepath.stat().st_size,
-                    description=f"波形数据 ({output_format.upper()})"
-                ))
+                artifacts.append(
+                    Artifact(
+                        type=output_format,
+                        path=str(filepath),
+                        size=filepath.stat().st_size,
+                        description=f"波形数据 ({output_format.upper()})",
+                    )
+                )
                 log("INFO", f"导出: {filepath}")
 
             # 构建结果数据
@@ -246,13 +276,17 @@ class EmtSimulationSkill(SkillBase):
 
             for i, plot in enumerate(plots):
                 channel_names = result.getPlotChannelNames(i)
-                result_data["plots"].append({
-                    "index": i,
-                    "key": plot.get("key"),
-                    "name": plot.get("name"),
-                    "channel_count": len(channel_names),
-                    "channels": channel_names[:10] if len(channel_names) > 10 else channel_names,
-                })
+                result_data["plots"].append(
+                    {
+                        "index": i,
+                        "key": plot.get("key"),
+                        "name": plot.get("name"),
+                        "channel_count": len(channel_names),
+                        "channels": channel_names[:10]
+                        if len(channel_names) > 10
+                        else channel_names,
+                    }
+                )
 
             return SkillResult(
                 skill_name=self.name,
@@ -262,7 +296,10 @@ class EmtSimulationSkill(SkillBase):
                 data=result_data,
                 artifacts=artifacts,
                 logs=logs,
-                metrics={"plot_count": len(plots), "exported_files": len(exported_files)},
+                metrics={
+                    "plot_count": len(plots),
+                    "exported_files": len(exported_files),
+                },
             )
 
         except (KeyError, AttributeError, ConnectionError) as e:
@@ -299,11 +336,15 @@ class EmtSimulationSkill(SkillBase):
                 return -1
 
             if elapsed % 10 == 0:  # 每10秒报告一次
-                log_func("INFO", f"仿真{status_map.get(status, status)}... ({elapsed}s)")
+                log_func(
+                    "INFO", f"仿真{status_map.get(status, status)}... ({elapsed}s)"
+                )
 
             time.sleep(3)
 
-    def _export_csv(self, result, plot_index: int, channel_names: list, filepath: Path) -> Path:
+    def _export_csv(
+        self, result, plot_index: int, channel_names: list, filepath: Path
+    ) -> Path:
         """导出为CSV格式"""
         import csv
 
@@ -318,42 +359,41 @@ class EmtSimulationSkill(SkillBase):
             return filepath
 
         # 写入CSV
-        with open(filepath, 'w', newline='', encoding='utf-8') as f:
+        with open(filepath, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
 
             # 表头
-            headers = ['time'] + list(all_data.keys())
+            headers = ["time"] + list(all_data.keys())
             writer.writerow(headers)
 
             # 数据行
             first_channel = list(all_data.values())[0]
-            x_data = first_channel.get('x', [])
+            x_data = first_channel.get("x", [])
 
             for i in range(len(x_data)):
                 row = [x_data[i]]
                 for channel in channel_names:
-                    y_data = all_data.get(channel, {}).get('y', [])
-                    row.append(y_data[i] if i < len(y_data) else '')
+                    y_data = all_data.get(channel, {}).get("y", [])
+                    row.append(y_data[i] if i < len(y_data) else "")
                 writer.writerow(row)
 
         return filepath
 
-    def _export_json(self, result, plot_index: int, channel_names: list, filepath: Path) -> Path:
+    def _export_json(
+        self, result, plot_index: int, channel_names: list, filepath: Path
+    ) -> Path:
         """导出为JSON格式"""
-        data = {
-            "plot_index": plot_index,
-            "channels": {}
-        }
+        data = {"plot_index": plot_index, "channels": {}}
 
         for channel in channel_names:
             channel_data = result.getPlotChannelData(plot_index, channel)
             if channel_data:
                 data["channels"][channel] = {
-                    "x": channel_data.get('x', []),
-                    "y": channel_data.get('y', []),
+                    "x": channel_data.get("x", []),
+                    "y": channel_data.get("y", []),
                 }
 
-        with open(filepath, 'w', encoding='utf-8') as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
 
         return filepath

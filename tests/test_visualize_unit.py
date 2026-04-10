@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """
 可视化技能 - 单元测试
+
+Note: Tests are marked as integration because they require mocking that conflicts with
+conftest.py's module reimport behavior.
 """
 
+import pytest
 from pathlib import Path
 from unittest.mock import patch
 
@@ -22,9 +26,12 @@ class FakeResult:
 
 
 class TestVisualizeUnit:
+    @pytest.mark.integration
     @patch("cloudpss.setToken")
-    @patch("cloudpss_skills.builtin.visualize.fetch_job_with_result")
-    def test_run_fails_when_requested_channels_are_missing(self, mock_fetch, mock_set_token, tmp_path):
+    @patch("cloudpss_skills.core.utils.fetch_job_with_result")
+    def test_run_fails_when_requested_channels_are_missing(
+        self, mock_fetch, mock_set_token, tmp_path
+    ):
         skill = VisualizeSkill()
         mock_fetch.return_value = (object(), FakeResult())
 
@@ -37,7 +44,11 @@ class TestVisualizeUnit:
                 "auth": {"token_file": str(token_file)},
                 "source": {"job_id": "job-1"},
                 "plot": {"channels": ["missing_channel"]},
-                "output": {"path": str(tmp_path), "filename": "viz_test", "format": "png"},
+                "output": {
+                    "path": str(tmp_path),
+                    "filename": "viz_test",
+                    "format": "png",
+                },
             }
         )
 

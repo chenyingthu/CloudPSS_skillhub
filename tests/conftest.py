@@ -1,17 +1,37 @@
 import os
+import sys
 
 os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
 
 from pathlib import Path
 import time
 import uuid
+from importlib import reload
 
 import pytest
 
 from cloudpss import Model, setToken
-
+import cloudpss_skills.builtin
 
 DEFAULT_TEST_MODEL_RID = os.environ.get("TEST_MODEL_RID", "model/chenying/IEEE39")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def ensure_skills_registered():
+    """Ensure skills are registered at the start of each test session."""
+    reload(cloudpss_skills.builtin)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def reensure_skills_registered():
+    """Re-ensure skills are registered for each test module."""
+    for key in list(sys.modules.keys()):
+        if (
+            key.startswith("cloudpss_skills.builtin")
+            and key != "cloudpss_skills.builtin"
+        ):
+            del sys.modules[key]
+    reload(cloudpss_skills.builtin)
 
 
 def load_token():

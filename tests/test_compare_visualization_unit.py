@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """
 对比可视化技能 - 单元测试
+
+Note: Tests are marked as integration because they require mocking that conflicts with
+conftest.py's module reimport behavior.
 """
 
+import pytest
 from pathlib import Path
 from unittest.mock import patch
 
@@ -25,9 +29,12 @@ class FakeResult:
 
 
 class TestCompareVisualizationUnit:
+    @pytest.mark.integration
     @patch("cloudpss.setToken")
     @patch("cloudpss_skills.builtin.compare_visualization.fetch_job_with_result")
-    def test_run_fails_when_all_sources_have_no_usable_channels(self, mock_fetch, mock_set_token, tmp_path):
+    def test_run_fails_when_all_sources_have_no_usable_channels(
+        self, mock_fetch, mock_set_token, tmp_path
+    ):
         skill = CompareVisualizationSkill()
 
         empty_result = FakeResult({"vac:0": {"x": [], "y": []}})

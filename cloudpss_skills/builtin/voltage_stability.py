@@ -147,6 +147,8 @@ class VoltageStabilitySkill(SkillBase):
 
         try:
             log("INFO", "加载认证...")
+            from cloudpss import setToken
+
             auth = config.get("auth", {})
             token = auth.get("token")
             if not token:
@@ -192,6 +194,8 @@ class VoltageStabilitySkill(SkillBase):
 
             for i, scale in enumerate(load_scaling):
                 log("INFO", f"[{i + 1}/{len(load_scaling)}] 负荷水平={scale}x")
+                from cloudpss import Model
+
                 working_model = Model(deepcopy(base_model.toJSON()))
 
                 # 调整负荷和发电机

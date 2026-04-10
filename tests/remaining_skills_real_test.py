@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-完整真实测试剩余6个技能
+完整真实测试剩余6个技能 (Integration Tests)
+Requires valid CloudPSS token to run.
 测试目标：n1_security, topology_check, batch_powerflow, ieee3_prep, result_compare, param_scan
 """
 
+import pytest
 import sys
 import time
 import os
@@ -21,11 +23,12 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 
 
 def log_step(step_num, title):
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print(f"步骤{step_num}: {title}")
-    print("="*70)
+    print("=" * 70)
 
 
+@pytest.mark.integration
 def test_n1_security_real():
     """真实测试N-1安全校核"""
     log_step(1, "N-1安全校核 (n1_security)")
@@ -55,7 +58,7 @@ def test_n1_security_real():
         print(f"  总支路: {data['summary']['total_branches']}")
         print(f"  通过: {data['summary']['passed']}")
         print(f"  失败: {data['summary']['failed']}")
-        print(f"  通过率: {data['summary']['pass_rate']*100:.1f}%")
+        print(f"  通过率: {data['summary']['pass_rate'] * 100:.1f}%")
 
         if result.artifacts:
             for art in result.artifacts:
@@ -68,6 +71,7 @@ def test_n1_security_real():
         return False
 
 
+@pytest.mark.integration
 def test_topology_check_real():
     """真实测试拓扑检查"""
     log_step(2, "拓扑检查 (topology_check)")
@@ -94,7 +98,7 @@ def test_topology_check_real():
         print(f"  问题: {data['summary']['issues']}")
 
         # 显示详细检查结果
-        for detail in data['details']:
+        for detail in data["details"]:
             print(f"\n  [{detail['check']}] {detail['status']}: {detail['message']}")
 
         if result.artifacts:
@@ -107,6 +111,7 @@ def test_topology_check_real():
         return False
 
 
+@pytest.mark.integration
 def test_batch_powerflow_real():
     """真实测试批量潮流计算"""
     log_step(3, "批量潮流计算 (batch_powerflow)")
@@ -123,7 +128,7 @@ def test_batch_powerflow_real():
 
     print("配置:")
     print(f"  模型数量: {len(config['models'])}")
-    for m in config['models']:
+    for m in config["models"]:
         print(f"    - {m['name']}: {m['rid']}")
 
     print("\n执行批量潮流...")
@@ -140,13 +145,15 @@ def test_batch_powerflow_real():
         print(f"  总模型: {data['summary']['total']}")
         print(f"  收敛: {data['summary']['converged']}")
         print(f"  失败: {data['summary']['failed']}")
-        print(f"  成功率: {data['summary']['success_rate']*100:.1f}%")
+        print(f"  成功率: {data['summary']['success_rate'] * 100:.1f}%")
 
         # 显示每个模型的结果
         print(f"\n  详细结果:")
-        for r in data['results']:
-            status = "✓" if r.get('converged') else "✗"
-            print(f"    {status} {r['model_name']}: {r['status']} (Job: {r.get('job_id', 'N/A')[:8]}...)")
+        for r in data["results"]:
+            status = "✓" if r.get("converged") else "✗"
+            print(
+                f"    {status} {r['model_name']}: {r['status']} (Job: {r.get('job_id', 'N/A')[:8]}...)"
+            )
 
         if result.artifacts:
             for art in result.artifacts:
@@ -158,6 +165,7 @@ def test_batch_powerflow_real():
         return False
 
 
+@pytest.mark.integration
 def test_ieee3_prep_real():
     """真实测试IEEE3模型准备"""
     log_step(4, "IEEE3模型准备 (ieee3_prep)")
@@ -168,7 +176,9 @@ def test_ieee3_prep_real():
 
     print("配置:")
     print(f"  模型: {config['model']['rid']}")
-    print(f"  故障时间: {config['fault']['start_time']}s - {config['fault']['end_time']}s")
+    print(
+        f"  故障时间: {config['fault']['start_time']}s - {config['fault']['end_time']}s"
+    )
     print(f"  采样频率: {config['output']['sampling_freq']}Hz")
 
     print("\n执行模型准备...")
@@ -189,7 +199,7 @@ def test_ieee3_prep_real():
                 print(f"    大小: {art.size} bytes")
 
         # 验证文件存在
-        if os.path.exists(data['output_path']):
+        if os.path.exists(data["output_path"]):
             print(f"\n  ✓ 文件验证: 存在")
         else:
             print(f"\n  ✗ 文件验证: 不存在")
@@ -200,6 +210,7 @@ def test_ieee3_prep_real():
         return False
 
 
+@pytest.mark.integration
 def test_result_compare_real(job_ids):
     """真实测试结果对比"""
     log_step(5, "结果对比 (result_compare)")
@@ -227,7 +238,7 @@ def test_result_compare_real(job_ids):
 
     print("配置:")
     print(f"  对比任务: {len(config['sources'])}")
-    for s in config['sources']:
+    for s in config["sources"]:
         print(f"    - {s['label']}: {s['job_id']}")
 
     print("\n执行结果对比...")
@@ -245,8 +256,8 @@ def test_result_compare_real(job_ids):
                 print(f"\n  生成文件: {art.path}")
                 print(f"    大小: {art.size} bytes")
                 # 显示报告内容预览
-                if art.path.endswith('.md'):
-                    with open(art.path, 'r') as f:
+                if art.path.endswith(".md"):
+                    with open(art.path, "r") as f:
                         content = f.read()
                         print(f"\n  报告预览 (前500字符):")
                         print(content[:500])
@@ -257,13 +268,18 @@ def test_result_compare_real(job_ids):
         return False
 
 
+@pytest.mark.integration
 def test_param_scan_real():
     """真实测试参数扫描"""
     log_step(6, "参数扫描 (param_scan)")
 
     # 首先查询IEEE3模型的元件
     print("1. 查询模型元件...")
-    token = Path("/home/chenying/researches/cloudpss-api-enhanced/.cloudpss_token").read_text().strip()
+    token = (
+        Path("/home/chenying/researches/cloudpss-api-enhanced/.cloudpss_token")
+        .read_text()
+        .strip()
+    )
     setToken(token)
 
     model = Model.fetch("model/holdme/IEEE3")
@@ -313,7 +329,9 @@ def test_param_scan_real():
 
     print(f"\n3. 扫描参数: {param_name}")
     print(f"   基准值: {base_value}")
-    print(f"   扫描值: {[base_value * 0.8, base_value * 0.9, base_value, base_value * 1.1, base_value * 1.2]}")
+    print(
+        f"   扫描值: {[base_value * 0.8, base_value * 0.9, base_value, base_value * 1.1, base_value * 1.2]}"
+    )
 
     # 执行参数扫描
     skill = get_skill("param_scan")
@@ -324,7 +342,13 @@ def test_param_scan_real():
         "scan": {
             "component": target_comp.id,
             "parameter": param_name,
-            "values": [base_value * 0.8, base_value * 0.9, base_value, base_value * 1.1, base_value * 1.2],
+            "values": [
+                base_value * 0.8,
+                base_value * 0.9,
+                base_value,
+                base_value * 1.1,
+                base_value * 1.2,
+            ],
             "simulation_type": "power_flow",
         },
         "output": {
@@ -352,8 +376,8 @@ def test_param_scan_real():
 
         # 显示每次扫描结果
         print(f"\n  扫描结果:")
-        for r in data['results']:
-            status = "✓" if r['status'] == 'success' else "✗"
+        for r in data["results"]:
+            status = "✓" if r["status"] == "success" else "✗"
             print(f"    {status} {param_name}={r['value']:.2f}: {r['status']}")
 
         if result.artifacts:
@@ -367,29 +391,33 @@ def test_param_scan_real():
 
 
 def main():
-    print("="*70)
+    print("=" * 70)
     print("完整真实测试 - 剩余6个技能")
     print(f"开始时间: {datetime.now()}")
-    print("="*70)
+    print("=" * 70)
 
     results = {}
     job_ids = []
 
     # 测试1: N-1安全校核
-    results['n1_security'] = test_n1_security_real()
+    results["n1_security"] = test_n1_security_real()
 
     # 测试2: 拓扑检查
-    results['topology_check'] = test_topology_check_real()
+    results["topology_check"] = test_topology_check_real()
 
     # 测试3: 批量潮流计算
-    results['batch_powerflow'] = test_batch_powerflow_real()
+    results["batch_powerflow"] = test_batch_powerflow_real()
 
     # 获取一个Job ID用于后续测试
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("获取Job IDs用于result_compare测试...")
-    print("="*70)
+    print("=" * 70)
 
-    token = Path("/home/chenying/researches/cloudpss-api-enhanced/.cloudpss_token").read_text().strip()
+    token = (
+        Path("/home/chenying/researches/cloudpss-api-enhanced/.cloudpss_token")
+        .read_text()
+        .strip()
+    )
     setToken(token)
 
     # 运行IEEE3 EMT获取Job ID
@@ -411,22 +439,22 @@ def main():
         print(f"  ✓ PF Job: {job.id}")
 
     # 测试4: IEEE3模型准备
-    results['ieee3_prep'] = test_ieee3_prep_real()
+    results["ieee3_prep"] = test_ieee3_prep_real()
 
     # 测试5: 结果对比（如果有2个Job ID）
     if len(job_ids) >= 2:
-        results['result_compare'] = test_result_compare_real(job_ids)
+        results["result_compare"] = test_result_compare_real(job_ids)
     else:
         print("\n  ⚠ Job ID不足，跳过result_compare测试")
-        results['result_compare'] = False
+        results["result_compare"] = False
 
     # 测试6: 参数扫描
-    results['param_scan'] = test_param_scan_real()
+    results["param_scan"] = test_param_scan_real()
 
     # 最终汇总
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("完整真实测试总结")
-    print("="*70)
+    print("=" * 70)
 
     for skill_name, ok in results.items():
         status = "✅ 通过" if ok else "❌ 失败"
@@ -434,7 +462,7 @@ def main():
 
     passed = sum(results.values())
     total = len(results)
-    print(f"\n总计: {passed}/{total} 通过 ({passed/total*100:.1f}%)")
+    print(f"\n总计: {passed}/{total} 通过 ({passed / total * 100:.1f}%)")
 
     if passed == total:
         print("\n🎉 所有技能完全真实测试通过！")

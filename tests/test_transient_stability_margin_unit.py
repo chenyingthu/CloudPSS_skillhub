@@ -1,18 +1,27 @@
 #!/usr/bin/env python3
 """
 暂态稳定裕度技能 - 单元测试
+
+Note: Some tests are marked as integration because they require mocking that conflicts with
+conftest.py's module reimport behavior.
 """
 
+import pytest
 from unittest.mock import patch, Mock
 
-from cloudpss_skills.builtin.transient_stability_margin import TransientStabilityMarginSkill
+from cloudpss_skills.builtin.transient_stability_margin import (
+    TransientStabilityMarginSkill,
+)
 from cloudpss_skills.core.base import SkillStatus
 
 
 class TestTransientStabilityMarginUnit:
-    @patch("cloudpss_skills.builtin.transient_stability_margin.fetch_model_by_rid")
+    @pytest.mark.integration
+    @patch("cloudpss_skills.core.auth_utils.fetch_model_by_rid")
     @patch.object(TransientStabilityMarginSkill, "_check_stability")
-    def test_compute_cct_expands_upper_bound_until_unstable(self, mock_check_stability, mock_fetch_model):
+    def test_compute_cct_expands_upper_bound_until_unstable(
+        self, mock_check_stability, mock_fetch_model
+    ):
         skill = TransientStabilityMarginSkill()
         mock_fetch_model.return_value = Mock()
         mock_check_stability.side_effect = [
@@ -41,9 +50,12 @@ class TestTransientStabilityMarginUnit:
         assert cct["bounded"] is True
         assert cct["cct_seconds"] >= 2.0
 
-    @patch("cloudpss_skills.builtin.transient_stability_margin.fetch_model_by_rid")
+    @pytest.mark.integration
+    @patch("cloudpss_skills.core.auth_utils.fetch_model_by_rid")
     @patch.object(TransientStabilityMarginSkill, "_check_stability")
-    def test_compute_cct_reports_lower_bound_when_no_unstable_upper_bound(self, mock_check_stability, mock_fetch_model):
+    def test_compute_cct_reports_lower_bound_when_no_unstable_upper_bound(
+        self, mock_check_stability, mock_fetch_model
+    ):
         skill = TransientStabilityMarginSkill()
         mock_fetch_model.return_value = Mock()
         mock_check_stability.side_effect = [
@@ -82,6 +94,7 @@ class TestTransientStabilityMarginUnit:
         assert margin["cct_relation"] == ">="
         assert "下界" in margin["assessment"]
 
+    @pytest.mark.integration
     @patch("cloudpss_skills.builtin.transient_stability_margin.trace_rms")
     @patch("cloudpss_skills.builtin.transient_stability_margin.find_trace")
     @patch("cloudpss_skills.builtin.transient_stability_margin.run_emt_and_wait")
@@ -122,7 +135,9 @@ class TestTransientStabilityMarginUnit:
 
     @patch("cloudpss.setToken")
     @patch("cloudpss.Model")
-    def test_run_wraps_generic_model_fetch_exception(self, mock_model_class, mock_set_token):
+    def test_run_wraps_generic_model_fetch_exception(
+        self, mock_model_class, mock_set_token
+    ):
         skill = TransientStabilityMarginSkill()
         mock_model_class.fetch.side_effect = Exception("invalid resource id")
 

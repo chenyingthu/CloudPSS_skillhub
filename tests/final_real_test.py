@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
-修复版完整真实测试
+修复版完整真实测试 (Integration Tests)
+Requires valid CloudPSS token to run.
 """
 
+import pytest
 import sys
 import time
 import os
@@ -25,7 +27,7 @@ def wait_for_job(job, timeout=60, label=""):
     for i in range(timeout // 2):
         status = job.status()
         if status == 1:
-            print(f" ✓ ({(i+1)*2}s)")
+            print(f" ✓ ({(i + 1) * 2}s)")
             return True
         elif status == 2:
             print(f" ✗ 失败")
@@ -35,13 +37,18 @@ def wait_for_job(job, timeout=60, label=""):
     return False
 
 
+@pytest.mark.integration
 def test_with_real_jobs():
     """先运行仿真获取真实Job ID，然后进行所有测试"""
-    print("="*70)
+    print("=" * 70)
     print("第一步: 运行仿真获取真实Job IDs")
-    print("="*70)
+    print("=" * 70)
 
-    token = Path("/home/chenying/researches/cloudpss-api-enhanced/.cloudpss_token").read_text().strip()
+    token = (
+        Path("/home/chenying/researches/cloudpss-api-enhanced/.cloudpss_token")
+        .read_text()
+        .strip()
+    )
     setToken(token)
 
     job_ids = {}
@@ -51,7 +58,7 @@ def test_with_real_jobs():
     model = Model.fetch("model/holdme/IEEE39")
     job = model.runPowerFlow()
     if wait_for_job(job, timeout=60, label="潮流"):
-        job_ids['ieee39_pf'] = job.id
+        job_ids["ieee39_pf"] = job.id
         print(f"   Job ID: {job.id}")
     else:
         print("   潮流未收敛，尝试EMT...")
@@ -61,7 +68,7 @@ def test_with_real_jobs():
     model = Model.fetch("model/holdme/IEEE3")
     job = model.runEMT()
     if wait_for_job(job, timeout=120, label="EMT"):
-        job_ids['ieee3_emt'] = job.id
+        job_ids["ieee3_emt"] = job.id
         print(f"   Job ID: {job.id}")
     else:
         print("   EMT未完成")
@@ -73,13 +80,18 @@ def test_with_real_jobs():
     return job_ids
 
 
+@pytest.mark.integration
 def test_n1_security_improved():
     """改进的N-1安全校核测试 - 使用正确的支路类型"""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("测试: N-1安全校核 (改进版)")
-    print("="*70)
+    print("=" * 70)
 
-    token = Path("/home/chenying/researches/cloudpss-api-enhanced/.cloudpss_token").read_text().strip()
+    token = (
+        Path("/home/chenying/researches/cloudpss-api-enhanced/.cloudpss_token")
+        .read_text()
+        .strip()
+    )
     setToken(token)
 
     # 手动执行N-1校核
@@ -98,11 +110,13 @@ def test_n1_security_improved():
     for comp_id, comp in components.items():
         definition = getattr(comp, "definition", "")
         if any(bt in definition for bt in branch_types):
-            branches.append({
-                "id": comp_id,
-                "name": getattr(comp, "name", comp_id),
-                "type": definition.split("/")[-1],
-            })
+            branches.append(
+                {
+                    "id": comp_id,
+                    "name": getattr(comp, "name", comp_id),
+                    "type": definition.split("/")[-1],
+                }
+            )
 
     print(f"✓ 发现 {len(branches)} 条支路")
     if branches:
@@ -114,7 +128,7 @@ def test_n1_security_improved():
 
     print(f"\n执行N-1校核（测试{len(test_branches)}条支路）...")
     for i, branch in enumerate(test_branches):
-        print(f"\n[{i+1}/{len(test_branches)}] 停运: {branch['name']}")
+        print(f"\n[{i + 1}/{len(test_branches)}] 停运: {branch['name']}")
 
         # 重新加载模型
         model = Model.fetch("model/holdme/IEEE39")
@@ -138,18 +152,25 @@ def test_n1_security_improved():
                 results.append({"branch": branch["name"], "status": "failed"})
         except Exception as e:
             print(f"  -> ✗ 异常: {e}")
-            results.append({"branch": branch["name"], "status": "error", "error": str(e)})
+            results.append(
+                {"branch": branch["name"], "status": "error", "error": str(e)}
+            )
 
     # 保存结果
     import json
+
     result_file = f"{RESULTS_DIR}/n1_security_improved_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-    with open(result_file, 'w') as f:
-        json.dump({
-            "timestamp": datetime.now().isoformat(),
-            "total_branches": len(branches),
-            "tested": len(test_branches),
-            "results": results,
-        }, f, indent=2)
+    with open(result_file, "w") as f:
+        json.dump(
+            {
+                "timestamp": datetime.now().isoformat(),
+                "total_branches": len(branches),
+                "tested": len(test_branches),
+                "results": results,
+            },
+            f,
+            indent=2,
+        )
 
     print(f"\n✓ 结果已保存: {result_file}")
     passed = sum(1 for r in results if r["status"] == "passed")
@@ -158,11 +179,12 @@ def test_n1_security_improved():
     return len(results) > 0
 
 
+@pytest.mark.integration
 def test_result_compare_with_jobs(job_ids):
     """使用真实Job ID测试结果对比"""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("测试: 结果对比 (使用真实Job IDs)")
-    print("="*70)
+    print("=" * 70)
 
     if len(job_ids) < 2:
         print("✗ Job IDs不足，需要至少2个")
@@ -214,13 +236,18 @@ def test_result_compare_with_jobs(job_ids):
         return False
 
 
+@pytest.mark.integration
 def test_param_scan_improved():
     """改进的参数扫描 - 找到真正的可修改参数"""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("测试: 参数扫描 (改进版)")
-    print("="*70)
+    print("=" * 70)
 
-    token = Path("/home/chenying/researches/cloudpss-api-enhanced/.cloudpss_token").read_text().strip()
+    token = (
+        Path("/home/chenying/researches/cloudpss-api-enhanced/.cloudpss_token")
+        .read_text()
+        .strip()
+    )
     setToken(token)
 
     # 获取模型
@@ -256,7 +283,13 @@ def test_param_scan_improved():
 
     # 执行参数扫描
     skill = get_skill("param_scan")
-    values = [base_value * 0.9, base_value * 0.95, base_value, base_value * 1.05, base_value * 1.1]
+    values = [
+        base_value * 0.9,
+        base_value * 0.95,
+        base_value,
+        base_value * 1.05,
+        base_value * 1.1,
+    ]
 
     config = {
         "skill": "param_scan",
@@ -286,7 +319,7 @@ def test_param_scan_improved():
 
     if result.status.value == "success":
         data = result.data
-        success_count = data['summary']['success']
+        success_count = data["summary"]["success"]
         print(f"✓ 扫描完成: {success_count}/{data['summary']['total']} 成功")
 
         if result.artifacts:
@@ -300,10 +333,10 @@ def test_param_scan_improved():
 
 
 def main():
-    print("="*70)
+    print("=" * 70)
     print("完整真实测试 - 修复版")
     print(f"开始: {datetime.now()}")
-    print("="*70)
+    print("=" * 70)
 
     # 第一步: 获取真实Job IDs
     job_ids = test_with_real_jobs()
@@ -311,14 +344,14 @@ def main():
     results = {}
 
     # 第二步: 运行各项测试
-    results['n1_security'] = test_n1_security_improved()
-    results['result_compare'] = test_result_compare_with_jobs(job_ids)
-    results['param_scan'] = test_param_scan_improved()
+    results["n1_security"] = test_n1_security_improved()
+    results["result_compare"] = test_result_compare_with_jobs(job_ids)
+    results["param_scan"] = test_param_scan_improved()
 
     # 汇总
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("最终测试总结")
-    print("="*70)
+    print("=" * 70)
 
     for name, ok in results.items():
         status = "✅ 通过" if ok else "❌ 失败"
@@ -326,7 +359,7 @@ def main():
 
     passed = sum(results.values())
     total = len(results)
-    print(f"\n总计: {passed}/{total} ({passed/total*100:.1f}%)")
+    print(f"\n总计: {passed}/{total} ({passed / total * 100:.1f}%)")
 
     # 显示生成的文件
     print("\n生成的文件:")

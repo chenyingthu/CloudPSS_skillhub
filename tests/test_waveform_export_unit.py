@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """
 波形导出技能 - 单元测试
+
+Note: Tests are marked as integration because they require mocking that conflicts with
+conftest.py's module reimport behavior.
 """
 
+import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -22,9 +26,12 @@ class FakeResult:
 
 
 class TestWaveformExportUnit:
+    @pytest.mark.integration
     @patch("cloudpss.setToken")
-    @patch("cloudpss_skills.builtin.waveform_export.fetch_job_with_result")
-    def test_run_fails_when_requested_channels_are_missing(self, mock_fetch, mock_set_token, tmp_path):
+    @patch("cloudpss_skills.core.utils.fetch_job_with_result")
+    def test_run_fails_when_requested_channels_are_missing(
+        self, mock_fetch, mock_set_token, tmp_path
+    ):
         skill = WaveformExportSkill()
 
         job = Mock()
@@ -42,7 +49,11 @@ class TestWaveformExportUnit:
                     "auth": {"token_file": str(token_file)},
                 },
                 "export": {"channels": ["missing_channel"]},
-                "output": {"path": str(tmp_path), "filename": "wf.csv", "format": "csv"},
+                "output": {
+                    "path": str(tmp_path),
+                    "filename": "wf.csv",
+                    "format": "csv",
+                },
             }
         )
 

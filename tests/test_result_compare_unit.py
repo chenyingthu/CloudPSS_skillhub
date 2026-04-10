@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """
 结果对比技能 - 单元测试
+
+Note: Tests are marked as integration because they require mocking that conflicts with
+conftest.py's module reimport behavior.
 """
 
+import pytest
 from pathlib import Path
 from unittest.mock import patch
 
@@ -25,9 +29,12 @@ class FakeResult:
 
 
 class TestResultCompareUnit:
+    @pytest.mark.integration
     @patch("cloudpss.setToken")
-    @patch("cloudpss_skills.builtin.result_compare.fetch_job_with_result")
-    def test_run_fails_when_fewer_than_two_valid_results_are_available(self, mock_fetch, mock_set_token, tmp_path):
+    @patch("cloudpss_skills.core.utils.fetch_job_with_result")
+    def test_run_fails_when_fewer_than_two_valid_results_are_available(
+        self, mock_fetch, mock_set_token, tmp_path
+    ):
         skill = ResultCompareSkill()
 
         valid_result = FakeResult({"vac:0": {"y": [1.0, 2.0]}})

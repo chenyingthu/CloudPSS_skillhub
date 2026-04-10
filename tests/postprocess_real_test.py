@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-使用真实Job ID完全真实测试后处理技能
+使用真实Job ID完全真实测试后处理技能 (Integration Tests)
+Requires valid CloudPSS token to run.
 - waveform_export: 真实导出CSV
 - visualize: 真实生成PNG图像
 """
 
+import pytest
 import sys
 import os
 from pathlib import Path
@@ -19,11 +21,13 @@ import matplotlib.pyplot as plt
 JOB_ID = "5d5ac539-5767-4df7-a486-f3bd4d97ae38"
 RESULTS_DIR = "/home/chenying/researches/cloudpss-api-enhanced/test_results/real_output"
 
+
+@pytest.mark.integration
 def test_waveform_export_real():
     """真实导出波形数据到CSV"""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("真实测试: waveform_export")
-    print("="*70)
+    print("=" * 70)
 
     # 获取Job结果
     print(f"1. 获取Job结果 (ID: {JOB_ID})...")
@@ -45,14 +49,14 @@ def test_waveform_export_real():
 
     for ch in channels:
         data = result.getPlotChannelData(0, ch)
-        all_data[ch] = data['y']
+        all_data[ch] = data["y"]
         if time_array is None:
-            time_array = data['x']
+            time_array = data["x"]
         print(f"   ✓ 通道 '{ch}': {len(data['y'])} 数据点")
 
     # 写入CSV
     csv_path = f"{RESULTS_DIR}/ieee3_waveforms_{JOB_ID[:8]}.csv"
-    with open(csv_path, 'w') as f:
+    with open(csv_path, "w") as f:
         # 写入header
         f.write("time," + ",".join(channels) + "\n")
         # 写入数据
@@ -68,11 +72,12 @@ def test_waveform_export_real():
     return True
 
 
+@pytest.mark.integration
 def test_visualize_real():
     """真实生成可视化图像"""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("真实测试: visualize")
-    print("="*70)
+    print("=" * 70)
 
     # 获取Job结果
     print(f"1. 获取Job结果 (ID: {JOB_ID})...")
@@ -89,21 +94,21 @@ def test_visualize_real():
     print("\n3. 生成PNG图像...")
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
-    fig, axes = plt.subplots(len(channels), 1, figsize=(12, 3*len(channels)))
+    fig, axes = plt.subplots(len(channels), 1, figsize=(12, 3 * len(channels)))
     if len(channels) == 1:
         axes = [axes]
 
     for idx, ch in enumerate(channels):
         data = result.getPlotChannelData(0, ch)
-        axes[idx].plot(data['x'], data['y'], linewidth=0.8)
-        axes[idx].set_title(f'Channel: {ch}')
-        axes[idx].set_xlabel('Time (s)')
-        axes[idx].set_ylabel('Value (pu)')
+        axes[idx].plot(data["x"], data["y"], linewidth=0.8)
+        axes[idx].set_title(f"Channel: {ch}")
+        axes[idx].set_xlabel("Time (s)")
+        axes[idx].set_ylabel("Value (pu)")
         axes[idx].grid(True, alpha=0.3)
 
     plt.tight_layout()
     png_path = f"{RESULTS_DIR}/ieee3_waveforms_{JOB_ID[:8]}.png"
-    plt.savefig(png_path, dpi=150, bbox_inches='tight')
+    plt.savefig(png_path, dpi=150, bbox_inches="tight")
     plt.close()
 
     print(f"   ✓ PNG生成成功: {png_path}")
@@ -113,11 +118,11 @@ def test_visualize_real():
 
 
 def main():
-    print("="*70)
+    print("=" * 70)
     print("真实后处理技能测试")
     print(f"使用Job ID: {JOB_ID}")
     print(f"开始时间: {datetime.now()}")
-    print("="*70)
+    print("=" * 70)
 
     # 加载token
     token_path = Path("/home/chenying/researches/cloudpss-api-enhanced/.cloudpss_token")
@@ -129,26 +134,28 @@ def main():
 
     # 测试waveform_export
     try:
-        results['waveform_export'] = test_waveform_export_real()
+        results["waveform_export"] = test_waveform_export_real()
     except Exception as e:
         print(f"\n✗ waveform_export 失败: {e}")
         import traceback
+
         traceback.print_exc()
-        results['waveform_export'] = False
+        results["waveform_export"] = False
 
     # 测试visualize
     try:
-        results['visualize'] = test_visualize_real()
+        results["visualize"] = test_visualize_real()
     except Exception as e:
         print(f"\n✗ visualize 失败: {e}")
         import traceback
+
         traceback.print_exc()
-        results['visualize'] = False
+        results["visualize"] = False
 
     # 汇总
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("真实后处理测试总结")
-    print("="*70)
+    print("=" * 70)
 
     for skill, ok in results.items():
         status = "✅ 通过" if ok else "❌ 失败"
