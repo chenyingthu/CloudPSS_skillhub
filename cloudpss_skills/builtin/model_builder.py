@@ -17,7 +17,12 @@ from datetime import datetime
 from copy import deepcopy
 import itertools
 
-from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult
+from cloudpss_skills.core.base import (
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+)
 from cloudpss_skills.core.auth_utils import get_cloudpss_kwargs
 from cloudpss_skills.core.registry import register
 from cloudpss_skills.metadata.integration import get_metadata_integration
@@ -28,6 +33,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ComponentModification:
     """组件修改操作"""
+
     action: str  # add, modify, remove
     component_type: Optional[str] = None
     label: Optional[str] = None
@@ -39,6 +45,7 @@ class ComponentModification:
 @dataclass
 class GeneratedModel:
     """生成的模型信息"""
+
     name: str
     rid: str
     description: str
@@ -141,34 +148,34 @@ class ModelBuilderSkill(SkillBase):
                 "properties": {
                     "name": {
                         "type": "string",
-                        "enum": ["open_cloudpss_wind_lvrt_case"]
+                        "enum": ["open_cloudpss_wind_lvrt_case"],
                     },
                     "base_model_rid": {"type": "string"},
-                    "fault_component_key": {"type": "string", "default": "component_vrt_fault_1"},
+                    "fault_component_key": {
+                        "type": "string",
+                        "default": "component_vrt_fault_1",
+                    },
                     "fault_mode": {
                         "description": "open-cloudpss VRT_Fault 模块的 Fault_VRT 模式，推荐 1",
-                        "oneOf": [
-                            {"type": "integer"},
-                            {"type": "string"}
-                        ],
-                        "default": 1
-                    }
-                }
+                        "oneOf": [{"type": "integer"}, {"type": "string"}],
+                        "default": 1,
+                    },
+                },
             },
             "base_model": {
                 "type": "object",
                 "required": ["rid"],
                 "properties": {
                     "rid": {"type": "string"},
-                    "config_index": {"type": "integer", "default": 0}
-                }
+                    "config_index": {"type": "integer", "default": 0},
+                },
             },
             "auth": {
                 "type": "object",
                 "properties": {
                     "token": {"type": "string"},
-                    "token_file": {"type": "string"}
-                }
+                    "token_file": {"type": "string"},
+                },
             },
             "modifications": {
                 "type": "array",
@@ -178,7 +185,11 @@ class ModelBuilderSkill(SkillBase):
                     "properties": {
                         "action": {
                             "type": "string",
-                            "enum": ["add_component", "modify_component", "remove_component"]
+                            "enum": [
+                                "add_component",
+                                "modify_component",
+                                "remove_component",
+                            ],
                         },
                         "component_type": {"type": "string"},
                         "label": {"type": "string"},
@@ -188,19 +199,26 @@ class ModelBuilderSkill(SkillBase):
                             "type": "object",
                             "properties": {
                                 "x": {"type": "number"},
-                                "y": {"type": "number"}
-                            }
+                                "y": {"type": "number"},
+                            },
                         },
                         "pin_connection": {
                             "type": "object",
                             "description": "引脚连接配置",
                             "properties": {
-                                "target_bus": {"type": "string", "description": "目标母线名称或ID"},
-                                "pin_name": {"type": "string", "default": "0", "description": "引脚名称"}
-                            }
-                        }
-                    }
-                }
+                                "target_bus": {
+                                    "type": "string",
+                                    "description": "目标母线名称或ID",
+                                },
+                                "pin_name": {
+                                    "type": "string",
+                                    "default": "0",
+                                    "description": "引脚名称",
+                                },
+                            },
+                        },
+                    },
+                },
             },
             "batch": {
                 "type": "object",
@@ -212,11 +230,11 @@ class ModelBuilderSkill(SkillBase):
                             "type": "object",
                             "properties": {
                                 "param_name": {"type": "string"},
-                                "values": {"type": "array"}
-                            }
-                        }
-                    }
-                }
+                                "values": {"type": "array"},
+                            },
+                        },
+                    },
+                },
             },
             "output": {
                 "type": "object",
@@ -225,13 +243,10 @@ class ModelBuilderSkill(SkillBase):
                     "branch": {"type": "string"},
                     "name": {"type": "string"},
                     "description": {"type": "string"},
-                    "tags": {
-                        "type": "array",
-                        "items": {"type": "string"}
-                    }
-                }
-            }
-        }
+                    "tags": {"type": "array", "items": {"type": "string"}},
+                },
+            },
+        },
     }
 
     def __init__(self):
@@ -261,13 +276,19 @@ class ModelBuilderSkill(SkillBase):
             action = mod.get("action")
             if action == "add_component":
                 if not mod.get("component_type"):
-                    errors.append(f"modifications[{i}]: add_component需要指定component_type")
+                    errors.append(
+                        f"modifications[{i}]: add_component需要指定component_type"
+                    )
                 if not mod.get("label"):
                     errors.append(f"modifications[{i}]: add_component需要指定label")
             elif action in ["modify_component", "remove_component"]:
                 if not mod.get("selector"):
                     errors.append(f"modifications[{i}]: {action}需要指定selector")
-            elif action not in ["add_component", "modify_component", "remove_component"]:
+            elif action not in [
+                "add_component",
+                "modify_component",
+                "remove_component",
+            ]:
                 errors.append(f"modifications[{i}]: 未知的action '{action}'")
 
         return ValidationResult(valid=len(errors) == 0, errors=errors)
@@ -289,7 +310,7 @@ class ModelBuilderSkill(SkillBase):
             self._strict_connectivity = config.get("output", {}).get("save", True)
 
             # 记录原始模型信息
-            original_name = getattr(self.model, 'name', 'Unknown')
+            original_name = getattr(self.model, "name", "Unknown")
             logger.info(f"基础模型名称: {original_name}")
 
             # 执行修改操作
@@ -302,17 +323,23 @@ class ModelBuilderSkill(SkillBase):
                 for i, mod_config in enumerate(modifications, 1):
                     try:
                         self._apply_modification(mod_config)
-                        logger.info(f"  [{i}/{len(modifications)}] {mod_config['action']} 完成")
+                        logger.info(
+                            f"  [{i}/{len(modifications)}] {mod_config['action']} 完成"
+                        )
                     except Exception as e:
                         # 捕获所有修改操作异常并记录后重新抛出
-                        logger.error(f"  [{i}/{len(modifications)}] {mod_config['action']} 失败: {e}")
+                        logger.error(
+                            f"  [{i}/{len(modifications)}] {mod_config['action']} 失败: {e}"
+                        )
                         raise
 
             # 处理批量生成
             generated_models = []
             if batch_config.get("enabled", False):
                 logger.info("执行批量生成...")
-                generated_models = self._batch_generate(batch_config, config.get("output", {}))
+                generated_models = self._batch_generate(
+                    batch_config, config.get("output", {})
+                )
             else:
                 # 单次保存
                 output_config = config.get("output", {})
@@ -331,10 +358,10 @@ class ModelBuilderSkill(SkillBase):
                         "name": m.name,
                         "rid": m.rid,
                         "description": m.description,
-                        "modifications": m.modifications_applied
+                        "modifications": m.modifications_applied,
                     }
                     for m in generated_models
-                ]
+                ],
             }
 
             logger.info(f"模型构建完成，生成了 {len(generated_models)} 个模型")
@@ -343,7 +370,7 @@ class ModelBuilderSkill(SkillBase):
                 status=SkillStatus.SUCCESS,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data=result_data
+                data=result_data,
             )
 
         except Exception as e:
@@ -354,7 +381,7 @@ class ModelBuilderSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                error=str(e)
+                error=str(e),
             )
         finally:
             self._active_config = None
@@ -373,15 +400,15 @@ class ModelBuilderSkill(SkillBase):
         raise ValueError(f"不支持的workflow: {workflow_name}")
 
     def _resolve_open_cloudpss_wind_lvrt_case(
-        self,
-        resolved: Dict[str, Any],
-        workflow: Dict[str, Any]
+        self, resolved: Dict[str, Any], workflow: Dict[str, Any]
     ) -> Dict[str, Any]:
         """展开基于 open-cloudpss 公开风机模板的 LVRT 测试算例构建流程。"""
         base_model = resolved.setdefault("base_model", {})
         base_model.setdefault(
             "rid",
-            workflow.get("base_model_rid", "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5")
+            workflow.get(
+                "base_model_rid", "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5"
+            ),
         )
 
         preset_modification = {
@@ -390,16 +417,20 @@ class ModelBuilderSkill(SkillBase):
                 "key": workflow.get("fault_component_key", "component_vrt_fault_1")
             },
             "parameters": {
-                "Fault_VRT": self._normalize_fault_vrt_value(workflow.get("fault_mode", 1))
-            }
+                "Fault_VRT": self._normalize_fault_vrt_value(
+                    workflow.get("fault_mode", 1)
+                )
+            },
         }
-        resolved["modifications"] = [preset_modification] + deepcopy(resolved.get("modifications", []))
+        resolved["modifications"] = [preset_modification] + deepcopy(
+            resolved.get("modifications", [])
+        )
 
         output = resolved.setdefault("output", {})
         output.setdefault("name", "WTG_PMSG_LVRT_TestCase")
         output.setdefault(
             "description",
-            "基于 open-cloudpss WTG_PMSG_01-avm-stdm-v2b5 的 LVRT 专项测试算例"
+            "基于 open-cloudpss WTG_PMSG_01-avm-stdm-v2b5 的 LVRT 专项测试算例",
         )
         return resolved
 
@@ -441,13 +472,17 @@ class ModelBuilderSkill(SkillBase):
         raw_params = config.get("parameters", {})
         position = config.get("position", {})
         pin_connection = config.get("pin_connection", {})
-        comp_type, params = self._prepare_component_definition(raw_comp_type, raw_params)
+        comp_type, params = self._prepare_component_definition(
+            raw_comp_type, raw_params
+        )
         params = self._normalize_parameters_by_metadata(comp_type, params)
 
         logger.debug(f"添加组件: {label} ({comp_type})")
 
         # ========== 元数据集成：参数自动补全 ==========
-        completed_params = self._metadata_integration.auto_complete_parameters(comp_type, params)
+        completed_params = self._metadata_integration.auto_complete_parameters(
+            comp_type, params
+        )
         if completed_params != params:
             added_keys = set(completed_params.keys()) - set(params.keys())
             if added_keys:
@@ -472,8 +507,10 @@ class ModelBuilderSkill(SkillBase):
         # ========== 元数据集成：引脚验证 ==========
         pin_requirements = self._metadata_integration.get_pin_requirements(comp_type)
         if pin_requirements:
-            logger.debug(f"  引脚要求: {pin_requirements['total_pins']} 个引脚, "
-                        f"{len(pin_requirements['required_pins'])} 个必需")
+            logger.debug(
+                f"  引脚要求: {pin_requirements['total_pins']} 个引脚, "
+                f"{len(pin_requirements['required_pins'])} 个必需"
+            )
 
             # 验证引脚连接
             pins = {}
@@ -483,9 +520,13 @@ class ModelBuilderSkill(SkillBase):
                 if target_bus:
                     pins[pin_name] = target_bus
 
-            pin_validation = self._metadata_integration.validate_pin_connection(comp_type, pins)
+            pin_validation = self._metadata_integration.validate_pin_connection(
+                comp_type, pins
+            )
             if not pin_validation.valid:
-                error_msg = f"组件 {label} 引脚连接验证失败: {'; '.join(pin_validation.errors)}"
+                error_msg = (
+                    f"组件 {label} 引脚连接验证失败: {'; '.join(pin_validation.errors)}"
+                )
                 logger.error(f"  ❌ {error_msg}")
                 if self._strict_connectivity:
                     raise ValueError(error_msg)
@@ -495,18 +536,14 @@ class ModelBuilderSkill(SkillBase):
         component_def = {
             "label": label,
             "type": "standard.Image",
-            "data": {
-                "rid": comp_type,
-                "label": label,
-                "args": params
-            }
+            "data": {"rid": comp_type, "label": label, "args": params},
         }
 
         # 添加位置信息
         if position:
             component_def["position"] = {
                 "x": position.get("x", 0),
-                "y": position.get("y", 0)
+                "y": position.get("y", 0),
             }
 
         # 处理引脚连接
@@ -542,9 +579,7 @@ class ModelBuilderSkill(SkillBase):
             self._add_component_direct(component_def)
 
     def _prepare_component_definition(
-        self,
-        component_type: str,
-        params: Dict[str, Any]
+        self, component_type: str, params: Dict[str, Any]
     ) -> Tuple[str, Dict[str, Any]]:
         """为新增元件准备真实可用的组件类型和参数。"""
         effective_type = self.COMPONENT_TYPE_ALIASES.get(component_type, component_type)
@@ -566,7 +601,7 @@ class ModelBuilderSkill(SkillBase):
         prepared = deepcopy(params)
         capacity = ModelBuilderSkill._first_present(
             prepared,
-            ["pf_P", "P_cmd", "Pnom", "额定容量", "capacity_mw", "有功功率参考值"]
+            ["pf_P", "P_cmd", "Pnom", "额定容量", "capacity_mw", "有功功率参考值"],
         )
         if capacity is not None:
             prepared["P_cmd"] = capacity
@@ -579,8 +614,7 @@ class ModelBuilderSkill(SkillBase):
         prepared.setdefault("pf_Q", 0.0)
         prepared.setdefault("Q_cmd", 0.0)
         return ModelBuilderSkill._drop_keys(
-            prepared,
-            {"Pnom", "额定容量", "capacity_mw", "有功功率参考值"}
+            prepared, {"Pnom", "额定容量", "capacity_mw", "有功功率参考值"}
         )
 
     @staticmethod
@@ -589,7 +623,7 @@ class ModelBuilderSkill(SkillBase):
         prepared = deepcopy(params)
         capacity = ModelBuilderSkill._first_present(
             prepared,
-            ["pf_P", "P_cmd", "Pnom", "额定容量", "capacity_mw", "有功功率参考值"]
+            ["pf_P", "P_cmd", "Pnom", "额定容量", "capacity_mw", "有功功率参考值"],
         )
         if capacity is not None:
             prepared["P_cmd"] = capacity
@@ -603,7 +637,7 @@ class ModelBuilderSkill(SkillBase):
         prepared.setdefault("Q_cmd", 0.0)
         return ModelBuilderSkill._drop_keys(
             prepared,
-            {"Pnom", "额定容量", "capacity_mw", "有功功率参考值", "Irradiance"}
+            {"Pnom", "额定容量", "capacity_mw", "有功功率参考值", "Irradiance"},
         )
 
     @staticmethod
@@ -655,11 +689,15 @@ class ModelBuilderSkill(SkillBase):
             return float(stripped)
         return value
 
-    def _normalize_parameters_by_metadata(self, component_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _normalize_parameters_by_metadata(
+        self, component_type: str, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """把显示名参数映射成真实 key，并按元数据做类型归一化。"""
         metadata = self._metadata_integration.get_component_metadata(component_type)
         if not metadata:
-            return {key: self._coerce_scalar_value(value) for key, value in params.items()}
+            return {
+                key: self._coerce_scalar_value(value) for key, value in params.items()
+            }
 
         key_map = {}
         type_map = {}
@@ -672,8 +710,14 @@ class ModelBuilderSkill(SkillBase):
 
         normalized = {}
         for key, value in params.items():
-            resolved_key = key_map.get(key) or key_map.get(self._normalize_lookup_value(key)) or key
-            normalized[resolved_key] = self._coerce_scalar_value(value, type_map.get(resolved_key))
+            resolved_key = (
+                key_map.get(key)
+                or key_map.get(self._normalize_lookup_value(key))
+                or key
+            )
+            normalized[resolved_key] = self._coerce_scalar_value(
+                value, type_map.get(resolved_key)
+            )
 
         return normalized
 
@@ -720,7 +764,11 @@ class ModelBuilderSkill(SkillBase):
                     if candidate is not None
                 }
                 if normalized_target in normalized_candidates:
-                    return pins.get("0") or args.get("Name") or str(normalized_candidates[normalized_target])
+                    return (
+                        pins.get("0")
+                        or args.get("Name")
+                        or str(normalized_candidates[normalized_target])
+                    )
 
         except Exception as exc:
             logger.error(f"解析目标母线失败: {exc}")
@@ -736,7 +784,9 @@ class ModelBuilderSkill(SkillBase):
         # 需要通过模型编辑 API 实现
         logger.warning("直接添加组件功能当前不可用，需要 CloudPSS SDK 支持")
         # 暂时记录修改但不实际添加
-        self.modifications_applied.append(f"add:{component_def.get('label', 'unknown')}(skipped)")
+        self.modifications_applied.append(
+            f"add:{component_def.get('label', 'unknown')}(skipped)"
+        )
 
     def _modify_component(self, config: Dict):
         """修改组件参数"""
@@ -753,7 +803,9 @@ class ModelBuilderSkill(SkillBase):
         # 更新参数
         component = self.model.getComponentByKey(component_key)
         component_type = getattr(component, "definition", "")
-        normalized_params = self._normalize_parameters_by_metadata(component_type, params)
+        normalized_params = self._normalize_parameters_by_metadata(
+            component_type, params
+        )
         try:
             self.model.updateComponent(component_key, args=normalized_params)
             self.modifications_applied.append(f"modify:{component_key}")
@@ -812,7 +864,7 @@ class ModelBuilderSkill(SkillBase):
 
             # 获取组件类型列表（类默认 + 实例配置）
             component_types = list(self.DEFAULT_COMPONENT_TYPES)
-            if hasattr(self, '_additional_component_types'):
+            if hasattr(self, "_additional_component_types"):
                 component_types.extend(self._additional_component_types)
 
             for comp_type in component_types:
@@ -828,8 +880,8 @@ class ModelBuilderSkill(SkillBase):
             # 遍历所有组件进行匹配
             for key, comp in all_components.items():
                 # Component 对象有直接的属性访问
-                comp_label = getattr(comp, 'label', None)
-                comp_type = getattr(comp, 'definition', None)  # 组件类型RID
+                comp_label = getattr(comp, "label", None)
+                comp_type = getattr(comp, "definition", None)  # 组件类型RID
 
                 # 匹配 label
                 if "label" in selector:
@@ -852,7 +904,9 @@ class ModelBuilderSkill(SkillBase):
             logger.error(f"查找组件失败: {e}")
             return None
 
-    def _batch_generate(self, batch_config: Dict, output_config: Dict) -> List[GeneratedModel]:
+    def _batch_generate(
+        self, batch_config: Dict, output_config: Dict
+    ) -> List[GeneratedModel]:
         """批量生成模型变体"""
         from cloudpss import Model
 
@@ -880,10 +934,19 @@ class ModelBuilderSkill(SkillBase):
 
             # 保存模型
             output = deepcopy(output_config)
-            output_name = self._apply_placeholder_template(output_config.get("name", "model"), params) or f"model_{i+1}"
+            output_name = (
+                self._apply_placeholder_template(
+                    output_config.get("name", "model"), params
+                )
+                or f"model_{i + 1}"
+            )
             output["name"] = output_name
-            output["description"] = (self._apply_placeholder_template(output_config.get("description", ""), params)
-                                     or "") + f" (params: {params})"
+            output["description"] = (
+                self._apply_placeholder_template(
+                    output_config.get("description", ""), params
+                )
+                or ""
+            ) + f" (params: {params})"
 
             if output.get("save", True):
                 model_info = self._save_model(output)
@@ -892,11 +955,11 @@ class ModelBuilderSkill(SkillBase):
                     name=output_name,
                     rid=f"unsaved://{output_name}",
                     description=output["description"],
-                    modifications_applied=self.modifications_applied.copy()
+                    modifications_applied=self.modifications_applied.copy(),
                 )
             models.append(model_info)
 
-            logger.info(f"批量生成 [{i+1}]: {model_info.name}")
+            logger.info(f"批量生成 [{i + 1}]: {model_info.name}")
 
         return models
 
@@ -919,7 +982,9 @@ class ModelBuilderSkill(SkillBase):
                             if value == placeholder:
                                 new_mod["parameters"][key] = param_value
                             elif placeholder in value:
-                                new_mod["parameters"][key] = value.replace(placeholder, str(param_value))
+                                new_mod["parameters"][key] = value.replace(
+                                    placeholder, str(param_value)
+                                )
 
             # 替换 label 中的占位符
             if "label" in new_mod:
@@ -939,7 +1004,9 @@ class ModelBuilderSkill(SkillBase):
                         for param_name, param_value in params.items():
                             placeholder = f"{{{param_name}}}"
                             if placeholder in value:
-                                selector[key] = value.replace(placeholder, str(param_value))
+                                selector[key] = value.replace(
+                                    placeholder, str(param_value)
+                                )
 
             modifications.append(new_mod)
 
@@ -956,8 +1023,12 @@ class ModelBuilderSkill(SkillBase):
 
     def _save_model(self, output_config: Dict) -> GeneratedModel:
         """保存模型"""
-        branch = output_config.get("branch", f"auto_generated_{datetime.now().strftime('%Y%m%d')}")
-        name = output_config.get("name", f"Model_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        branch = output_config.get(
+            "branch", f"auto_generated_{datetime.now().strftime('%Y%m%d')}"
+        )
+        name = output_config.get(
+            "name", f"Model_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        )
         description = output_config.get("description", "Auto-generated model")
 
         logger.info(f"保存模型到分支: {branch}")
@@ -971,7 +1042,7 @@ class ModelBuilderSkill(SkillBase):
                 or result.get("rid")
             )
             if not new_rid:
-                base_parts = self.base_model_rid.split('/')
+                base_parts = self.base_model_rid.split("/")
                 if len(base_parts) >= 2:
                     new_rid = f"{base_parts[0]}/{base_parts[1]}/{branch}"
                 else:
@@ -983,7 +1054,7 @@ class ModelBuilderSkill(SkillBase):
                 name=name,
                 rid=new_rid,
                 description=description,
-                modifications_applied=self.modifications_applied.copy()
+                modifications_applied=self.modifications_applied.copy(),
             )
 
         except (ConnectionError, RuntimeError, ValueError) as e:
@@ -993,9 +1064,22 @@ class ModelBuilderSkill(SkillBase):
     def _setup_auth(self, config: Dict):
         """设置认证"""
         from cloudpss import setToken
+        import os
 
         auth = config.get("auth", {})
         token = auth.get("token")
+
+        # 确定服务器和对应的 token 文件
+        server = auth.get("server", "public")
+        base_url = auth.get("base_url") or auth.get("baseUrl")
+
+        # 设置 API URL
+        if base_url:
+            os.environ["CLOUDPSS_API_URL"] = base_url
+        elif server == "internal":
+            os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
+        else:
+            os.environ["CLOUDPSS_API_URL"] = "https://cloudpss.net/"
 
         if not token and auth.get("token_file"):
             try:
@@ -1006,15 +1090,28 @@ class ModelBuilderSkill(SkillBase):
                 logger.debug(f"忽略预期异常: {e}")
 
         if not token:
-            try:
-                with open(".cloudpss_token", "r") as f:
-                    token = f.read().strip()
-            except FileNotFoundError:
-                raise ValueError("未找到CloudPSS token")
+            # 根据服务器选择 token 文件
+            if server == "internal":
+                token_files = [".cloudpss_token_internal", ".cloudpss_token"]
+            else:
+                token_files = [".cloudpss_token"]
+            for token_file in token_files:
+                try:
+                    with open(token_file, "r") as f:
+                        token = f.read().strip()
+                        break
+                except FileNotFoundError:
+                    continue
+
+        if not token:
+            raise ValueError("未找到CloudPSS token")
 
         setToken(token)
 
     def _fetch_model(self, rid: str):
         """获取模型"""
         from cloudpss import Model
-        return Model.fetch(rid, **get_cloudpss_kwargs(getattr(self, "_active_config", None) or {}))
+
+        return Model.fetch(
+            rid, **get_cloudpss_kwargs(getattr(self, "_active_config", None) or {})
+        )

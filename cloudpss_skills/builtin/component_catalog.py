@@ -20,7 +20,12 @@ import csv
 import json
 from pathlib import Path
 
-from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult
+from cloudpss_skills.core.base import (
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+)
 from cloudpss_skills.core.auth_utils import get_cloudpss_kwargs
 from cloudpss_skills.core.registry import register
 
@@ -30,6 +35,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ComponentInfo:
     """组件信息"""
+
     name: str
     rid: str
     description: str = ""
@@ -80,8 +86,8 @@ class ComponentCatalogSkill(SkillBase):
                 "type": "object",
                 "properties": {
                     "token": {"type": "string"},
-                    "token_file": {"type": "string"}
-                }
+                    "token_file": {"type": "string"},
+                },
             },
             "filters": {
                 "type": "object",
@@ -89,18 +95,18 @@ class ComponentCatalogSkill(SkillBase):
                     "tags": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "按标签过滤，如 project-category:component"
+                        "description": "按标签过滤，如 project-category:component",
                     },
                     "name_pattern": {
                         "type": "string",
-                        "description": "按名称正则表达式过滤"
+                        "description": "按名称正则表达式过滤",
                     },
                     "owner": {
                         "type": "string",
                         "default": "*",
-                        "description": "按所有者过滤，* 表示所有"
-                    }
-                }
+                        "description": "按所有者过滤，* 表示所有",
+                    },
+                },
             },
             "options": {
                 "type": "object",
@@ -108,18 +114,18 @@ class ComponentCatalogSkill(SkillBase):
                     "page_size": {
                         "type": "integer",
                         "default": 1000,
-                        "description": "每页获取数量"
+                        "description": "每页获取数量",
                     },
                     "max_results": {
                         "type": "integer",
-                        "description": "最大返回结果数，默认不限制"
+                        "description": "最大返回结果数，默认不限制",
                     },
                     "include_details": {
                         "type": "boolean",
                         "default": True,
-                        "description": "是否获取组件详细信息"
-                    }
-                }
+                        "description": "是否获取组件详细信息",
+                    },
+                },
             },
             "output": {
                 "type": "object",
@@ -127,20 +133,20 @@ class ComponentCatalogSkill(SkillBase):
                     "format": {
                         "type": "string",
                         "enum": ["json", "csv", "console"],
-                        "default": "console"
+                        "default": "console",
                     },
                     "path": {
                         "type": "string",
-                        "description": "输出文件路径（format为json/csv时）"
+                        "description": "输出文件路径（format为json/csv时）",
                     },
                     "group_by_tag": {
                         "type": "boolean",
                         "default": False,
-                        "description": "按标签分组输出"
-                    }
-                }
-            }
-        }
+                        "description": "按标签分组输出",
+                    },
+                },
+            },
+        },
     }
 
     def __init__(self):
@@ -210,10 +216,10 @@ class ComponentCatalogSkill(SkillBase):
                         "rid": c.rid,
                         "description": c.description,
                         "tags": c.tags,
-                        "owner": c.owner
+                        "owner": c.owner,
                     }
                     for c in filtered
-                ]
+                ],
             }
 
             # 按标签分组统计
@@ -224,13 +230,18 @@ class ComponentCatalogSkill(SkillBase):
             artifacts = []
             if output_path:
                 from cloudpss_skills.core import Artifact
+
                 output_file = Path(output_path)
-                artifacts.append(Artifact(
-                    type="file",
-                    path=str(output_file),
-                    size=output_file.stat().st_size if output_file and output_file.exists() else 0,
-                    description="组件目录输出"
-                ))
+                artifacts.append(
+                    Artifact(
+                        type="file",
+                        path=str(output_file),
+                        size=output_file.stat().st_size
+                        if output_file and output_file.exists()
+                        else 0,
+                        description="组件目录输出",
+                    )
+                )
 
             logger.info(f"组件目录获取完成: {len(filtered)} 个组件")
             return SkillResult(
@@ -239,17 +250,26 @@ class ComponentCatalogSkill(SkillBase):
                 start_time=start_time,
                 end_time=datetime.now(),
                 data=result_data,
-                artifacts=artifacts
+                artifacts=artifacts,
             )
 
-        except (KeyError, AttributeError, ConnectionError, FileNotFoundError, ValueError, TypeError, RuntimeError, Exception) as e:
+        except (
+            KeyError,
+            AttributeError,
+            ConnectionError,
+            FileNotFoundError,
+            ValueError,
+            TypeError,
+            RuntimeError,
+            Exception,
+        ) as e:
             logger.error(f"组件目录获取失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                error=str(e)
+                error=str(e),
             )
 
     def _fetch_components(self, config: Dict) -> List[ComponentInfo]:
@@ -264,7 +284,9 @@ class ComponentCatalogSkill(SkillBase):
 
         try:
             # 使用 fetchMany 获取所有模型
-            models = Model.fetchMany(pageSize=page_size, owner=owner, **get_cloudpss_kwargs(config))
+            models = Model.fetchMany(
+                pageSize=page_size, owner=owner, **get_cloudpss_kwargs(config)
+            )
             logger.info(f"获取到 {len(models)} 个模型")
         except (KeyError, AttributeError) as e:
             logger.error(f"获取模型列表失败: {e}")
@@ -279,13 +301,15 @@ class ComponentCatalogSkill(SkillBase):
                 description=m.get("description", ""),
                 tags=m.get("tags", []),
                 owner=m.get("owner", ""),
-                updated_at=m.get("updatedAt", "")
+                updated_at=m.get("updatedAt", ""),
             )
             components.append(comp)
 
         return components
 
-    def _apply_filters(self, components: List[ComponentInfo], filters: Dict) -> List[ComponentInfo]:
+    def _apply_filters(
+        self, components: List[ComponentInfo], filters: Dict
+    ) -> List[ComponentInfo]:
         """应用过滤器"""
         result = components
 
@@ -293,10 +317,7 @@ class ComponentCatalogSkill(SkillBase):
         tags = filters.get("tags", [])
         if tags:
             logger.info(f"按标签过滤: {tags}")
-            result = [
-                c for c in result
-                if any(tag in c.tags for tag in tags)
-            ]
+            result = [c for c in result if any(tag in c.tags for tag in tags)]
             logger.info(f"标签过滤后: {len(result)} 个")
 
         # 按名称正则表达式过滤
@@ -304,15 +325,14 @@ class ComponentCatalogSkill(SkillBase):
         if pattern:
             logger.info(f"按名称过滤: {pattern}")
             regex = re.compile(pattern, re.IGNORECASE)
-            result = [
-                c for c in result
-                if regex.search(c.name)
-            ]
+            result = [c for c in result if regex.search(c.name)]
             logger.info(f"名称过滤后: {len(result)} 个")
 
         return result
 
-    def _enrich_components(self, components: List[ComponentInfo], config: Dict) -> List[ComponentInfo]:
+    def _enrich_components(
+        self, components: List[ComponentInfo], config: Dict
+    ) -> List[ComponentInfo]:
         """获取组件详细信息"""
         from cloudpss import Model
 
@@ -333,7 +353,9 @@ class ComponentCatalogSkill(SkillBase):
 
         return enriched
 
-    def _output_results(self, components: List[ComponentInfo], output_config: Dict) -> Optional[str]:
+    def _output_results(
+        self, components: List[ComponentInfo], output_config: Dict
+    ) -> Optional[str]:
         """输出结果"""
         fmt = output_config.get("format", "console")
         path = output_config.get("path")
@@ -386,7 +408,9 @@ class ComponentCatalogSkill(SkillBase):
         for line in lines:
             logger.info(line)
 
-    def _output_json(self, components: List[ComponentInfo], path: str, group_by_tag: bool) -> str:
+    def _output_json(
+        self, components: List[ComponentInfo], path: str, group_by_tag: bool
+    ) -> str:
         """输出为 JSON"""
         if group_by_tag:
             data = {}
@@ -394,13 +418,15 @@ class ComponentCatalogSkill(SkillBase):
                 primary_tag = c.tags[0] if c.tags else "未分类"
                 if primary_tag not in data:
                     data[primary_tag] = []
-                data[primary_tag].append({
-                    "name": c.name,
-                    "rid": c.rid,
-                    "description": c.description,
-                    "tags": c.tags,
-                    "owner": c.owner
-                })
+                data[primary_tag].append(
+                    {
+                        "name": c.name,
+                        "rid": c.rid,
+                        "description": c.description,
+                        "tags": c.tags,
+                        "owner": c.owner,
+                    }
+                )
         else:
             data = [
                 {
@@ -408,7 +434,7 @@ class ComponentCatalogSkill(SkillBase):
                     "rid": c.rid,
                     "description": c.description,
                     "tags": c.tags,
-                    "owner": c.owner
+                    "owner": c.owner,
                 }
                 for c in components
             ]
@@ -425,13 +451,9 @@ class ComponentCatalogSkill(SkillBase):
             writer = csv.writer(f)
             writer.writerow(["名称", "RID", "描述", "标签", "所有者"])
             for c in components:
-                writer.writerow([
-                    c.name,
-                    c.rid,
-                    c.description,
-                    ", ".join(c.tags),
-                    c.owner
-                ])
+                writer.writerow(
+                    [c.name, c.rid, c.description, ", ".join(c.tags), c.owner]
+                )
 
         logger.info(f"CSV 已保存到: {path}")
         return path
@@ -447,9 +469,22 @@ class ComponentCatalogSkill(SkillBase):
     def _setup_auth(self, config: Dict):
         """设置认证"""
         from cloudpss import setToken
+        import os
 
         auth = config.get("auth", {})
         token = auth.get("token")
+
+        # 确定服务器和对应的 token 文件
+        server = auth.get("server", "public")
+        base_url = auth.get("base_url") or auth.get("baseUrl")
+
+        # 设置 API URL
+        if base_url:
+            os.environ["CLOUDPSS_API_URL"] = base_url
+        elif server == "internal":
+            os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
+        else:
+            os.environ["CLOUDPSS_API_URL"] = "https://cloudpss.net/"
 
         if not token and auth.get("token_file"):
             try:
@@ -460,10 +495,20 @@ class ComponentCatalogSkill(SkillBase):
                 logger.debug(f"忽略预期异常: {e}")
 
         if not token:
-            try:
-                with open(".cloudpss_token", "r") as f:
-                    token = f.read().strip()
-            except FileNotFoundError:
-                raise ValueError("未找到 CloudPSS token")
+            # 根据服务器选择 token 文件
+            if server == "internal":
+                token_files = [".cloudpss_token_internal", ".cloudpss_token"]
+            else:
+                token_files = [".cloudpss_token"]
+            for token_file in token_files:
+                try:
+                    with open(token_file, "r") as f:
+                        token = f.read().strip()
+                        break
+                except FileNotFoundError:
+                    continue
+
+        if not token:
+            raise ValueError("未找到CloudPSS token")
 
         setToken(token)

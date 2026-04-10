@@ -19,7 +19,15 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 from cloudpss import Model
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
 from cloudpss_skills.core.auth_utils import fetch_model_by_rid
 from cloudpss_skills.core.utils import (
     calculate_dv_metrics,
@@ -27,7 +35,7 @@ from cloudpss_skills.core.utils import (
     extract_voltage_from_result,
     fetch_job_with_result,
     get_time_index,
-    calculate_voltage_average
+    calculate_voltage_average,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,56 +63,129 @@ class DisturbanceSeveritySkill(SkillBase):
                     "type": "object",
                     "properties": {
                         "token_file": {"type": "string", "default": ".cloudpss_token"}
-                    }
+                    },
                 },
                 "model": {
                     "type": "object",
                     "required": ["rid"],
                     "properties": {
                         "rid": {"type": "string", "description": "模型RID"},
-                        "source": {"type": "string", "enum": ["cloud", "local"], "default": "cloud"}
-                    }
+                        "source": {
+                            "type": "string",
+                            "enum": ["cloud", "local"],
+                            "default": "cloud",
+                        },
+                    },
                 },
                 "simulation": {
                     "type": "object",
                     "properties": {
-                        "emt_result": {"type": "string", "description": "已有EMT结果Job ID（可选）"},
-                        "fault_bus": {"type": "string", "description": "故障母线label/key"},
-                        "fault_type": {"type": "string", "enum": ["three_phase", "single_phase"], "default": "three_phase"},
-                        "fault_time": {"type": "number", "default": 4.0, "description": "故障发生时间(s)"},
-                        "fault_duration": {"type": "number", "default": 0.1, "description": "故障持续时间(s)"},
-                        "simulation_time": {"type": "number", "default": 10.0, "description": "总仿真时间(s)"},
-                        "step_time": {"type": "number", "default": 0.0001, "description": "仿真步长(s)"}
-                    }
+                        "emt_result": {
+                            "type": "string",
+                            "description": "已有EMT结果Job ID（可选）",
+                        },
+                        "fault_bus": {
+                            "type": "string",
+                            "description": "故障母线label/key",
+                        },
+                        "fault_type": {
+                            "type": "string",
+                            "enum": ["three_phase", "single_phase"],
+                            "default": "three_phase",
+                        },
+                        "fault_time": {
+                            "type": "number",
+                            "default": 4.0,
+                            "description": "故障发生时间(s)",
+                        },
+                        "fault_duration": {
+                            "type": "number",
+                            "default": 0.1,
+                            "description": "故障持续时间(s)",
+                        },
+                        "simulation_time": {
+                            "type": "number",
+                            "default": 10.0,
+                            "description": "总仿真时间(s)",
+                        },
+                        "step_time": {
+                            "type": "number",
+                            "default": 0.0001,
+                            "description": "仿真步长(s)",
+                        },
+                    },
                 },
                 "analysis": {
                     "type": "object",
                     "properties": {
-                        "dv_enabled": {"type": "boolean", "default": True, "description": "启用DV计算"},
-                        "si_enabled": {"type": "boolean", "default": True, "description": "启用SI计算"},
-                        "dudv_enabled": {"type": "boolean", "default": True, "description": "启用DUDV曲线"},
-                        "voltage_measure_plot": {"type": "integer", "default": 0, "description": "电压量测图索引"},
-                        "pre_fault_window": {"type": "number", "default": 0.5, "description": "故障前稳态计算窗口(s)"},
+                        "dv_enabled": {
+                            "type": "boolean",
+                            "default": True,
+                            "description": "启用DV计算",
+                        },
+                        "si_enabled": {
+                            "type": "boolean",
+                            "default": True,
+                            "description": "启用SI计算",
+                        },
+                        "dudv_enabled": {
+                            "type": "boolean",
+                            "default": True,
+                            "description": "启用DUDV曲线",
+                        },
+                        "voltage_measure_plot": {
+                            "type": "integer",
+                            "default": 0,
+                            "description": "电压量测图索引",
+                        },
+                        "pre_fault_window": {
+                            "type": "number",
+                            "default": 0.5,
+                            "description": "故障前稳态计算窗口(s)",
+                        },
                         "judge_criteria": {
                             "type": "array",
                             "description": "DV判断条件 [[t_start, t_end, v_min_ratio, v_max_ratio], ...]",
-                            "default": [[0.1, 3.0, 0.75, 1.25], [3.0, 999.0, 0.95, 1.05]]
+                            "default": [
+                                [0.1, 3.0, 0.75, 1.25],
+                                [3.0, 999.0, 0.95, 1.05],
+                            ],
                         },
-                        "si_interval": {"type": "number", "default": 0.11, "description": "SI计算起始偏移(s)"},
-                        "si_window": {"type": "number", "default": 3.0, "description": "SI积分窗口(s)"},
-                        "si_dv1": {"type": "number", "default": 0.25, "description": "SI第一阶段电压偏差阈值"},
-                        "si_dv2": {"type": "number", "default": 0.1, "description": "SI第二阶段电压偏差阈值"}
-                    }
+                        "si_interval": {
+                            "type": "number",
+                            "default": 0.11,
+                            "description": "SI计算起始偏移(s)",
+                        },
+                        "si_window": {
+                            "type": "number",
+                            "default": 3.0,
+                            "description": "SI积分窗口(s)",
+                        },
+                        "si_dv1": {
+                            "type": "number",
+                            "default": 0.25,
+                            "description": "SI第一阶段电压偏差阈值",
+                        },
+                        "si_dv2": {
+                            "type": "number",
+                            "default": 0.1,
+                            "description": "SI第二阶段电压偏差阈值",
+                        },
+                    },
                 },
                 "output": {
                     "type": "object",
                     "properties": {
-                        "format": {"type": "string", "enum": ["json", "csv"], "default": "json"},
+                        "format": {
+                            "type": "string",
+                            "enum": ["json", "csv"],
+                            "default": "json",
+                        },
                         "path": {"type": "string", "default": "./results/"},
-                        "prefix": {"type": "string", "default": "disturbance_severity"}
-                    }
-                }
-            }
+                        "prefix": {"type": "string", "default": "disturbance_severity"},
+                    },
+                },
+            },
         }
 
     def validate(self, config: Dict[str, Any]) -> ValidationResult:
@@ -128,7 +209,9 @@ class DisturbanceSeveritySkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(timestamp=datetime.now(), level=level, message=message))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
@@ -146,8 +229,15 @@ class DisturbanceSeveritySkill(SkillBase):
                     status=SkillStatus.FAILED,
                     data={},
                     artifacts=artifacts,
-                    logs=logs + [LogEntry(timestamp=datetime.now(), level="ERROR", message="获取EMT结果失败")],
-                    metrics={"duration": (datetime.now() - start_time).total_seconds()}
+                    logs=logs
+                    + [
+                        LogEntry(
+                            timestamp=datetime.now(),
+                            level="ERROR",
+                            message="获取EMT结果失败",
+                        )
+                    ],
+                    metrics={"duration": (datetime.now() - start_time).total_seconds()},
                 )
 
             log("INFO", "成功获取EMT仿真结果")
@@ -161,8 +251,15 @@ class DisturbanceSeveritySkill(SkillBase):
                     status=SkillStatus.FAILED,
                     data={},
                     artifacts=artifacts,
-                    logs=logs + [LogEntry(timestamp=datetime.now(), level="ERROR", message="未能从结果中提取电压数据")],
-                    metrics={"duration": (datetime.now() - start_time).total_seconds()}
+                    logs=logs
+                    + [
+                        LogEntry(
+                            timestamp=datetime.now(),
+                            level="ERROR",
+                            message="未能从结果中提取电压数据",
+                        )
+                    ],
+                    metrics={"duration": (datetime.now() - start_time).total_seconds()},
                 )
 
             log("INFO", f"提取到 {len(voltage_channels)} 个电压通道")
@@ -173,10 +270,7 @@ class DisturbanceSeveritySkill(SkillBase):
             pre_fault_window = analysis_config.get("pre_fault_window", 0.5)
 
             results = self._analyze_all_channels(
-                voltage_channels,
-                disturbance_time,
-                pre_fault_window,
-                analysis_config
+                voltage_channels, disturbance_time, pre_fault_window, analysis_config
             )
 
             # 5. 识别薄弱点
@@ -194,42 +288,48 @@ class DisturbanceSeveritySkill(SkillBase):
                 "channel_count": len(voltage_channels),
                 "channel_results": results,
                 "weak_points": weak_points,
-                "summary": self._generate_summary(results)
+                "summary": self._generate_summary(results),
             }
 
             # 保存JSON结果
             json_path = output_path / f"{prefix}_result.json"
-            with open(json_path, 'w', encoding='utf-8') as f:
+            with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(result_data, f, indent=2, ensure_ascii=False)
 
-            artifacts.append(Artifact(
-                type="json",
-                path=str(json_path),
-                size=json_path.stat().st_size,
-                description="扰动严重度分析结果"
-            ))
+            artifacts.append(
+                Artifact(
+                    type="json",
+                    path=str(json_path),
+                    size=json_path.stat().st_size,
+                    description="扰动严重度分析结果",
+                )
+            )
 
             # 保存CSV结果
             csv_path = output_path / f"{prefix}_result.csv"
             self._save_csv_results(results, csv_path)
 
-            artifacts.append(Artifact(
-                type="csv",
-                path=str(csv_path),
-                size=csv_path.stat().st_size,
-                description="扰动严重度指标汇总"
-            ))
+            artifacts.append(
+                Artifact(
+                    type="csv",
+                    path=str(csv_path),
+                    size=csv_path.stat().st_size,
+                    description="扰动严重度指标汇总",
+                )
+            )
 
             # 生成Markdown报告
             report_path = output_path / f"{prefix}_report.md"
             self._generate_report(result_data, report_path)
 
-            artifacts.append(Artifact(
-                type="markdown",
-                path=str(report_path),
-                size=report_path.stat().st_size,
-                description="扰动严重度分析报告"
-            ))
+            artifacts.append(
+                Artifact(
+                    type="markdown",
+                    path=str(report_path),
+                    size=report_path.stat().st_size,
+                    description="扰动严重度分析报告",
+                )
+            )
 
             duration = (datetime.now() - start_time).total_seconds()
             log("INFO", f"扰动严重度分析完成，耗时 {duration:.2f}s")
@@ -242,10 +342,20 @@ class DisturbanceSeveritySkill(SkillBase):
                 data=result_data,
                 artifacts=artifacts,
                 logs=logs,
-                metrics={"duration": duration, "channel_count": len(voltage_channels)}
+                metrics={"duration": duration, "channel_count": len(voltage_channels)},
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError, TypeError, ConnectionError, Exception) as e:
+        except (
+            KeyError,
+            AttributeError,
+            ZeroDivisionError,
+            RuntimeError,
+            FileNotFoundError,
+            ValueError,
+            TypeError,
+            ConnectionError,
+            Exception,
+        ) as e:
             logger.error(f"扰动严重度分析失败: {e}", exc_info=True)
             return SkillResult(
                 skill_name=self.name,
@@ -254,9 +364,16 @@ class DisturbanceSeveritySkill(SkillBase):
                 end_time=datetime.now(),
                 data={},
                 artifacts=artifacts,
-                logs=logs + [LogEntry(timestamp=datetime.now(), level="ERROR", message=f"分析失败: {str(e)}")],
+                logs=logs
+                + [
+                    LogEntry(
+                        timestamp=datetime.now(),
+                        level="ERROR",
+                        message=f"分析失败: {str(e)}",
+                    )
+                ],
                 error=str(e),
-                metrics={"duration": (datetime.now() - start_time).total_seconds()}
+                metrics={"duration": (datetime.now() - start_time).total_seconds()},
             )
 
     def _get_emt_result(self, model: Model, config: Dict[str, Any]) -> Optional[Any]:
@@ -274,20 +391,51 @@ class DisturbanceSeveritySkill(SkillBase):
                 raise RuntimeError("EMT任务结果为空")
             return result
 
-        raise RuntimeError("当前仅支持基于已有 EMT 任务结果进行扰动严重度分析，请提供 simulation.emt_result")
+        raise RuntimeError(
+            "当前仅支持基于已有 EMT 任务结果进行扰动严重度分析，请提供 simulation.emt_result"
+        )
 
     def _setup_auth(self, config: Dict[str, Any]):
         """设置认证"""
         from cloudpss import setToken
+        import os
 
         auth = config.get("auth", {})
         token = auth.get("token")
 
+        # 确定服务器和对应的 token 文件
+        server = auth.get("server", "public")
+        base_url = auth.get("base_url") or auth.get("baseUrl")
+
+        # 设置 API URL
+        if base_url:
+            os.environ["CLOUDPSS_API_URL"] = base_url
+        elif server == "internal":
+            os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
+        else:
+            os.environ["CLOUDPSS_API_URL"] = "https://cloudpss.net/"
+
+        if not token and auth.get("token_file"):
+            try:
+                with open(auth["token_file"], "r") as f:
+                    token = f.read().strip()
+            except FileNotFoundError as e:
+                # 异常已捕获，无需额外处理
+                logger.debug(f"忽略预期异常: {e}")
+
         if not token:
-            token_file = auth.get("token_file", ".cloudpss_token")
-            token_path = Path(token_file)
-            if token_path.exists():
-                token = token_path.read_text().strip()
+            # 根据服务器选择 token 文件
+            if server == "internal":
+                token_files = [".cloudpss_token_internal", ".cloudpss_token"]
+            else:
+                token_files = [".cloudpss_token"]
+            for token_file in token_files:
+                try:
+                    with open(token_file, "r") as f:
+                        token = f.read().strip()
+                        break
+                except FileNotFoundError:
+                    continue
 
         if not token:
             raise ValueError("未找到CloudPSS token")
@@ -299,7 +447,7 @@ class DisturbanceSeveritySkill(SkillBase):
         voltage_channels: List[Dict],
         disturbance_time: float,
         pre_fault_window: float,
-        analysis_config: Dict[str, Any]
+        analysis_config: Dict[str, Any],
     ) -> List[Dict]:
         """分析所有电压通道"""
         results = []
@@ -308,7 +456,7 @@ class DisturbanceSeveritySkill(SkillBase):
             channel_result = {
                 "name": channel["name"],
                 "dv_enabled": analysis_config.get("dv_enabled", True),
-                "si_enabled": analysis_config.get("si_enabled", True)
+                "si_enabled": analysis_config.get("si_enabled", True),
             }
 
             time_data = channel["x"]
@@ -320,23 +468,29 @@ class DisturbanceSeveritySkill(SkillBase):
 
             # 计算DV
             if analysis_config.get("dv_enabled", True):
-                judge_criteria = analysis_config.get("judge_criteria", [[0.1, 3.0, 0.75, 1.25], [3.0, 999.0, 0.95, 1.05]])
+                judge_criteria = analysis_config.get(
+                    "judge_criteria", [[0.1, 3.0, 0.75, 1.25], [3.0, 999.0, 0.95, 1.05]]
+                )
                 dv_result = calculate_dv_metrics(
-                    voltage_data, time_data,
-                    disturbance_time, pre_fault_window,
-                    judge_criteria
+                    voltage_data,
+                    time_data,
+                    disturbance_time,
+                    pre_fault_window,
+                    judge_criteria,
                 )
                 channel_result["dv"] = dv_result
 
             # 计算SI
             if analysis_config.get("si_enabled", True):
                 si_result = calculate_si_metric(
-                    voltage_data, time_data,
-                    disturbance_time, pre_fault_window,
+                    voltage_data,
+                    time_data,
+                    disturbance_time,
+                    pre_fault_window,
                     analysis_config.get("si_interval", 0.11),
                     analysis_config.get("si_window", 3.0),
                     analysis_config.get("si_dv1", 0.25),
-                    analysis_config.get("si_dv2", 0.1)
+                    analysis_config.get("si_dv2", 0.1),
                 )
                 channel_result["si"] = si_result
 
@@ -370,13 +524,15 @@ class DisturbanceSeveritySkill(SkillBase):
                     reason.append(f"严重度指数较高 (SI={si:.4f})")
 
             if is_weak:
-                weak_points.append({
-                    "name": result["name"],
-                    "reason": "; ".join(reason),
-                    "dv_up": result.get("dv", {}).get("dv_up"),
-                    "dv_down": result.get("dv", {}).get("dv_down"),
-                    "si": result.get("si")
-                })
+                weak_points.append(
+                    {
+                        "name": result["name"],
+                        "reason": "; ".join(reason),
+                        "dv_up": result.get("dv", {}).get("dv_up"),
+                        "dv_down": result.get("dv", {}).get("dv_down"),
+                        "si": result.get("si"),
+                    }
+                )
 
         # 按严重程度排序（SI降序）
         weak_points.sort(key=lambda x: x.get("si", 0), reverse=True)
@@ -388,19 +544,27 @@ class DisturbanceSeveritySkill(SkillBase):
         summary = {
             "total_channels": len(results),
             "dv_analyzed": sum(1 for r in results if "dv" in r),
-            "si_analyzed": sum(1 for r in results if "si" in r)
+            "si_analyzed": sum(1 for r in results if "si" in r),
         }
 
         # DV统计
-        dv_up_values = [r["dv"]["dv_up"] for r in results if "dv" in r and r["dv"].get("dv_up") is not None]
-        dv_down_values = [r["dv"]["dv_down"] for r in results if "dv" in r and r["dv"].get("dv_down") is not None]
+        dv_up_values = [
+            r["dv"]["dv_up"]
+            for r in results
+            if "dv" in r and r["dv"].get("dv_up") is not None
+        ]
+        dv_down_values = [
+            r["dv"]["dv_down"]
+            for r in results
+            if "dv" in r and r["dv"].get("dv_down") is not None
+        ]
 
         if dv_up_values:
             summary["dv_up"] = {
                 "min": min(dv_up_values),
                 "max": max(dv_up_values),
                 "mean": sum(dv_up_values) / len(dv_up_values),
-                "negative_count": sum(1 for v in dv_up_values if v < 0)
+                "negative_count": sum(1 for v in dv_up_values if v < 0),
             }
 
         if dv_down_values:
@@ -408,7 +572,7 @@ class DisturbanceSeveritySkill(SkillBase):
                 "min": min(dv_down_values),
                 "max": max(dv_down_values),
                 "mean": sum(dv_down_values) / len(dv_down_values),
-                "negative_count": sum(1 for v in dv_down_values if v < 0)
+                "negative_count": sum(1 for v in dv_down_values if v < 0),
             }
 
         # SI统计
@@ -418,7 +582,7 @@ class DisturbanceSeveritySkill(SkillBase):
                 "min": min(si_values),
                 "max": max(si_values),
                 "mean": sum(si_values) / len(si_values),
-                "high_count": sum(1 for v in si_values if v > 0.5)
+                "high_count": sum(1 for v in si_values if v > 0.5),
             }
 
         return summary
@@ -427,9 +591,18 @@ class DisturbanceSeveritySkill(SkillBase):
         """保存CSV格式结果"""
         import csv
 
-        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(["通道名称", "DV上限裕度", "DV下限裕度", "稳态电压", "SI严重度", "是否薄弱"])
+            writer.writerow(
+                [
+                    "通道名称",
+                    "DV上限裕度",
+                    "DV下限裕度",
+                    "稳态电压",
+                    "SI严重度",
+                    "是否薄弱",
+                ]
+            )
 
             for result in results:
                 dv = result.get("dv", {})
@@ -440,18 +613,22 @@ class DisturbanceSeveritySkill(SkillBase):
                 v_steady = dv.get("v_steady", "N/A")
 
                 # 判断是否薄弱
-                is_weak = (isinstance(dv_up, (int, float)) and dv_up < 0) or \
-                         (isinstance(dv_down, (int, float)) and dv_down < 0) or \
-                         (isinstance(si, (int, float)) and si > 0.5)
+                is_weak = (
+                    (isinstance(dv_up, (int, float)) and dv_up < 0)
+                    or (isinstance(dv_down, (int, float)) and dv_down < 0)
+                    or (isinstance(si, (int, float)) and si > 0.5)
+                )
 
-                writer.writerow([
-                    result["name"],
-                    dv_up,
-                    dv_down,
-                    v_steady,
-                    si,
-                    "是" if is_weak else "否"
-                ])
+                writer.writerow(
+                    [
+                        result["name"],
+                        dv_up,
+                        dv_down,
+                        v_steady,
+                        si,
+                        "是" if is_weak else "否",
+                    ]
+                )
 
     def _generate_report(self, result_data: Dict[str, Any], report_path: Path):
         """生成Markdown报告"""
@@ -466,50 +643,58 @@ class DisturbanceSeveritySkill(SkillBase):
             "",
             f"- **总通道数**: {result_data['summary']['total_channels']}",
             f"- **薄弱点数**: {len(result_data['weak_points'])}",
-            ""
+            "",
         ]
 
         # DV统计
-        if 'dv_up' in result_data['summary']:
-            dv_up = result_data['summary']['dv_up']
-            lines.extend([
-                "### DV电压裕度统计",
-                "",
-                f"- **DV上限裕度**: 最小={dv_up['min']:.4f}, 最大={dv_up['max']:.4f}, 平均={dv_up['mean']:.4f}",
-                f"- **DV上限不足数**: {dv_up['negative_count']}/{result_data['summary']['dv_analyzed']}",
-                ""
-            ])
+        if "dv_up" in result_data["summary"]:
+            dv_up = result_data["summary"]["dv_up"]
+            lines.extend(
+                [
+                    "### DV电压裕度统计",
+                    "",
+                    f"- **DV上限裕度**: 最小={dv_up['min']:.4f}, 最大={dv_up['max']:.4f}, 平均={dv_up['mean']:.4f}",
+                    f"- **DV上限不足数**: {dv_up['negative_count']}/{result_data['summary']['dv_analyzed']}",
+                    "",
+                ]
+            )
 
-        if 'dv_down' in result_data['summary']:
-            dv_down = result_data['summary']['dv_down']
-            lines.extend([
-                f"- **DV下限裕度**: 最小={dv_down['min']:.4f}, 最大={dv_down['max']:.4f}, 平均={dv_down['mean']:.4f}",
-                f"- **DV下限不足数**: {dv_down['negative_count']}/{result_data['summary']['dv_analyzed']}",
-                ""
-            ])
+        if "dv_down" in result_data["summary"]:
+            dv_down = result_data["summary"]["dv_down"]
+            lines.extend(
+                [
+                    f"- **DV下限裕度**: 最小={dv_down['min']:.4f}, 最大={dv_down['max']:.4f}, 平均={dv_down['mean']:.4f}",
+                    f"- **DV下限不足数**: {dv_down['negative_count']}/{result_data['summary']['dv_analyzed']}",
+                    "",
+                ]
+            )
 
         # SI统计
-        if 'si' in result_data['summary']:
-            si = result_data['summary']['si']
-            lines.extend([
-                "### SI严重度指数统计",
-                "",
-                f"- **SI范围**: {si['min']:.4f} ~ {si['max']:.4f}",
-                f"- **SI平均值**: {si['mean']:.4f}",
-                f"- **高严重度数**: {si['high_count']}/{result_data['summary']['si_analyzed']}",
-                ""
-            ])
+        if "si" in result_data["summary"]:
+            si = result_data["summary"]["si"]
+            lines.extend(
+                [
+                    "### SI严重度指数统计",
+                    "",
+                    f"- **SI范围**: {si['min']:.4f} ~ {si['max']:.4f}",
+                    f"- **SI平均值**: {si['mean']:.4f}",
+                    f"- **高严重度数**: {si['high_count']}/{result_data['summary']['si_analyzed']}",
+                    "",
+                ]
+            )
 
         # 薄弱点列表
-        if result_data['weak_points']:
-            lines.extend([
-                "## 薄弱点识别",
-                "",
-                "| 排名 | 通道名称 | DV上限裕度 | DV下限裕度 | SI | 原因 |",
-                "|------|----------|------------|------------|-----|------|"
-            ])
+        if result_data["weak_points"]:
+            lines.extend(
+                [
+                    "## 薄弱点识别",
+                    "",
+                    "| 排名 | 通道名称 | DV上限裕度 | DV下限裕度 | SI | 原因 |",
+                    "|------|----------|------------|------------|-----|------|",
+                ]
+            )
 
-            for i, wp in enumerate(result_data['weak_points'][:10], 1):
+            for i, wp in enumerate(result_data["weak_points"][:10], 1):
                 lines.append(
                     f"| {i} | {wp['name']} | {wp.get('dv_up', 'N/A')} | "
                     f"{wp.get('dv_down', 'N/A')} | {wp.get('si', 'N/A'):.4f} | {wp['reason']} |"
@@ -518,19 +703,21 @@ class DisturbanceSeveritySkill(SkillBase):
             lines.append("")
 
         # 详细结果
-        lines.extend([
-            "## 详细结果",
-            "",
-            "| 通道名称 | DV上限裕度 | DV下限裕度 | 稳态电压 | SI |",
-            "|----------|------------|------------|----------|-----|"
-        ])
+        lines.extend(
+            [
+                "## 详细结果",
+                "",
+                "| 通道名称 | DV上限裕度 | DV下限裕度 | 稳态电压 | SI |",
+                "|----------|------------|------------|----------|-----|",
+            ]
+        )
 
-        for r in result_data['channel_results']:
-            dv = r.get('dv', {})
+        for r in result_data["channel_results"]:
+            dv = r.get("dv", {})
             lines.append(
                 f"| {r['name']} | {dv.get('dv_up', 'N/A')} | "
                 f"{dv.get('dv_down', 'N/A')} | {dv.get('v_steady', 'N/A')} | {r.get('si', 'N/A')} |"
             )
 
-        with open(report_path, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(lines))
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
