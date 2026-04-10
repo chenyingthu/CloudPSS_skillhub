@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-report_generator Skill - Integration Tests
+waveform_export Skill - Integration Tests
 
-Tests for report_generator skill with real CloudPSS API.
+Tests for waveform_export skill with real CloudPSS API.
 """
 
 import pytest
@@ -12,16 +12,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from cloudpss import setToken
-from cloudpss_skills.builtin.report_generator import ReportGeneratorSkill
+from cloudpss_skills.builtin.waveform_export import WaveformExportSkill
 from cloudpss_skills.core import SkillStatus
 
 
-class TestReportGeneratorSkillIntegration:
-    """Integration tests for report_generator skill"""
+class TestWaveformExportSkillIntegration:
+    """Integration tests for waveform_export skill"""
 
     def setup_method(self):
         """Setup for each test"""
-        self.skill = ReportGeneratorSkill()
+        self.skill = WaveformExportSkill()
 
     @pytest.fixture(scope="class")
     def auth_token(self):
@@ -37,9 +37,9 @@ class TestReportGeneratorSkillIntegration:
     def test_skill_registration(self):
         """Test that skill is registered"""
         from cloudpss_skills import get_skill
-        skill = get_skill("report_generator")
+        skill = get_skill("waveform_export")
         assert skill is not None
-        assert skill.name == "report_generator"
+        assert skill.name == "waveform_export"
 
     def test_config_schema_validation(self):
         """Test config schema validation"""
@@ -57,7 +57,7 @@ class TestReportGeneratorSkillIntegration:
     def test_validation_with_missing_rid(self, auth_token):
         """Test validation fails when model.rid is missing"""
         config = {
-            "skill": "report_generator",
+            "skill": "waveform_export",
             "auth": {"token": auth_token},
         }
         result = self.skill.validate(config)
