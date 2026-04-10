@@ -16,9 +16,28 @@ from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 
-from cloudpss_skills.core.base import SkillBase, SkillResult, SkillStatus, ValidationResult
-from cloudpss_skills.core.auth_utils import setup_auth, DEFAULT_TIMEOUT, fetch_model_by_rid
-from cloudpss_skills.core.emt_fault_core import clone_model, find_fault_component, apply_fault_parameters, run_emt_and_wait, find_trace, trace_rms
+from cloudpss_skills.core.base import (
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+)
+from cloudpss_skills.core.auth_utils import (
+    setup_auth,
+    DEFAULT_TIMEOUT,
+    fetch_model_by_rid,
+)
+from cloudpss_skills.core.emt_fault_core import (
+    clone_model,
+    find_fault_component,
+    apply_fault_parameters,
+    run_emt_and_wait,
+    find_trace,
+    trace_rms,
+)
+from cloudpss_skills.core.emt_measurement_core import (
+    ensure_voltage_meter,
+)
 from cloudpss_skills.core.registry import register
 
 logger = logging.getLogger(__name__)
@@ -27,6 +46,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class StabilityMargin:
     """稳定裕度数据"""
+
     fault_location: str
     cct: float  # Critical Clearing Time (s)
     margin_percent: float
@@ -82,16 +102,16 @@ class TransientStabilityMarginSkill(SkillBase):
                 "type": "object",
                 "properties": {
                     "token": {"type": "string"},
-                    "token_file": {"type": "string", "default": ".cloudpss_token"}
-                }
+                    "token_file": {"type": "string", "default": ".cloudpss_token"},
+                },
             },
             "model": {
                 "type": "object",
                 "required": ["rid"],
                 "properties": {
                     "rid": {"type": "string"},
-                    "source": {"enum": ["cloud", "local"], "default": "cloud"}
-                }
+                    "source": {"enum": ["cloud", "local"], "default": "cloud"},
+                },
             },
             "fault_scenarios": {
                 "type": "array",
@@ -99,57 +119,60 @@ class TransientStabilityMarginSkill(SkillBase):
                     "type": "object",
                     "properties": {
                         "location": {"type": "string"},
-                        "type": {"enum": ["three_phase", "single_phase", "line_ground"], "default": "three_phase"},
-                        "duration": {"type": "number", "default": 0.1}
+                        "type": {
+                            "enum": ["three_phase", "single_phase", "line_ground"],
+                            "default": "three_phase",
+                        },
+                        "duration": {"type": "number", "default": 0.1},
                     },
-                    "required": ["location"]
-                }
+                    "required": ["location"],
+                },
             },
             "generators": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "需要监控的发电机列表"
+                "description": "需要监控的发电机列表",
             },
-                "analysis": {
-                    "type": "object",
-                    "properties": {
-                        "compute_cct": {"type": "boolean", "default": True},
-                        "compute_margin": {"type": "boolean", "default": True},
-                        "margin_baseline": {"type": "number", "default": 0.5},
-                        "cct_initial_upper_bound": {"type": "number", "default": 1.0},
-                        "cct_search_upper_bound": {"type": "number", "default": 5.0},
-                        "cct_bound_expansion_factor": {"type": "number", "default": 2.0},
-                        "cct_tolerance": {"type": "number", "default": 0.001},
-                        "max_iterations": {"type": "integer", "default": 20},
-                        "emt_timeout": {"type": "number", "default": 300.0},
-                        "stability_trace_name": {"type": "string", "default": "vac:0"},
-                        "postfault_min_ratio": {"type": "number", "default": 0.9},
-                        "late_recovery_min_ratio": {"type": "number", "default": 0.95},
-                        "prefault_window_offset": {
-                            "type": "array",
-                            "items": {"type": "number"},
-                            "default": [-0.08, -0.06],
-                        },
-                        "postfault_window_offset": {
-                            "type": "array",
-                            "items": {"type": "number"},
-                            "default": [0.22, 0.24],
-                        },
-                        "late_recovery_window_offset": {
-                            "type": "array",
-                            "items": {"type": "number"},
-                            "default": [0.46, 0.48],
-                        }
-                    }
+            "analysis": {
+                "type": "object",
+                "properties": {
+                    "compute_cct": {"type": "boolean", "default": True},
+                    "compute_margin": {"type": "boolean", "default": True},
+                    "margin_baseline": {"type": "number", "default": 0.5},
+                    "cct_initial_upper_bound": {"type": "number", "default": 1.0},
+                    "cct_search_upper_bound": {"type": "number", "default": 5.0},
+                    "cct_bound_expansion_factor": {"type": "number", "default": 2.0},
+                    "cct_tolerance": {"type": "number", "default": 0.001},
+                    "max_iterations": {"type": "integer", "default": 20},
+                    "emt_timeout": {"type": "number", "default": 300.0},
+                    "stability_trace_name": {"type": "string", "default": "vac:0"},
+                    "postfault_min_ratio": {"type": "number", "default": 0.9},
+                    "late_recovery_min_ratio": {"type": "number", "default": 0.95},
+                    "prefault_window_offset": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "default": [-0.08, -0.06],
+                    },
+                    "postfault_window_offset": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "default": [0.22, 0.24],
+                    },
+                    "late_recovery_window_offset": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "default": [0.46, 0.48],
+                    },
                 },
+            },
             "output": {
                 "type": "object",
                 "properties": {
                     "format": {"enum": ["json", "console"], "default": "json"},
-                    "path": {"type": "string"}
-                }
-            }
-        }
+                    "path": {"type": "string"},
+                },
+            },
+        },
     }
 
     def validate(self, config: Dict) -> ValidationResult:
@@ -165,7 +188,9 @@ class TransientStabilityMarginSkill(SkillBase):
         if not scenarios:
             warnings.append("建议至少指定一个故障场景")
 
-        return ValidationResult(valid=len(errors) == 0, errors=errors, warnings=warnings)
+        return ValidationResult(
+            valid=len(errors) == 0, errors=errors, warnings=warnings
+        )
 
     def run(self, config: Dict) -> SkillResult:
         """执行暂态稳定裕度评估"""
@@ -184,7 +209,7 @@ class TransientStabilityMarginSkill(SkillBase):
             report = {
                 "model_rid": model_rid,
                 "timestamp": datetime.now().isoformat(),
-                "scenarios": []
+                "scenarios": [],
             }
 
             for i, scenario in enumerate(scenarios, 1):
@@ -195,7 +220,8 @@ class TransientStabilityMarginSkill(SkillBase):
             # 生成总体评估
             report["summary"] = self._generate_summary(report["scenarios"])
             report["summary"]["verified"] = fully_verified = all(
-                scenario.get("cct", {}).get("verified", True) and scenario.get("margin", {}).get("verified", True)
+                scenario.get("cct", {}).get("verified", True)
+                and scenario.get("margin", {}).get("verified", True)
                 for scenario in report["scenarios"]
             )
             if not fully_verified:
@@ -210,7 +236,11 @@ class TransientStabilityMarginSkill(SkillBase):
             logger.info("暂态稳定裕度评估完成")
 
             final_status = SkillStatus.SUCCESS if fully_verified else SkillStatus.FAILED
-            error = None if fully_verified else "当前CCT与稳定裕度仍基于简化稳定性判据，不能作为正式暂态稳定裕度结论"
+            error = (
+                None
+                if fully_verified
+                else "当前CCT与稳定裕度仍基于简化稳定性判据，不能作为正式暂态稳定裕度结论"
+            )
 
             return SkillResult(
                 skill_name=self.name,
@@ -221,7 +251,17 @@ class TransientStabilityMarginSkill(SkillBase):
                 error=error,
             )
 
-        except (KeyError, AttributeError, ConnectionError, RuntimeError, TimeoutError, FileNotFoundError, ValueError, TypeError, Exception) as e:
+        except (
+            KeyError,
+            AttributeError,
+            ConnectionError,
+            RuntimeError,
+            TimeoutError,
+            FileNotFoundError,
+            ValueError,
+            TypeError,
+            Exception,
+        ) as e:
             error_message = str(e)
             if isinstance(e, TimeoutError):
                 error_message = (
@@ -234,7 +274,7 @@ class TransientStabilityMarginSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                error=error_message
+                error=error_message,
             )
 
     def _analyze_scenario(self, model_rid: str, scenario: Dict, config: Dict) -> Dict:
@@ -245,7 +285,7 @@ class TransientStabilityMarginSkill(SkillBase):
         result = {
             "fault_location": location,
             "fault_type": fault_type,
-            "base_duration": scenario.get("duration", 0.1)
+            "base_duration": scenario.get("duration", 0.1),
         }
 
         analysis_config = config.get("analysis", {})
@@ -296,7 +336,9 @@ class TransientStabilityMarginSkill(SkillBase):
         upper_bound_evidence = None
 
         while t_max <= search_upper_bound:
-            stable_at_upper, upper_bound_evidence = self._check_stability(base_model, scenario, t_max, config)
+            stable_at_upper, upper_bound_evidence = self._check_stability(
+                base_model, scenario, t_max, config
+            )
             if not stable_at_upper:
                 upper_unstable = t_max
                 break
@@ -304,7 +346,9 @@ class TransientStabilityMarginSkill(SkillBase):
             bound_iterations += 1
             if t_max >= search_upper_bound:
                 break
-            expanded = t_max * bound_expansion_factor if t_max > 0 else max(tolerance, 0.1)
+            expanded = (
+                t_max * bound_expansion_factor if t_max > 0 else max(tolerance, 0.1)
+            )
             if expanded <= t_max:
                 expanded = t_max + max(tolerance, 0.1)
             t_max = min(search_upper_bound, expanded)
@@ -335,7 +379,9 @@ class TransientStabilityMarginSkill(SkillBase):
             t_mid = (t_min + t_max) / 2
 
             # 仿真检查稳定性
-            stable, evidence = self._check_stability(base_model, scenario, t_mid, config)
+            stable, evidence = self._check_stability(
+                base_model, scenario, t_mid, config
+            )
 
             if stable:
                 t_min = t_mid
@@ -345,7 +391,9 @@ class TransientStabilityMarginSkill(SkillBase):
             iterations += 1
 
         cct = (t_min + t_max) / 2
-        stable_at_cct, evidence = self._check_stability(base_model, scenario, cct, config)
+        stable_at_cct, evidence = self._check_stability(
+            base_model, scenario, cct, config
+        )
 
         return {
             "cct_seconds": round(cct, 4),
@@ -360,7 +408,9 @@ class TransientStabilityMarginSkill(SkillBase):
             "limitation": "当前CCT基于真实电压恢复波形的近似判据，而非正式功角/转速暂稳判据，不能替代完整暂态稳定校核",
         }
 
-    def _check_stability(self, base_model, scenario: Dict, clearing_time: float, config: Dict) -> Tuple[bool, Dict[str, Any]]:
+    def _check_stability(
+        self, base_model, scenario: Dict, clearing_time: float, config: Dict
+    ) -> Tuple[bool, Dict[str, Any]]:
         """
         检查给定切除时间下的稳定性
 
@@ -381,22 +431,43 @@ class TransientStabilityMarginSkill(SkillBase):
             working_model = clone_model(base_model)
             fault = find_fault_component(working_model)
             fault_args = getattr(fault, "args", {}) or {}
-            fs = float((fault_args.get("fs", {}) or {}).get("source", scenario.get("fault_time", 3.0)))
+            fs = float(
+                (fault_args.get("fs", {}) or {}).get(
+                    "source", scenario.get("fault_time", 3.0)
+                )
+            )
             chg = float((fault_args.get("chg", {}) or {}).get("source", 0.01))
             fe = fs + clearing_time
             apply_fault_parameters(working_model, fs, fe, chg)
 
-            job = run_emt_and_wait(working_model, timeout=int(emt_timeout), config=config)
+            trace_name = ensure_voltage_meter(
+                working_model,
+                bus_name=scenario.get("location", "BUS_1"),
+                trace_name=trace_name,
+                sampling_freq=12800,
+                log_func=logger.info,
+            )
+
+            job = run_emt_and_wait(
+                working_model, timeout=int(emt_timeout), config=config
+            )
             result = job.result
             _, trace = find_trace(result, trace_name)
 
-            prefault_rms = trace_rms(trace, fs + prefault_offset[0], fs + prefault_offset[1])
-            postfault_rms = trace_rms(trace, fe + postfault_offset[0], fe + postfault_offset[1])
+            prefault_rms = trace_rms(
+                trace, fs + prefault_offset[0], fs + prefault_offset[1]
+            )
+            postfault_rms = trace_rms(
+                trace, fe + postfault_offset[0], fe + postfault_offset[1]
+            )
             late_rms = trace_rms(trace, fe + late_offset[0], fe + late_offset[1])
 
             postfault_ratio = postfault_rms / prefault_rms if prefault_rms else 0.0
             late_ratio = late_rms / prefault_rms if prefault_rms else 0.0
-            stable = postfault_ratio >= postfault_min_ratio and late_ratio >= late_recovery_min_ratio
+            stable = (
+                postfault_ratio >= postfault_min_ratio
+                and late_ratio >= late_recovery_min_ratio
+            )
 
             return stable, {
                 "trace_name": trace_name,
@@ -412,7 +483,16 @@ class TransientStabilityMarginSkill(SkillBase):
                 "stable": stable,
             }
 
-        except (AttributeError, ConnectionError, RuntimeError, TypeError, TimeoutError) as e:
+        except KeyError as e:
+            logger.error(f"稳定性检查失败: 找不到目标通道 {trace_name}: {e}")
+            return False, {"stable": False, "error": f"找不到目标通道 {trace_name}"}
+        except (
+            AttributeError,
+            ConnectionError,
+            RuntimeError,
+            TypeError,
+            TimeoutError,
+        ) as e:
             logger.warning(f"稳定性检查失败: {e}")
             return False, {"stable": False, "error": str(e)}
 
@@ -487,13 +567,13 @@ class TransientStabilityMarginSkill(SkillBase):
             "cct_statistics": {
                 "min": round(min(ccts), 4) if ccts else None,
                 "max": round(max(ccts), 4) if ccts else None,
-                "avg": round(sum(ccts) / len(ccts), 4) if ccts else None
+                "avg": round(sum(ccts) / len(ccts), 4) if ccts else None,
             },
             "margin_statistics": {
                 "min": round(min(margins), 2) if margins else None,
                 "max": round(max(margins), 2) if margins else None,
-                "avg": round(sum(margins) / len(margins), 2) if margins else None
-            }
+                "avg": round(sum(margins) / len(margins), 2) if margins else None,
+            },
         }
 
         # 最薄弱点
@@ -501,7 +581,7 @@ class TransientStabilityMarginSkill(SkillBase):
             min_margin_idx = margins.index(min(margins))
             summary["weakest_point"] = {
                 "location": scenarios[min_margin_idx]["fault_location"],
-                "margin_percent": round(margins[min_margin_idx], 2)
+                "margin_percent": round(margins[min_margin_idx], 2),
             }
 
         # 总体结论
@@ -516,7 +596,9 @@ class TransientStabilityMarginSkill(SkillBase):
 
         return summary
 
-    def _generate_recommendations(self, scenarios: List[Dict], margins: List[float]) -> List[str]:
+    def _generate_recommendations(
+        self, scenarios: List[Dict], margins: List[float]
+    ) -> List[str]:
         """生成建议"""
         recommendations = []
 
@@ -546,6 +628,7 @@ class TransientStabilityMarginSkill(SkillBase):
             self._output_console(report)
         elif fmt == "json":
             import json
+
             path = output_config.get("path", "./stability_margin_report.json")
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(report, f, indent=2, ensure_ascii=False)
@@ -568,8 +651,10 @@ class TransientStabilityMarginSkill(SkillBase):
                 relation = cct.get("cct_relation", "=")
                 lines.append(f"  CCT: {relation} {cct['cct_seconds']:.4f} s")
             if "margin" in scenario:
-                m = scenario['margin']
-                lines.append(f"  裕度: {m['margin_percent']:.2f}% ({m['stability_status']})")
+                m = scenario["margin"]
+                lines.append(
+                    f"  裕度: {m['margin_percent']:.2f}% ({m['stability_status']})"
+                )
 
         summary = report.get("summary", {})
         lines.append(f"\n总体评估: {summary.get('overall_assessment', '未知')}")

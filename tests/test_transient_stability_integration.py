@@ -61,7 +61,7 @@ class TestTransientStabilitySkillIntegration:
         """Test transient stability on IEEE3 model"""
         config = {
             "skill": "transient_stability",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/chenying/IEEE3"},
             "fault": {
                 "type": "three_phase",

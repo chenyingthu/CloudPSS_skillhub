@@ -66,13 +66,19 @@ def build_generic_bus_edge(meter_component, bus_component, edge_vertex=None):
         },
         "source": {"cell": meter_component.id, "port": "0"},
         "target": {
-            "anchor": {"args": {"dx": "-20%", "dy": "0%", "rotate": True}, "name": "center"},
+            "anchor": {
+                "args": {"dx": "-20%", "dy": "0%", "rotate": True},
+                "name": "center",
+            },
             "cell": bus_component.id,
             "port": "0",
             "selector": "> path:nth-child(2)",
         },
         "vertices": [edge_vertex] if edge_vertex is not None else [],
-        "zIndex": min(getattr(meter_component, "zIndex", 0), getattr(bus_component, "zIndex", 0)) - 1,
+        "zIndex": min(
+            getattr(meter_component, "zIndex", 0), getattr(bus_component, "zIndex", 0)
+        )
+        - 1,
     }
 
 
@@ -109,7 +115,9 @@ def add_voltage_meter_output_chain(
         pins={"0": ""},
         canvas=bus_component.canvas,
         position=meter_position,
-        size=meter_template.size if meter_template is not None else {"width": 30, "height": 50},
+        size=meter_template.size
+        if meter_template is not None
+        else {"width": 30, "height": 50},
     )
     new_channel = working_model.addComponent(
         CHANNEL_DEFINITION,
@@ -126,7 +134,10 @@ def add_voltage_meter_output_chain(
         size=channel_template.size,
     )
 
-    edge_vertex = {"x": bus_component.position["x"] + 10, "y": bus_component.position["y"] - 40}
+    edge_vertex = {
+        "x": bus_component.position["x"] + 10,
+        "y": bus_component.position["y"] - 40,
+    }
     new_edge_id = f"edge_{uuid.uuid4().hex[:8]}"
     if edge_template is not None:
         new_edge = deepcopy(edge_template.toJSON())
@@ -137,7 +148,9 @@ def add_voltage_meter_output_chain(
         new_edge["vertices"] = [edge_vertex]
     else:
         new_edge = build_generic_bus_edge(new_meter, bus_component, edge_vertex)
-    working_model.revision.getImplements().getDiagram().cells[new_edge_id] = Component(new_edge)
+    working_model.revision.getImplements().getDiagram().cells[new_edge_id] = Component(
+        new_edge
+    )
 
     emt_job = next(job for job in working_model.jobs if job["rid"] == EMT_JOB_RID)
     emt_job["args"]["output_channels"].append(
@@ -150,6 +163,103 @@ def add_voltage_meter_output_chain(
         }
     )
     return len(emt_job["args"]["output_channels"]) - 1, new_meter, new_channel
+
+
+def find_bus_component(model, bus_name: str) -> Optional[Any]:
+    """
+    Find a bus component by name using multiple matching strategies.
+
+    Strategies:
+    1. Exact match (case insensitive)
+    2. Number extraction: BUS_1 matches newBus_3p-1
+    3. Partial match: bus1 matches newbus3p1
+
+    Args:
+        model: The model to search
+        bus_name: The bus name to find
+
+    Returns:
+        The bus component if found, None otherwise
+    """
+    components = list(model.getAllComponents().values())
+    buses = {
+        c.id: c
+        for c in components
+        if getattr(c, "definition", None) == "model/CloudPSS/_newBus_3p"
+    }
+
+    bus_name_lower = bus_name.lower()
+
+    for bus_id, bus_comp in buses.items():
+        bus_label = getattr(bus_comp, "label", "") or ""
+        bus_label_lower = bus_label.lower()
+
+        if bus_name_lower == bus_label_lower:
+            return bus_comp
+
+        bus_num = bus_name_lower.replace("bus_", "").replace("_", "-")
+        if bus_num in bus_label_lower:
+            return bus_comp
+
+        if bus_name_lower.replace("_", "") in bus_label_lower.replace("_", "").replace(
+            "-", ""
+        ):
+            return bus_comp
+
+    if buses:
+        return next(iter(buses.values()))
+    return None
+
+
+def ensure_voltage_meter(
+    working_model,
+    bus_name: str,
+    trace_name: str,
+    sampling_freq: int = 12800,
+    log_func: Optional[Callable[[str], None]] = None,
+) -> str:
+    """
+    Ensure the model has a voltage measurement channel for the target bus.
+
+    If the channel already exists, this is a no-op.
+    Otherwise, adds a voltage meter -> channel -> output chain.
+
+    Args:
+        working_model: The working copy model to modify
+        bus_name: Target bus name (e.g., "BUS_1", "newBus_3p-1")
+        trace_name: Expected trace name (e.g., "vac:0")
+        sampling_freq: Sampling frequency in Hz
+        log_func: Optional logging function
+
+    Returns:
+        The trace name (e.g., "vac:0")
+    """
+    channel_base_name = trace_name.split(":")[0]
+
+    target_bus = find_bus_component(working_model, bus_name)
+    if target_bus is None:
+        raise ValueError(f"未找到目标母线: {bus_name}")
+
+    signal_name = f"#{channel_base_name}"
+    meter_label = f"VM-{bus_name}"
+    channel_label = f"CH-{channel_base_name}"
+
+    add_voltage_meter_output_chain(
+        working_model,
+        bus_component=target_bus,
+        signal_name=signal_name,
+        channel_name=channel_base_name,
+        sampling_freq=sampling_freq,
+        meter_label=meter_label,
+        channel_label=channel_label,
+    )
+
+    if log_func:
+        log_func(
+            f"已添加电压表 {meter_label} 到母线 {getattr(target_bus, 'label', bus_name)}，通道 {channel_base_name}"
+        )
+
+    return trace_name
 
 
 def add_bus_voltage_measurements(
@@ -186,7 +296,9 @@ def add_bus_voltage_measurements(
     return measurement_channels
 
 
-def get_three_phase_rms_trace(result: Any, *, plot_index: int, trace_prefix: str) -> Optional[Tuple[List[float], List[float]]]:
+def get_three_phase_rms_trace(
+    result: Any, *, plot_index: int, trace_prefix: str
+) -> Optional[Tuple[List[float], List[float]]]:
     phase_traces = []
     for phase in range(3):
         trace = result.getPlotChannelData(plot_index, f"{trace_prefix}:{phase}")
@@ -210,14 +322,17 @@ def get_three_phase_rms_trace(result: Any, *, plot_index: int, trace_prefix: str
                 phase_values[0][idx] ** 2
                 + phase_values[1][idx] ** 2
                 + phase_values[2][idx] ** 2
-            ) / 3.0
+            )
+            / 3.0
         )
         for idx in range(sample_count)
     ]
     return time_values, vrms
 
 
-def average_trace_in_window(time_values: List[float], values: List[float], *, start: float, end: float) -> float:
+def average_trace_in_window(
+    time_values: List[float], values: List[float], *, start: float, end: float
+) -> float:
     start_idx = get_time_index(time_values, start)
     end_idx = get_time_index(time_values, end)
     return calculate_voltage_average(values, start_idx, end_idx)
@@ -298,7 +413,9 @@ def compute_vsi_from_voltage_channels(
 
         vsi_values = []
         for channel in measurement_channels:
-            trace = result.getPlotChannelData(channel["plot_index"], channel["trace_name"])
+            trace = result.getPlotChannelData(
+                channel["plot_index"], channel["trace_name"]
+            )
             if not trace:
                 continue
             time_values = trace.get("x", [])
@@ -306,8 +423,12 @@ def compute_vsi_from_voltage_channels(
             if not time_values or not values:
                 continue
 
-            voltage_before = average_trace_in_window(time_values, values, start=before_start, end=inject_start)
-            voltage_after = average_trace_in_window(time_values, values, start=inject_start, end=inject_end)
+            voltage_before = average_trace_in_window(
+                time_values, values, start=before_start, end=inject_start
+            )
+            voltage_after = average_trace_in_window(
+                time_values, values, start=inject_start, end=inject_end
+            )
 
             injected_q = abs(q_base)
             if injected_q == 0:

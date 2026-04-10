@@ -160,6 +160,7 @@ skill: transient_stability           # 必需: 技能名称
 auth:                                 # 认证配置
   token: string                       # 直接提供token（不推荐）
   token_file: string                  # token文件路径（默认: .cloudpss_token）
+  server: enum                        # 服务器: public | internal（默认: public）
 
 model:                                # 模型配置（必需）
   rid: string                         # 模型RID或本地路径（必需）
@@ -196,6 +197,7 @@ output:                               # 输出配置
 | `skill` | string | 是 | - | 技能标识，必须为"transient_stability" |
 | `auth.token` | string | 否 | - | 直接提供API token |
 | `auth.token_file` | string | 否 | .cloudpss_token | token文件路径 |
+| `auth.server` | enum | 否 | public | 服务器：public(公共云) / internal(内部服务器) |
 | `model.rid` | string | 是 | - | 模型RID或本地YAML路径 |
 | `model.source` | enum | 否 | cloud | 模型来源：cloud(云端) / local(本地) |
 | `fault.location` | string | 是 | - | 故障位置母线ID |
