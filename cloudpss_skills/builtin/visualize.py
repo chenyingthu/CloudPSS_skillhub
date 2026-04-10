@@ -10,7 +10,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
 from cloudpss_skills.core.utils import fetch_job_with_result
 
 logger = logging.getLogger(__name__)
@@ -50,18 +58,24 @@ class VisualizeSkill(SkillBase):
                     "type": "object",
                     "properties": {
                         "job_id": {"type": "string", "description": "仿真任务ID"},
-                        "data_file": {"type": "string", "description": "本地数据文件路径"},
+                        "data_file": {
+                            "type": "string",
+                            "description": "本地数据文件路径",
+                        },
                         "format": {"enum": ["csv", "json"], "default": "csv"},
                     },
                 },
                 "plot": {
                     "type": "object",
                     "properties": {
-                        "type": {"enum": ["time_series", "bar", "scatter", "comparison"], "default": "time_series"},
+                        "type": {
+                            "enum": ["time_series", "bar", "scatter", "comparison"],
+                            "default": "time_series",
+                        },
                         "channels": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "要绘制的通道"
+                            "description": "要绘制的通道",
                         },
                         "title": {"type": "string"},
                         "xlabel": {"type": "string"},
@@ -133,7 +147,8 @@ class VisualizeSkill(SkillBase):
         """执行可视化"""
         from cloudpss import setToken
         import matplotlib
-        matplotlib.use('Agg')  # 非交互式后端
+
+        matplotlib.use("Agg")  # 非交互式后端
         import matplotlib.pyplot as plt
 
         start_time = datetime.now()
@@ -141,11 +156,9 @@ class VisualizeSkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(
-                timestamp=datetime.now(),
-                level=level,
-                message=message
-            ))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
@@ -158,17 +171,41 @@ class VisualizeSkill(SkillBase):
 
             if source_config.get("job_id"):
                 # 从CloudPSS获取
+                import os
+
                 log("INFO", "从CloudPSS获取数据...")
 
                 auth = config.get("auth", {})
                 token = auth.get("token")
+
+                # 确定服务器和对应的 token 文件
+                server = auth.get("server", "public")
+                base_url = auth.get("base_url") or auth.get("baseUrl")
+
+                # 设置 API URL
+                if base_url:
+                    os.environ["CLOUDPSS_API_URL"] = base_url
+                elif server == "internal":
+                    os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
+                else:
+                    os.environ["CLOUDPSS_API_URL"] = "https://cloudpss.net/"
+
                 if not token:
-                    token_file = auth.get("token_file", ".cloudpss_token")
-                    token_path = Path(token_file)
-                    if token_path.exists():
-                        token = token_path.read_text().strip()
+                    # 根据服务器选择 token 文件
+                    if server == "internal":
+                        token_files = [".cloudpss_token_internal", ".cloudpss_token"]
+                    else:
+                        token_files = [".cloudpss_token"]
+                    for token_file in token_files:
+                        token_path = Path(token_file)
+                        if token_path.exists():
+                            token = token_path.read_text().strip()
+                            break
+
                 if not token:
-                    raise ValueError("未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件")
+                    raise ValueError(
+                        "未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件"
+                    )
 
                 setToken(token)
 
@@ -186,10 +223,15 @@ class VisualizeSkill(SkillBase):
                 # 从第一个plot提取
                 channel_names = result.getPlotChannelNames(0)
                 target_channels = plot_config.get("channels") or channel_names
-                missing_requested_channels = [
-                    channel for channel in target_channels
-                    if channel not in channel_names
-                ] if plot_config.get("channels") else []
+                missing_requested_channels = (
+                    [
+                        channel
+                        for channel in target_channels
+                        if channel not in channel_names
+                    ]
+                    if plot_config.get("channels")
+                    else []
+                )
 
                 data = {"time": []}
                 for channel in target_channels:
@@ -203,7 +245,11 @@ class VisualizeSkill(SkillBase):
                 if plot_config.get("channels") and len(data) == 1:
                     raise RuntimeError(
                         "未找到任何可绘制的目标通道"
-                        + (f": {', '.join(missing_requested_channels)}" if missing_requested_channels else "")
+                        + (
+                            f": {', '.join(missing_requested_channels)}"
+                            if missing_requested_channels
+                            else ""
+                        )
                     )
 
             elif source_config.get("data_file"):
@@ -217,8 +263,9 @@ class VisualizeSkill(SkillBase):
 
                 # 读取CSV
                 import csv
+
                 data = {}
-                with open(filepath, 'r', encoding='utf-8') as f:
+                with open(filepath, "r", encoding="utf-8") as f:
                     reader = csv.DictReader(f)
                     for row in reader:
                         for key, value in row.items():
@@ -237,8 +284,8 @@ class VisualizeSkill(SkillBase):
             # 应用时间范围
             time_range = plot_config.get("time_range", {})
             if time_range.get("start") is not None or time_range.get("end") is not None:
-                start = time_range.get("start", float('-inf'))
-                end = time_range.get("end", float('inf'))
+                start = time_range.get("start", float("-inf"))
+                end = time_range.get("end", float("inf"))
 
                 time_data = data.get("time", [])
                 indices = [i for i, t in enumerate(time_data) if start <= t <= end]
@@ -284,7 +331,9 @@ class VisualizeSkill(SkillBase):
             output_path = Path(output_config.get("path", "./results/"))
             output_path.mkdir(parents=True, exist_ok=True)
 
-            filename = output_config.get("filename", f"waveform_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+            filename = output_config.get(
+                "filename", f"waveform_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            )
             fmt = output_config.get("format", "png")
             if Path(filename).suffix.lower() == f".{fmt}":
                 filepath = output_path / filename
@@ -292,15 +341,17 @@ class VisualizeSkill(SkillBase):
                 filepath = output_path / f"{filename}.{fmt}"
 
             dpi = output_config.get("dpi", 150)
-            plt.savefig(filepath, dpi=dpi, bbox_inches='tight')
+            plt.savefig(filepath, dpi=dpi, bbox_inches="tight")
             plt.close()
 
-            artifacts.append(Artifact(
-                type=fmt,
-                path=str(filepath),
-                size=filepath.stat().st_size,
-                description="波形图表"
-            ))
+            artifacts.append(
+                Artifact(
+                    type=fmt,
+                    path=str(filepath),
+                    size=filepath.stat().st_size,
+                    description="波形图表",
+                )
+            )
 
             log("INFO", f"图表已保存: {filepath}")
 
@@ -319,7 +370,14 @@ class VisualizeSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, RuntimeError, FileNotFoundError, ValueError, TypeError) as e:
+        except (
+            KeyError,
+            AttributeError,
+            RuntimeError,
+            FileNotFoundError,
+            ValueError,
+            TypeError,
+        ) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,

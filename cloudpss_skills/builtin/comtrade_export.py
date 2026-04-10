@@ -16,7 +16,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
 from cloudpss_skills.core.utils import fetch_job_with_result
 
 logger = logging.getLogger(__name__)
@@ -53,17 +61,41 @@ class ComtradeExportSkill(SkillBase):
                     "required": ["job_id"],
                     "properties": {
                         "job_id": {"type": "string", "description": "EMT仿真任务ID"},
-                        "plot_index": {"type": "integer", "default": 0, "description": "要导出的波形分组索引"},
+                        "plot_index": {
+                            "type": "integer",
+                            "default": 0,
+                            "description": "要导出的波形分组索引",
+                        },
                     },
                 },
                 "comtrade": {
                     "type": "object",
                     "properties": {
-                        "station_name": {"type": "string", "default": "CloudPSS", "description": "厂站名称"},
-                        "rec_dev_id": {"type": "string", "default": "EMT", "description": "记录装置标识"},
-                        "rev_year": {"type": "integer", "default": 1999, "description": "COMTRADE版本年号(1991/1999/2013)"},
-                        "frequency": {"type": "number", "default": 50.0, "description": "系统频率(Hz)"},
-                        "time_mult": {"type": "number", "default": 1.0, "description": "时间戳倍率因子"},
+                        "station_name": {
+                            "type": "string",
+                            "default": "CloudPSS",
+                            "description": "厂站名称",
+                        },
+                        "rec_dev_id": {
+                            "type": "string",
+                            "default": "EMT",
+                            "description": "记录装置标识",
+                        },
+                        "rev_year": {
+                            "type": "integer",
+                            "default": 1999,
+                            "description": "COMTRADE版本年号(1991/1999/2013)",
+                        },
+                        "frequency": {
+                            "type": "number",
+                            "default": 50.0,
+                            "description": "系统频率(Hz)",
+                        },
+                        "time_mult": {
+                            "type": "number",
+                            "default": 1.0,
+                            "description": "时间戳倍率因子",
+                        },
                     },
                 },
                 "channels": {
@@ -72,28 +104,39 @@ class ComtradeExportSkill(SkillBase):
                         "selected": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "要导出的通道列表，空数组表示全部"
+                            "description": "要导出的通道列表，空数组表示全部",
                         },
                         "uu_map": {
                             "type": "object",
-                            "description": "通道名称到单位的映射，如{'Bus1_V': 'kV'}"
+                            "description": "通道名称到单位的映射，如{'Bus1_V': 'kV'}",
                         },
                         "ph_map": {
                             "type": "object",
-                            "description": "通道名称到相别的映射，如{'Bus1_V': 'A'}"
+                            "description": "通道名称到相别的映射，如{'Bus1_V': 'A'}",
                         },
                         "ratio_map": {
                             "type": "object",
-                            "description": "通道名称到变比的映射，如{'Bus1_V': [220.0, 1.0]}"
+                            "description": "通道名称到变比的映射，如{'Bus1_V': [220.0, 1.0]}",
                         },
                     },
                 },
                 "output": {
                     "type": "object",
                     "properties": {
-                        "path": {"type": "string", "default": "./results/", "description": "输出目录"},
-                        "filename": {"type": "string", "description": "文件名前缀（默认使用job_id）"},
-                        "file_type": {"enum": ["BINARY", "ASCII"], "default": "BINARY", "description": "数据文件格式"},
+                        "path": {
+                            "type": "string",
+                            "default": "./results/",
+                            "description": "输出目录",
+                        },
+                        "filename": {
+                            "type": "string",
+                            "description": "文件名前缀（默认使用job_id）",
+                        },
+                        "file_type": {
+                            "enum": ["BINARY", "ASCII"],
+                            "default": "BINARY",
+                            "description": "数据文件格式",
+                        },
                     },
                 },
             },
@@ -149,27 +192,47 @@ class ComtradeExportSkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(
-                timestamp=datetime.now(),
-                level=level,
-                message=message
-            ))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
             # 1. 认证
+            import os
+
             log("INFO", "加载认证信息...")
             auth = config.get("auth", {})
             token = auth.get("token")
 
-            if not token:
-                token_file = auth.get("token_file", ".cloudpss_token")
-                token_path = Path(token_file)
-                if token_path.exists():
-                    token = token_path.read_text().strip()
+            # 确定服务器和对应的 token 文件
+            server = auth.get("server", "public")
+            base_url = auth.get("base_url") or auth.get("baseUrl")
+
+            # 设置 API URL
+            if base_url:
+                os.environ["CLOUDPSS_API_URL"] = base_url
+            elif server == "internal":
+                os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
+            else:
+                os.environ["CLOUDPSS_API_URL"] = "https://cloudpss.net/"
 
             if not token:
-                raise ValueError("未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件")
+                # 根据服务器选择 token 文件
+                if server == "internal":
+                    token_files = [".cloudpss_token_internal", ".cloudpss_token"]
+                else:
+                    token_files = [".cloudpss_token"]
+                for token_file in token_files:
+                    token_path = Path(token_file)
+                    if token_path.exists():
+                        token = token_path.read_text().strip()
+                        break
+
+            if not token:
+                raise ValueError(
+                    "未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件"
+                )
 
             setToken(token)
             log("INFO", "认证成功")
@@ -192,7 +255,9 @@ class ComtradeExportSkill(SkillBase):
                 raise RuntimeError("没有波形数据")
 
             if plot_index >= len(plots):
-                raise RuntimeError(f"plot_index {plot_index} 超出范围，共有 {len(plots)} 个波形分组")
+                raise RuntimeError(
+                    f"plot_index {plot_index} 超出范围，共有 {len(plots)} 个波形分组"
+                )
 
             channel_names = result.getPlotChannelNames(plot_index)
             if not channel_names:
@@ -214,7 +279,9 @@ class ComtradeExportSkill(SkillBase):
             # 4. 筛选通道
             selected_channels = channels_config.get("selected", [])
             if selected_channels:
-                channels_to_export = [ch for ch in channel_names if ch in selected_channels]
+                channels_to_export = [
+                    ch for ch in channel_names if ch in selected_channels
+                ]
                 if not channels_to_export:
                     raise RuntimeError(f"指定的通道 {selected_channels} 未在结果中找到")
             else:
@@ -253,7 +320,10 @@ class ComtradeExportSkill(SkillBase):
                 all_times.update(ch_data["time"])
             sorted_times = sorted(all_times)
 
-            log("INFO", f"数据点数: {len(sorted_times)}, 采样率: {(sampling_rate or 1000.0):.2f} Hz")
+            log(
+                "INFO",
+                f"数据点数: {len(sorted_times)}, 采样率: {(sampling_rate or 1000.0):.2f} Hz",
+            )
 
             # 6. 准备输出路径
             output_path = Path(output_config.get("path", "./results/"))
@@ -294,7 +364,9 @@ class ComtradeExportSkill(SkillBase):
 
                     # 计算转换因子A和B
                     # A = (max - min) / 8192, B = (max + min) / 2
-                    a_factor = (max_val - min_val) / 8192.0 if max_val != min_val else 1.0
+                    a_factor = (
+                        (max_val - min_val) / 8192.0 if max_val != min_val else 1.0
+                    )
                     b_factor = (max_val + min_val) / 2.0
                 else:
                     min_val, max_val = -32767, 32767
@@ -320,7 +392,9 @@ class ComtradeExportSkill(SkillBase):
             # 8. 生成时间信息
             start_time_obj = datetime.now()
             start_time_str = start_time_obj.strftime("%d/%m/%Y,%H:%M:%S.%f")[:-3]
-            end_time_obj = start_time_obj + timedelta(seconds=sorted_times[-1] if sorted_times else 0)
+            end_time_obj = start_time_obj + timedelta(
+                seconds=sorted_times[-1] if sorted_times else 0
+            )
             end_time_str = end_time_obj.strftime("%d/%m/%Y,%H:%M:%S.%f")[:-3]
 
             # 9. 生成CFG文件
@@ -343,12 +417,14 @@ class ComtradeExportSkill(SkillBase):
             cfg_path = output_path / f"{filename}.cfg"
             cfg_path.write_text(cfg_content, encoding="gb2312")
 
-            artifacts.append(Artifact(
-                type="cfg",
-                path=str(cfg_path),
-                size=cfg_path.stat().st_size,
-                description="COMTRADE配置文件"
-            ))
+            artifacts.append(
+                Artifact(
+                    type="cfg",
+                    path=str(cfg_path),
+                    size=cfg_path.stat().st_size,
+                    description="COMTRADE配置文件",
+                )
+            )
 
             log("INFO", f"CFG文件已保存: {cfg_path.name}")
 
@@ -376,12 +452,14 @@ class ComtradeExportSkill(SkillBase):
                     time_mult=time_mult,
                 )
 
-            artifacts.append(Artifact(
-                type="dat",
-                path=str(dat_path),
-                size=dat_path.stat().st_size,
-                description=f"COMTRADE数据文件({file_type})"
-            ))
+            artifacts.append(
+                Artifact(
+                    type="dat",
+                    path=str(dat_path),
+                    size=dat_path.stat().st_size,
+                    description=f"COMTRADE数据文件({file_type})",
+                )
+            )
 
             log("INFO", f"DAT文件已保存: {dat_path.name}")
 
@@ -410,7 +488,15 @@ class ComtradeExportSkill(SkillBase):
                 },
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError, TypeError) as e:
+        except (
+            KeyError,
+            AttributeError,
+            ZeroDivisionError,
+            RuntimeError,
+            FileNotFoundError,
+            ValueError,
+            TypeError,
+        ) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
@@ -525,7 +611,7 @@ class ComtradeExportSkill(SkillBase):
 
                 # 写入采样序号和时间戳（32位整数）
                 f.write(struct.pack("<I", sample_num))  # 小端序无符号32位
-                f.write(struct.pack("<i", timestamp))   # 小端序有符号32位
+                f.write(struct.pack("<i", timestamp))  # 小端序有符号32位
 
                 # 写入各通道数据（16位整数）
                 for ch_info in channel_info_list:

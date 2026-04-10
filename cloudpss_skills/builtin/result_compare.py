@@ -10,7 +10,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
 from cloudpss_skills.core.utils import fetch_job_with_result
 
 logger = logging.getLogger(__name__)
@@ -52,7 +60,7 @@ class ResultCompareSkill(SkillBase):
                         },
                         "required": ["job_id"],
                     },
-                    "description": "要对比的仿真任务列表"
+                    "description": "要对比的仿真任务列表",
                 },
                 "compare": {
                     "type": "object",
@@ -60,7 +68,7 @@ class ResultCompareSkill(SkillBase):
                         "channels": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "要对比的通道列表"
+                            "description": "要对比的通道列表",
                         },
                         "metrics": {
                             "type": "array",
@@ -113,7 +121,9 @@ class ResultCompareSkill(SkillBase):
 
         if len(sources) < 2:
             result.add_error("至少需要2个仿真任务进行对比")
-            result.add_error("  示例: [{job_id: 'abc123', label: 'Case A'}, {job_id: 'def456', label: 'Case B'}]")
+            result.add_error(
+                "  示例: [{job_id: 'abc123', label: 'Case A'}, {job_id: 'def456', label: 'Case B'}]"
+            )
 
         for i, source in enumerate(sources):
             job_id = source.get("job_id", "")
@@ -132,25 +142,45 @@ class ResultCompareSkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(
-                timestamp=datetime.now(),
-                level=level,
-                message=message
-            ))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
             # 1. 认证
+            import os
+
             log("INFO", "加载认证信息...")
             auth = config.get("auth", {})
             token = auth.get("token")
 
+            # 确定服务器和对应的 token 文件
+            server = auth.get("server", "public")
+            base_url = auth.get("base_url") or auth.get("baseUrl")
+
+            # 设置 API URL
+            if base_url:
+                os.environ["CLOUDPSS_API_URL"] = base_url
+            elif server == "internal":
+                os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
+            else:
+                os.environ["CLOUDPSS_API_URL"] = "https://cloudpss.net/"
+
             if not token:
-                token_file = auth.get("token_file", ".cloudpss_token")
-                token_path = Path(token_file)
-                if not token_path.exists():
-                    raise FileNotFoundError(f"Token文件不存在: {token_file}")
-                token = token_path.read_text().strip()
+                # 根据服务器选择 token 文件
+                if server == "internal":
+                    token_files = [".cloudpss_token_internal", ".cloudpss_token"]
+                else:
+                    token_files = [".cloudpss_token"]
+                for token_file in token_files:
+                    token_path = Path(token_file)
+                    if token_path.exists():
+                        token = token_path.read_text().strip()
+                        break
+
+            if not token:
+                raise FileNotFoundError(f"Token文件不存在")
 
             setToken(token)
             log("INFO", "认证成功")
@@ -184,7 +214,7 @@ class ResultCompareSkill(SkillBase):
                     channels_data = {}
 
                     # 对于EMT结果（有getPlots方法）
-                    if hasattr(result, 'getPlots'):
+                    if hasattr(result, "getPlots"):
                         plots = list(result.getPlots())
                         log("INFO", f"  -> 波形分组数: {len(plots)}")
 
@@ -196,12 +226,15 @@ class ResultCompareSkill(SkillBase):
                                 if target_channels and channel not in target_channels:
                                     continue
 
-                                channel_data = result.getPlotChannelData(plot_idx, channel)
+                                channel_data = result.getPlotChannelData(
+                                    plot_idx, channel
+                                )
                                 if channel_data:
-                                    y_values = channel_data.get('y', [])
+                                    y_values = channel_data.get("y", [])
 
                                     # 计算指标
                                     import numpy as np
+
                                     channel_metrics = {}
                                     if y_values:
                                         arr = np.array(y_values)
@@ -210,27 +243,41 @@ class ResultCompareSkill(SkillBase):
                                         if "min" in metrics:
                                             channel_metrics["min"] = float(np.min(arr))
                                         if "mean" in metrics:
-                                            channel_metrics["mean"] = float(np.mean(arr))
+                                            channel_metrics["mean"] = float(
+                                                np.mean(arr)
+                                            )
                                         if "rms" in metrics:
-                                            channel_metrics["rms"] = float(np.sqrt(np.mean(arr**2)))
+                                            channel_metrics["rms"] = float(
+                                                np.sqrt(np.mean(arr**2))
+                                            )
 
                                     channels_data[channel] = channel_metrics
                     else:
                         # 对于潮流等其他结果类型，记录日志
-                        log("WARNING", f"  -> 结果类型 {result_type} 暂不支持通道数据提取")
+                        log(
+                            "WARNING",
+                            f"  -> 结果类型 {result_type} 暂不支持通道数据提取",
+                        )
                         # 尝试获取基本数据
                         try:
-                            data_attrs = [attr for attr in dir(result) if not attr.startswith('_') and not callable(getattr(result, attr))]
+                            data_attrs = [
+                                attr
+                                for attr in dir(result)
+                                if not attr.startswith("_")
+                                and not callable(getattr(result, attr))
+                            ]
                             log("INFO", f"  -> 可用属性: {data_attrs[:5]}")
                         except Exception as e:
                             # 异常已捕获，无需额外处理
                             logger.debug(f"忽略预期异常: {e}")
 
-                    all_results.append({
-                        "label": label,
-                        "job_id": job_id,
-                        "channels": channels_data,
-                    })
+                    all_results.append(
+                        {
+                            "label": label,
+                            "job_id": job_id,
+                            "channels": channels_data,
+                        }
+                    )
 
                     log("INFO", f"  -> 获取 {len(channels_data)} 个通道")
 
@@ -295,12 +342,14 @@ class ResultCompareSkill(SkillBase):
             else:
                 self._export_json(filepath, all_results, comparison)
 
-            artifacts.append(Artifact(
-                type=output_format,
-                path=str(filepath),
-                size=filepath.stat().st_size,
-                description="结果对比报告"
-            ))
+            artifacts.append(
+                Artifact(
+                    type=output_format,
+                    path=str(filepath),
+                    size=filepath.stat().st_size,
+                    description="结果对比报告",
+                )
+            )
 
             log("INFO", f"对比报告已保存: {filepath}")
 
@@ -326,7 +375,14 @@ class ResultCompareSkill(SkillBase):
                 },
             )
 
-        except (KeyError, AttributeError, RuntimeError, FileNotFoundError, ValueError, TypeError) as e:
+        except (
+            KeyError,
+            AttributeError,
+            RuntimeError,
+            FileNotFoundError,
+            ValueError,
+            TypeError,
+        ) as e:
             log("ERROR", f"执行失败: {e}")
             return SkillResult(
                 skill_name=self.name,
@@ -339,7 +395,9 @@ class ResultCompareSkill(SkillBase):
                 error=str(e),
             )
 
-    def _export_markdown(self, filepath: Path, results: List[Dict], comparison: Dict, metrics: List[str]):
+    def _export_markdown(
+        self, filepath: Path, results: List[Dict], comparison: Dict, metrics: List[str]
+    ):
         """导出为Markdown格式"""
         lines = [
             "# 仿真结果对比报告",
@@ -376,11 +434,13 @@ class ResultCompareSkill(SkillBase):
                     lines.append(f"| {label} | {value:.6f} |")
 
                 lines.append(f"")
-                lines.append(f"- 范围: [{metric_data['min']:.6f}, {metric_data['max']:.6f}]")
+                lines.append(
+                    f"- 范围: [{metric_data['min']:.6f}, {metric_data['max']:.6f}]"
+                )
                 lines.append(f"- 差值: {metric_data['diff']:.6f}")
                 lines.append("")
 
-        filepath.write_text("\n".join(lines), encoding='utf-8')
+        filepath.write_text("\n".join(lines), encoding="utf-8")
 
     def _export_json(self, filepath: Path, results: List[Dict], comparison: Dict):
         """导出为JSON格式"""
@@ -390,5 +450,5 @@ class ResultCompareSkill(SkillBase):
             "comparison": comparison,
         }
 
-        with open(filepath, 'w', encoding='utf-8') as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)

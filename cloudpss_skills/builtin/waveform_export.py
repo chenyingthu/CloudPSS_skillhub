@@ -10,7 +10,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
 from cloudpss_skills.core.utils import fetch_job_with_result
 
 logger = logging.getLogger(__name__)
@@ -55,12 +63,12 @@ class WaveformExportSkill(SkillBase):
                         "plots": {
                             "type": "array",
                             "items": {"type": "integer"},
-                            "description": "要导出的波形分组索引，空表示全部"
+                            "description": "要导出的波形分组索引，空表示全部",
                         },
                         "channels": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "要导出的通道名称，空表示全部"
+                            "description": "要导出的通道名称，空表示全部",
                         },
                         "time_range": {
                             "type": "object",
@@ -121,28 +129,48 @@ class WaveformExportSkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(
-                timestamp=datetime.now(),
-                level=level,
-                message=message
-            ))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
             # 1. 认证
+            import os
+
             log("INFO", "认证...")
             source_config = config.get("source", {})
             auth = source_config.get("auth", {})
             token = auth.get("token")
 
-            if not token:
-                token_file = auth.get("token_file", ".cloudpss_token")
-                token_path = Path(token_file)
-                if token_path.exists():
-                    token = token_path.read_text().strip()
+            # 确定服务器和对应的 token 文件
+            server = auth.get("server", "public")
+            base_url = auth.get("base_url") or auth.get("baseUrl")
+
+            # 设置 API URL
+            if base_url:
+                os.environ["CLOUDPSS_API_URL"] = base_url
+            elif server == "internal":
+                os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
+            else:
+                os.environ["CLOUDPSS_API_URL"] = "https://cloudpss.net/"
 
             if not token:
-                raise ValueError("未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件")
+                # 根据服务器选择 token 文件
+                if server == "internal":
+                    token_files = [".cloudpss_token_internal", ".cloudpss_token"]
+                else:
+                    token_files = [".cloudpss_token"]
+                for token_file in token_files:
+                    token_path = Path(token_file)
+                    if token_path.exists():
+                        token = token_path.read_text().strip()
+                        break
+
+            if not token:
+                raise ValueError(
+                    "未找到CloudPSS token，请提供auth.token或创建.cloudpss_token文件"
+                )
 
             setToken(token)
 
@@ -172,7 +200,9 @@ class WaveformExportSkill(SkillBase):
             output_path.mkdir(parents=True, exist_ok=True)
 
             output_format = output_config.get("format", "csv")
-            filename = output_config.get("filename") or f"waveforms_{job_id}.{output_format}"
+            filename = (
+                output_config.get("filename") or f"waveforms_{job_id}.{output_format}"
+            )
             filepath = output_path / filename
 
             # 导出数据
@@ -193,14 +223,14 @@ class WaveformExportSkill(SkillBase):
                 plot_data = {
                     "plot_index": plot_idx,
                     "plot_key": plot.get("key"),
-                    "channels": {}
+                    "channels": {},
                 }
 
                 for channel in channel_names:
                     channel_data = result.getPlotChannelData(plot_idx, channel)
                     if channel_data:
-                        x_data = channel_data.get('x', [])
-                        y_data = channel_data.get('y', [])
+                        x_data = channel_data.get("x", [])
+                        y_data = channel_data.get("y", [])
 
                         # 时间范围切片
                         time_range = export_config.get("time_range", {})
@@ -234,14 +264,12 @@ class WaveformExportSkill(SkillBase):
 
             # 写入文件
             if output_format == "json":
-                with open(filepath, 'w', encoding='utf-8') as f:
-                    json.dump({
-                        "job_id": job_id,
-                        "plots": exported_data
-                    }, f, indent=2)
+                with open(filepath, "w", encoding="utf-8") as f:
+                    json.dump({"job_id": job_id, "plots": exported_data}, f, indent=2)
             else:  # csv
                 import csv
-                with open(filepath, 'w', newline='', encoding='utf-8') as f:
+
+                with open(filepath, "w", newline="", encoding="utf-8") as f:
                     for plot_data in exported_data:
                         channels = plot_data["channels"]
                         if not channels:
@@ -260,12 +288,14 @@ class WaveformExportSkill(SkillBase):
                                 row.append(y_data[i] if i < len(y_data) else "")
                             writer.writerow(row)
 
-            artifacts.append(Artifact(
-                type=output_format,
-                path=str(filepath),
-                size=filepath.stat().st_size,
-                description=f"波形数据 ({len(exported_data)}个分组)"
-            ))
+            artifacts.append(
+                Artifact(
+                    type=output_format,
+                    path=str(filepath),
+                    size=filepath.stat().st_size,
+                    description=f"波形数据 ({len(exported_data)}个分组)",
+                )
+            )
 
             log("INFO", f"导出完成: {filepath}")
 
@@ -284,7 +314,15 @@ class WaveformExportSkill(SkillBase):
                 logs=logs,
             )
 
-        except (KeyError, AttributeError, ZeroDivisionError, RuntimeError, FileNotFoundError, ValueError, TypeError) as e:
+        except (
+            KeyError,
+            AttributeError,
+            ZeroDivisionError,
+            RuntimeError,
+            FileNotFoundError,
+            ValueError,
+            TypeError,
+        ) as e:
             log("ERROR", str(e))
             return SkillResult(
                 skill_name=self.name,
