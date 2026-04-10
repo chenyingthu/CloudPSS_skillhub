@@ -17,7 +17,11 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from cloudpss_skills.builtin.loss_analysis import LossAnalysisSkill, BranchLoss, TransformerLoss
+from cloudpss_skills.builtin.loss_analysis import (
+    LossAnalysisSkill,
+    BranchLoss,
+    TransformerLoss,
+)
 from cloudpss_skills.core.base import SkillStatus
 
 
@@ -35,28 +39,20 @@ class TestLossAnalysisSkill:
     @pytest.fixture
     def valid_config(self):
         return {
-            "model": {
-                "rid": "model/holdme/IEEE39"
-            },
-            "auth": {
-                "token_file": ".cloudpss_token"
-            },
+            "model": {"rid": "model/chenying/IEEE39"},
+            "auth": {"server": "internal"},
             "analysis": {
                 "loss_calculation": {
                     "enabled": True,
-                    "components": ["lines", "transformers"]
+                    "components": ["lines", "transformers"],
                 },
-                "loss_sensitivity": {
-                    "enabled": True
-                },
+                "loss_sensitivity": {"enabled": True},
                 "loss_optimization": {
                     "enabled": True,
-                    "method": "reactive_power_optimization"
-                }
+                    "method": "reactive_power_optimization",
+                },
             },
-            "output": {
-                "format": "json"
-            }
+            "output": {"format": "json"},
         }
 
     def test_skill_registration(self, skill):
@@ -130,7 +126,9 @@ class TestLossAnalysisSkill:
         branch_losses = result.data.get("branch_losses", [])
         if branch_losses:
             total_branch_loss = sum(bl.get("p_loss_mw", 0) for bl in branch_losses)
-            print(f"   实际线路损耗总和: {total_branch_loss:.4f} MW ({len(branch_losses)}条支路)")
+            print(
+                f"   实际线路损耗总和: {total_branch_loss:.4f} MW ({len(branch_losses)}条支路)"
+            )
             # 对于IEEE39系统，应该有实际的损耗值
             assert total_branch_loss > 0.001, "应该提取到非零的线路损耗数据"
 
