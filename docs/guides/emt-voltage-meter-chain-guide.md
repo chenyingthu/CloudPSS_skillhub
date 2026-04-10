@@ -230,3 +230,72 @@ V_rms ≈ V_pu * VBase / sqrt(3)
 - `IEEE3 Bus7`
 - `IEEE3 Bus2`
 - `IEEE39 bus37`
+
+## 公共函数 API
+
+`cloudpss_skills/core/emt_measurement_core.py` 提供了两个可复用的公共函数：
+
+### find_bus_component
+
+查找母线组件，支持多种匹配策略。
+
+```python
+from cloudpss_skills.core.emt_measurement_core import find_bus_component
+
+bus = find_bus_component(model, "BUS_1")
+# 或
+bus = find_bus_component(model, "newBus_3p-1")
+```
+
+**匹配策略：**
+1. 精确匹配（大小写不敏感）
+2. 数字提取：`BUS_1` 匹配 `newBus_3p-1`
+3. 部分匹配：`bus1` 匹配 `newbus3p1`
+4. 回退：未找到时返回第一个母线
+
+### ensure_voltage_meter
+
+确保模型有目标母线的电压测量通道。
+
+```python
+from cloudpss_skills.core.emt_measurement_core import ensure_voltage_meter
+
+# 添加电压测量，返回 trace 名称
+trace_name = ensure_voltage_meter(
+    working_model,
+    bus_name="BUS_1",
+    trace_name="vac:0",  # 注意：使用 trace 名称，函数会提取 base name
+    sampling_freq=12800,
+    log_func=logger.info
+)
+```
+
+**参数说明：**
+- `working_model`: 工作副本模型（会被修改）
+- `bus_name`: 目标母线名称（支持多种匹配策略）
+- `trace_name`: 期望的 trace 名称（如 `"vac:0"`）
+- `sampling_freq`: 采样频率（默认 12800 Hz）
+- `log_func`: 可选的日志函数
+
+**返回值：** trace 名称字符串（如 `"vac:0"`）
+
+### 在技能中使用
+
+其他 EMT 分析技能可以使用这些函数自动添加电压测量：
+
+```python
+from cloudpss_skills.core.emt_measurement_core import ensure_voltage_meter
+
+# 在运行 EMT 之前
+trace_name = ensure_voltage_meter(
+    working_model,
+    bus_name=target_bus,
+    trace_name="vac:0",
+    sampling_freq=12800,
+    log_func=logger.info
+)
+
+# 然后运行 EMT 并获取数据
+result = job.result
+trace = result.getPlotChannelData(plot_index, trace_name)
+```
