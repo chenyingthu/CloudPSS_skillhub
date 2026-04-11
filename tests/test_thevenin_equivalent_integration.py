@@ -23,11 +23,16 @@ class TestTheveninEquivalentSkill:
     def base_config(self, live_auth):
         return {
             "skill": "thevenin_equivalent",
-            "auth": {"token": live_auth},
-            "model": {"rid": "model/holdme/IEEE39", "source": "cloud"},
+            "auth": {"token": live_auth, "server": "internal"},
+            "model": {"rid": "model/chenying/IEEE39", "source": "cloud"},
             "pcc": {"bus": "bus8"},
             "equivalent": {"system_base_mva": 100.0, "rating_mva": 50.0},
-            "output": {"format": "json", "path": "./results/", "prefix": "test_thevenin_equivalent", "timestamp": True},
+            "output": {
+                "format": "json",
+                "path": "./results/",
+                "prefix": "test_thevenin_equivalent",
+                "timestamp": True,
+            },
         }
 
     def test_skill_registration(self, skill):
