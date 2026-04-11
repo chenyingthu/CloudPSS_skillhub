@@ -14,14 +14,23 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import setup_auth
 
 logger = logging.getLogger(__name__)
 
 # 扰动类型定义
 STEP_LOAD_CHANGE = "step_load_change"  # 阶跃负荷变化
-GENERATOR_TRIP = "generator_trip"       # 发电机跳闸
-LOAD_SHEDDING = "load_shedding"         # 负荷切除
+GENERATOR_TRIP = "generator_trip"  # 发电机跳闸
+LOAD_SHEDDING = "load_shedding"  # 负荷切除
 
 
 @register
@@ -63,18 +72,41 @@ class FrequencyResponseSkill(SkillBase):
                     "required": ["type"],
                     "properties": {
                         "type": {
-                            "enum": ["step_load_change", "generator_trip", "load_shedding"],
+                            "enum": [
+                                "step_load_change",
+                                "generator_trip",
+                                "load_shedding",
+                            ],
                             "description": "扰动类型",
                         },
-                        "time": {"type": "number", "default": 2.0, "description": "扰动发生时间(s)"},
+                        "time": {
+                            "type": "number",
+                            "default": 2.0,
+                            "description": "扰动发生时间(s)",
+                        },
                         # 阶跃负荷变化参数
-                        "load_target": {"type": "string", "description": "目标负荷组件"},
-                        "load_change_percent": {"type": "number", "description": "负荷变化百分比(%)"},
+                        "load_target": {
+                            "type": "string",
+                            "description": "目标负荷组件",
+                        },
+                        "load_change_percent": {
+                            "type": "number",
+                            "description": "负荷变化百分比(%)",
+                        },
                         # 发电机跳闸参数
-                        "generator_target": {"type": "string", "description": "目标发电机组件"},
+                        "generator_target": {
+                            "type": "string",
+                            "description": "目标发电机组件",
+                        },
                         # 负荷切除参数
-                        "shed_load_target": {"type": "string", "description": "切除负荷目标"},
-                        "shed_percent": {"type": "number", "description": "切除百分比(%)"},
+                        "shed_load_target": {
+                            "type": "string",
+                            "description": "切除负荷目标",
+                        },
+                        "shed_percent": {
+                            "type": "number",
+                            "description": "切除百分比(%)",
+                        },
                     },
                 },
                 "monitoring": {
@@ -95,21 +127,37 @@ class FrequencyResponseSkill(SkillBase):
                 "analysis": {
                     "type": "object",
                     "properties": {
-                        "base_frequency": {"type": "number", "default": 60.0, "description": "基准频率(Hz)"},
+                        "base_frequency": {
+                            "type": "number",
+                            "default": 60.0,
+                            "description": "基准频率(Hz)",
+                        },
                         "analysis_window": {
                             "type": "array",
                             "items": {"type": "number"},
                             "default": [2.0, 10.0],
                             "description": "分析时间窗口[s]",
                         },
-                        "frequency_deadband": {"type": "number", "default": 0.05, "description": "频率死区(Hz)"},
-                        "settling_threshold": {"type": "number", "default": 0.1, "description": "稳定阈值(Hz)"},
+                        "frequency_deadband": {
+                            "type": "number",
+                            "default": 0.05,
+                            "description": "频率死区(Hz)",
+                        },
+                        "settling_threshold": {
+                            "type": "number",
+                            "default": 0.1,
+                            "description": "稳定阈值(Hz)",
+                        },
                     },
                 },
                 "emt": {
                     "type": "object",
                     "properties": {
-                        "duration": {"type": "number", "default": 10.0, "description": "仿真时长(s)"},
+                        "duration": {
+                            "type": "number",
+                            "default": 10.0,
+                            "description": "仿真时长(s)",
+                        },
                     },
                 },
                 "output": {
@@ -156,7 +204,7 @@ class FrequencyResponseSkill(SkillBase):
         }
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
-        from cloudpss import Model, setToken
+        from cloudpss import Model
         import time
 
         start_time = datetime.now()
@@ -164,20 +212,13 @@ class FrequencyResponseSkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(timestamp=datetime.now(), level=level, message=message))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
-            log("INFO", "加载认证...")
-            auth = config.get("auth", {})
-            token = auth.get("token")
-            if not token:
-                token_file = auth.get("token_file", ".cloudpss_token")
-                token_path = Path(token_file)
-                if not token_path.exists():
-                    raise FileNotFoundError(f"Token文件不存在: {token_file}")
-                token = token_path.read_text().strip()
-            setToken(token)
+            setup_auth(config)
             log("INFO", "认证成功")
 
             model_config = config["model"]
@@ -214,8 +255,11 @@ class FrequencyResponseSkill(SkillBase):
 
             # 配置扰动
             self._configure_disturbance(
-                working_model, disturbance_type, disturbance_time,
-                disturbance_config, log
+                working_model,
+                disturbance_type,
+                disturbance_time,
+                disturbance_config,
+                log,
             )
 
             # 运行EMT
@@ -238,8 +282,13 @@ class FrequencyResponseSkill(SkillBase):
             # 分析频率响应
             log("INFO", "分析频率响应...")
             frequency_metrics = self._analyze_frequency_response(
-                result, freq_channels, base_freq, analysis_window,
-                freq_deadband, settling_threshold, log
+                result,
+                freq_channels,
+                base_freq,
+                analysis_window,
+                freq_deadband,
+                settling_threshold,
+                log,
             )
 
             # 汇总结果
@@ -259,32 +308,65 @@ class FrequencyResponseSkill(SkillBase):
 
             # JSON输出
             json_path = output_path / f"{prefix}_{timestamp}.json"
-            with open(json_path, 'w') as f:
+            with open(json_path, "w") as f:
                 json.dump(result_data, f, indent=2)
-            artifacts.append(Artifact(type="json", path=str(json_path), size=json_path.stat().st_size, description="频率响应分析结果"))
+            artifacts.append(
+                Artifact(
+                    type="json",
+                    path=str(json_path),
+                    size=json_path.stat().st_size,
+                    description="频率响应分析结果",
+                )
+            )
 
             # CSV输出
             csv_path = output_path / f"{prefix}_{timestamp}.csv"
-            with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            with open(csv_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                writer.writerow(["channel", "nadir_freq", "nadir_time", "max_rocof", "steady_freq", "settling_time", "frequency_deviation"])
+                writer.writerow(
+                    [
+                        "channel",
+                        "nadir_freq",
+                        "nadir_time",
+                        "max_rocof",
+                        "steady_freq",
+                        "settling_time",
+                        "frequency_deviation",
+                    ]
+                )
                 for ch, metrics in frequency_metrics.items():
-                    writer.writerow([
-                        ch,
-                        f"{metrics.get('nadir_frequency', 0):.4f}",
-                        f"{metrics.get('nadir_time', 0):.4f}",
-                        f"{metrics.get('max_rocof', 0):.4f}",
-                        f"{metrics.get('steady_frequency', 0):.4f}",
-                        f"{metrics.get('settling_time', 0):.4f}",
-                        f"{metrics.get('frequency_deviation', 0):.4f}",
-                    ])
-            artifacts.append(Artifact(type="csv", path=str(csv_path), size=csv_path.stat().st_size, description="频率响应数据"))
+                    writer.writerow(
+                        [
+                            ch,
+                            f"{metrics.get('nadir_frequency', 0):.4f}",
+                            f"{metrics.get('nadir_time', 0):.4f}",
+                            f"{metrics.get('max_rocof', 0):.4f}",
+                            f"{metrics.get('steady_frequency', 0):.4f}",
+                            f"{metrics.get('settling_time', 0):.4f}",
+                            f"{metrics.get('frequency_deviation', 0):.4f}",
+                        ]
+                    )
+            artifacts.append(
+                Artifact(
+                    type="csv",
+                    path=str(csv_path),
+                    size=csv_path.stat().st_size,
+                    description="频率响应数据",
+                )
+            )
 
             # 生成报告
             if output_config.get("generate_report", True):
                 report_path = output_path / f"{prefix}_report_{timestamp}.md"
                 self._generate_report(result_data, report_path)
-                artifacts.append(Artifact(type="markdown", path=str(report_path), size=report_path.stat().st_size, description="频率响应分析报告"))
+                artifacts.append(
+                    Artifact(
+                        type="markdown",
+                        path=str(report_path),
+                        size=report_path.stat().st_size,
+                        description="频率响应分析报告",
+                    )
+                )
 
             return SkillResult(
                 skill_name=self.name,
@@ -309,8 +391,14 @@ class FrequencyResponseSkill(SkillBase):
                 error=str(e),
             )
 
-    def _configure_disturbance(self, model, disturbance_type: str, disturbance_time: float,
-                               config: Dict, log_func):
+    def _configure_disturbance(
+        self,
+        model,
+        disturbance_type: str,
+        disturbance_time: float,
+        config: Dict,
+        log_func,
+    ):
         """配置扰动"""
         from cloudpss import Model
 
@@ -322,7 +410,7 @@ class FrequencyResponseSkill(SkillBase):
             change_percent = config.get("load_change_percent", 10)
 
             for key, comp in components.items():
-                if not hasattr(comp, 'args'):
+                if not hasattr(comp, "args"):
                     continue
 
                 comp_def = getattr(comp, "definition", "")
@@ -344,7 +432,10 @@ class FrequencyResponseSkill(SkillBase):
                             "stepValue": {"source": str(new_p), "ɵexp": ""},
                         }
                         model.updateComponent(key, args=args)
-                        log_func("INFO", f"负荷阶跃: {comp_label}, {base_p}MW -> {new_p}MW @ {disturbance_time}s")
+                        log_func(
+                            "INFO",
+                            f"负荷阶跃: {comp_label}, {base_p}MW -> {new_p}MW @ {disturbance_time}s",
+                        )
                     except (ValueError, TypeError) as e:
                         # 异常已捕获，无需额外处理
                         logger.debug(f"忽略预期异常: {e}")
@@ -360,7 +451,10 @@ class FrequencyResponseSkill(SkillBase):
                             "stepValue": {"source": str(new_p), "ɵexp": ""},
                         }
                         model.updateComponent(key, args=args)
-                        log_func("INFO", f"负荷阶跃: {comp_label}, {base_p}MW -> {new_p}MW @ {disturbance_time}s")
+                        log_func(
+                            "INFO",
+                            f"负荷阶跃: {comp_label}, {base_p}MW -> {new_p}MW @ {disturbance_time}s",
+                        )
                     except (ValueError, TypeError) as e:
                         # 异常已捕获，无需额外处理
                         logger.debug(f"忽略预期异常: {e}")
@@ -370,7 +464,7 @@ class FrequencyResponseSkill(SkillBase):
             gen_target = config.get("generator_target")
 
             for key, comp in components.items():
-                if not hasattr(comp, 'args'):
+                if not hasattr(comp, "args"):
                     continue
 
                 comp_def = getattr(comp, "definition", "")
@@ -395,7 +489,7 @@ class FrequencyResponseSkill(SkillBase):
             shed_percent = config.get("shed_percent", 50)
 
             for key, comp in components.items():
-                if not hasattr(comp, 'args'):
+                if not hasattr(comp, "args"):
                     continue
 
                 comp_def = getattr(comp, "definition", "")
@@ -411,12 +505,22 @@ class FrequencyResponseSkill(SkillBase):
                         "shedPercent": {"source": str(shed_percent), "ɵexp": ""},
                     }
                     model.updateComponent(key, args=args)
-                    log_func("INFO", f"负荷切除: {comp_label}, {shed_percent}% @ {disturbance_time}s")
+                    log_func(
+                        "INFO",
+                        f"负荷切除: {comp_label}, {shed_percent}% @ {disturbance_time}s",
+                    )
                     break
 
-    def _analyze_frequency_response(self, result, freq_channels: List, base_freq: float,
-                                    analysis_window: List, freq_deadband: float,
-                                    settling_threshold: float, log_func) -> Dict:
+    def _analyze_frequency_response(
+        self,
+        result,
+        freq_channels: List,
+        base_freq: float,
+        analysis_window: List,
+        freq_deadband: float,
+        settling_threshold: float,
+        log_func,
+    ) -> Dict:
         """分析频率响应"""
         metrics = {}
 
@@ -448,8 +552,11 @@ class FrequencyResponseSkill(SkillBase):
                         frequencies.append(base_freq)
 
                 # 提取分析窗口内的数据
-                window_data = [(t, f) for t, f in zip(xs, frequencies)
-                              if analysis_window[0] <= t <= analysis_window[1]]
+                window_data = [
+                    (t, f)
+                    for t, f in zip(xs, frequencies)
+                    if analysis_window[0] <= t <= analysis_window[1]
+                ]
 
                 if not window_data:
                     continue
@@ -458,27 +565,42 @@ class FrequencyResponseSkill(SkillBase):
                 freqs = [d[1] for d in window_data]
 
                 # 基准频率（扰动前稳态）
-                pre_disturbance = [f for t, f in zip(xs, frequencies)
-                                  if analysis_window[0] - 0.5 <= t < analysis_window[0]]
-                base_freq_val = sum(pre_disturbance) / len(pre_disturbance) if pre_disturbance else base_freq
+                pre_disturbance = [
+                    f
+                    for t, f in zip(xs, frequencies)
+                    if analysis_window[0] - 0.5 <= t < analysis_window[0]
+                ]
+                base_freq_val = (
+                    sum(pre_disturbance) / len(pre_disturbance)
+                    if pre_disturbance
+                    else base_freq
+                )
 
                 # 频率最低点
                 nadir_freq = min(freqs) if freqs else base_freq_val
                 nadir_idx = freqs.index(nadir_freq) if freqs else 0
-                nadir_time = times[nadir_idx] if nadir_idx < len(times) else analysis_window[0]
+                nadir_time = (
+                    times[nadir_idx] if nadir_idx < len(times) else analysis_window[0]
+                )
 
                 # 最大频率变化率 (Hz/s)
                 max_rocof = 0
                 for i in range(1, len(freqs)):
-                    dt = times[i] - times[i-1]
+                    dt = times[i] - times[i - 1]
                     if dt > 0:
-                        df = abs(freqs[i] - freqs[i-1])
+                        df = abs(freqs[i] - freqs[i - 1])
                         rocof = df / dt
                         max_rocof = max(max_rocof, rocof)
 
                 # 稳态频率（分析窗口最后1秒的平均）
-                steady_data = [f for t, f in window_data if t > analysis_window[1] - 1.0]
-                steady_freq = sum(steady_data) / len(steady_data) if steady_data else base_freq_val
+                steady_data = [
+                    f for t, f in window_data if t > analysis_window[1] - 1.0
+                ]
+                steady_freq = (
+                    sum(steady_data) / len(steady_data)
+                    if steady_data
+                    else base_freq_val
+                )
 
                 # 稳定时间（进入稳态阈值的时间）
                 settling_time = analysis_window[1]
@@ -487,8 +609,10 @@ class FrequencyResponseSkill(SkillBase):
                         if abs(f - steady_freq) < settling_threshold:
                             # 连续5个点在阈值内
                             if i + 5 < len(freqs):
-                                if all(abs(freqs[j] - steady_freq) < settling_threshold
-                                       for j in range(i, i+5)):
+                                if all(
+                                    abs(freqs[j] - steady_freq) < settling_threshold
+                                    for j in range(i, i + 5)
+                                ):
                                     settling_time = t
                                     break
 
@@ -540,32 +664,40 @@ class FrequencyResponseSkill(SkillBase):
                 f"{metrics.get('frequency_deviation', 0):.4f} |"
             )
 
-        lines.extend([
-            "",
-            "## 指标说明",
-            "",
-            "- **最低点**: 扰动后系统频率的最低值",
-            "- **最大变化率**: 频率变化的最大速率 (RoCoF)",
-            "- **稳态频率**: 扰动后系统达到的新稳态频率",
-            "- **稳定时间**: 从扰动开始到频率进入稳态的时间",
-            "- **频率偏差**: 稳态频率与基准频率的差值",
-            "",
-            "## 结论",
-            "",
-        ])
+        lines.extend(
+            [
+                "",
+                "## 指标说明",
+                "",
+                "- **最低点**: 扰动后系统频率的最低值",
+                "- **最大变化率**: 频率变化的最大速率 (RoCoF)",
+                "- **稳态频率**: 扰动后系统达到的新稳态频率",
+                "- **稳定时间**: 从扰动开始到频率进入稳态的时间",
+                "- **频率偏差**: 稳态频率与基准频率的差值",
+                "",
+                "## 结论",
+                "",
+            ]
+        )
 
         # 汇总信息
         if data.get("frequency_metrics"):
-            all_nadir = [m.get("nadir_frequency", data['base_frequency']) for m in data["frequency_metrics"].values()]
-            min_nadir = min(all_nadir) if all_nadir else data['base_frequency']
-            max_dev = max(abs(m.get("frequency_deviation", 0)) for m in data["frequency_metrics"].values())
+            all_nadir = [
+                m.get("nadir_frequency", data["base_frequency"])
+                for m in data["frequency_metrics"].values()
+            ]
+            min_nadir = min(all_nadir) if all_nadir else data["base_frequency"]
+            max_dev = max(
+                abs(m.get("frequency_deviation", 0))
+                for m in data["frequency_metrics"].values()
+            )
 
             lines.append(f"系统频率最低点为 **{min_nadir:.4f} Hz**")
             lines.append(f"")
             lines.append(f"频率最大偏差为 **{max_dev:.4f} Hz**")
 
             # 评估
-            if min_nadir < data['base_frequency'] - 0.5:
+            if min_nadir < data["base_frequency"] - 0.5:
                 lines.append(f"")
                 lines.append("⚠️ 频率跌落较大，可能需要评估低频减载策略。")
             elif max_dev < 0.1:

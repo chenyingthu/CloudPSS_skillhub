@@ -32,7 +32,7 @@ from cloudpss_skills.core import (
     ValidationResult,
     register,
 )
-from cloudpss_skills.core.auth_utils import fetch_model_by_rid, run_emt
+from cloudpss_skills.core.auth_utils import fetch_model_by_rid, run_emt, setup_auth
 from cloudpss_skills.core.utils import (
     fetch_job_with_result,
     get_bus_components,
@@ -281,44 +281,14 @@ class ReactiveCompensationDesignSkill(SkillBase):
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
         """执行无功补偿设计"""
-        import os
-        from cloudpss import setToken
 
         start_time = datetime.now()
         logs = []
         artifacts = []
 
         try:
-            auth = config.get("auth", {})
-            token = auth.get("token")
-
-            # 确定服务器和对应的 token 文件
-            server = auth.get("server", "public")
-            base_url = auth.get("base_url") or auth.get("baseUrl")
-
-            # 设置 API URL
-            if base_url:
-                os.environ["CLOUDPSS_API_URL"] = base_url
-            elif server == "internal":
-                os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
-            else:
-                os.environ["CLOUDPSS_API_URL"] = "https://cloudpss.net/"
-
-            if not token:
-                # 根据服务器选择 token 文件
-                if server == "internal":
-                    token_files = [".cloudpss_token_internal", ".cloudpss_token"]
-                else:
-                    token_files = [".cloudpss_token"]
-                for token_file in token_files:
-                    token_path = Path(token_file)
-                    if token_path.exists():
-                        token = token_path.read_text().strip()
-                        break
-
-            if not token:
-                raise FileNotFoundError("未找到CloudPSS token")
-            setToken(token)
+            setup_auth(config)
+            logger.info("认证成功")
 
             # 1. 获取模型
             model_rid = config["model"]["rid"]

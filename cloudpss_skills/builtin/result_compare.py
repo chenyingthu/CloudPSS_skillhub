@@ -19,6 +19,7 @@ from cloudpss_skills.core import (
     ValidationResult,
     register,
 )
+from cloudpss_skills.core.auth_utils import setup_auth
 from cloudpss_skills.core.utils import fetch_job_with_result
 
 logger = logging.getLogger(__name__)
@@ -135,7 +136,6 @@ class ResultCompareSkill(SkillBase):
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
         """执行结果对比"""
-        from cloudpss import setToken
 
         start_time = datetime.now()
         logs = []
@@ -149,40 +149,7 @@ class ResultCompareSkill(SkillBase):
 
         try:
             # 1. 认证
-            import os
-
-            log("INFO", "加载认证信息...")
-            auth = config.get("auth", {})
-            token = auth.get("token")
-
-            # 确定服务器和对应的 token 文件
-            server = auth.get("server", "public")
-            base_url = auth.get("base_url") or auth.get("baseUrl")
-
-            # 设置 API URL
-            if base_url:
-                os.environ["CLOUDPSS_API_URL"] = base_url
-            elif server == "internal":
-                os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
-            else:
-                os.environ["CLOUDPSS_API_URL"] = "https://cloudpss.net/"
-
-            if not token:
-                # 根据服务器选择 token 文件
-                if server == "internal":
-                    token_files = [".cloudpss_token_internal", ".cloudpss_token"]
-                else:
-                    token_files = [".cloudpss_token"]
-                for token_file in token_files:
-                    token_path = Path(token_file)
-                    if token_path.exists():
-                        token = token_path.read_text().strip()
-                        break
-
-            if not token:
-                raise FileNotFoundError(f"Token文件不存在")
-
-            setToken(token)
+            setup_auth(config)
             log("INFO", "认证成功")
 
             # 2. 获取所有任务结果

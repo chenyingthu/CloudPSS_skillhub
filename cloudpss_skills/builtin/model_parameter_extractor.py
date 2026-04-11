@@ -27,7 +27,16 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Set
 from dataclasses import dataclass, field
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import setup_auth
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +57,7 @@ COMPONENT_DEFINITIONS = {
 @dataclass
 class ComponentParameter:
     """元件参数"""
+
     comp_key: str
     comp_type: str
     comp_rid: str
@@ -59,6 +69,7 @@ class ComponentParameter:
 @dataclass
 class ParameterGroup:
     """参数分组"""
+
     group_name: str
     component_type: str
     parameters: List[ComponentParameter]
@@ -107,9 +118,21 @@ class ModelParameterExtractorSkill(SkillBase):
                             "items": {"enum": list(COMPONENT_DEFINITIONS.keys())},
                             "description": "要提取的元件类型",
                         },
-                        "include_topology": {"type": "boolean", "default": True, "description": "提取拓扑连接关系"},
-                        "include_all_args": {"type": "boolean", "default": False, "description": "提取所有参数（包括空值）"},
-                        "filter_empty": {"type": "boolean", "default": True, "description": "过滤空值参数"},
+                        "include_topology": {
+                            "type": "boolean",
+                            "default": True,
+                            "description": "提取拓扑连接关系",
+                        },
+                        "include_all_args": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": "提取所有参数（包括空值）",
+                        },
+                        "filter_empty": {
+                            "type": "boolean",
+                            "default": True,
+                            "description": "过滤空值参数",
+                        },
                     },
                 },
                 "output": {
@@ -118,7 +141,11 @@ class ModelParameterExtractorSkill(SkillBase):
                         "format": {"enum": ["json", "csv", "both"], "default": "both"},
                         "path": {"type": "string", "default": "./results/"},
                         "prefix": {"type": "string", "default": "model_params"},
-                        "group_by_type": {"type": "boolean", "default": True, "description": "按元件类型分组导出"},
+                        "group_by_type": {
+                            "type": "boolean",
+                            "default": True,
+                            "description": "按元件类型分组导出",
+                        },
                     },
                 },
             },
@@ -172,7 +199,7 @@ class ModelParameterExtractorSkill(SkillBase):
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
         """执行参数提取"""
-        from cloudpss import Model, setToken
+        from cloudpss import Model
 
         start_time = datetime.now()
         logs = []
@@ -180,26 +207,14 @@ class ModelParameterExtractorSkill(SkillBase):
         extracted_params = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(
-                timestamp=datetime.now(),
-                level=level,
-                message=message
-            ))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
             # 1. 认证
-            log("INFO", "加载认证信息...")
-            auth = config.get("auth", {})
-            token = auth.get("token")
-
-            if not token:
-                token_file = auth.get("token_file", ".cloudpss_token")
-                token_path = Path(token_file)
-                if token_path.exists():
-                    token = token_path.read_text().strip()
-
-            setToken(token)
+            setup_auth(config)
             log("INFO", "认证成功")
 
             # 2. 加载模型
@@ -218,7 +233,9 @@ class ModelParameterExtractorSkill(SkillBase):
 
             # 3. 获取提取配置
             extraction_config = config.get("extraction", {})
-            component_types = extraction_config.get("component_types", list(COMPONENT_DEFINITIONS.keys()))
+            component_types = extraction_config.get(
+                "component_types", list(COMPONENT_DEFINITIONS.keys())
+            )
             include_topology = extraction_config.get("include_topology", True)
             include_all_args = extraction_config.get("include_all_args", False)
             filter_empty = extraction_config.get("filter_empty", True)
@@ -231,7 +248,9 @@ class ModelParameterExtractorSkill(SkillBase):
             if include_topology:
                 log("INFO", "提取模型拓扑...")
                 try:
-                    topo = model.fetchTopology(implementType="emtp", maximumDepth=0).toJSON()
+                    topo = model.fetchTopology(
+                        implementType="emtp", maximumDepth=0
+                    ).toJSON()
                     topology_data = topo
                     log("INFO", f"  -> 拓扑组件数: {len(topo.get('components', {}))}")
                 except (KeyError, AttributeError) as e:
@@ -255,16 +274,22 @@ class ModelParameterExtractorSkill(SkillBase):
 
                     for comp_key, comp in components.items():
                         # 获取参数
-                        args = dict(comp.args) if hasattr(comp, 'args') and comp.args else {}
+                        args = (
+                            dict(comp.args)
+                            if hasattr(comp, "args") and comp.args
+                            else {}
+                        )
 
                         # 处理pins - 可能是dict、list或其他类型
                         pins = {}
-                        if hasattr(comp, 'pins') and comp.pins:
+                        if hasattr(comp, "pins") and comp.pins:
                             try:
                                 if isinstance(comp.pins, dict):
                                     pins = dict(comp.pins)
                                 elif isinstance(comp.pins, (list, tuple)):
-                                    pins = {f"pin_{i}": v for i, v in enumerate(comp.pins)}
+                                    pins = {
+                                        f"pin_{i}": v for i, v in enumerate(comp.pins)
+                                    }
                                 else:
                                     pins = {"pins": str(comp.pins)}
                             except Exception as e:
@@ -274,15 +299,19 @@ class ModelParameterExtractorSkill(SkillBase):
 
                         # 过滤空值
                         if filter_empty and not include_all_args:
-                            args = {k: v for k, v in args.items() if v not in [None, "", [], {}]}
+                            args = {
+                                k: v
+                                for k, v in args.items()
+                                if v not in [None, "", [], {}]
+                            }
 
                         comp_param = ComponentParameter(
                             comp_key=comp_key,
                             comp_type=comp_type,
                             comp_rid=comp_rid,
-                            label=getattr(comp, 'label', comp_key),
+                            label=getattr(comp, "label", comp_key),
                             args=args,
-                            pins=pins
+                            pins=pins,
                         )
                         comp_list.append(comp_param)
                         all_components.append(comp_param)
@@ -291,27 +320,39 @@ class ModelParameterExtractorSkill(SkillBase):
                         component_groups[comp_type] = comp_list
                         log("INFO", f"     找到 {len(comp_list)} 个{comp_type}")
 
-                except (AttributeError, KeyError, RuntimeError, ValueError, TypeError, ConnectionError, Exception) as e:
+                except (
+                    AttributeError,
+                    KeyError,
+                    RuntimeError,
+                    ValueError,
+                    TypeError,
+                    ConnectionError,
+                    Exception,
+                ) as e:
                     log("WARN", f"     提取失败: {e}")
 
             # 6. 提取拓扑连接信息
             connections = []
             if include_topology and topology_data:
                 log("INFO", "提取连接关系...")
-                components_data = topology_data.get('components', {})
+                components_data = topology_data.get("components", {})
                 for comp_key, comp_data in components_data.items():
-                    pins = comp_data.get('pins', {})
+                    pins = comp_data.get("pins", {})
                     for pin_name, pin_id in pins.items():
                         if pin_id:
-                            connections.append({
-                                "source_component": comp_key,
-                                "source_pin": pin_name,
-                                "pin_id": pin_id,
-                            })
+                            connections.append(
+                                {
+                                    "source_component": comp_key,
+                                    "source_pin": pin_name,
+                                    "pin_id": pin_id,
+                                }
+                            )
 
             # 7. 生成报告
             log("INFO", "生成参数报告...")
-            report = self._generate_report(all_components, component_groups, connections, model)
+            report = self._generate_report(
+                all_components, component_groups, connections, model
+            )
 
             # 8. 导出结果
             output_path = Path(output_config.get("path", "./results/"))
@@ -322,13 +363,17 @@ class ModelParameterExtractorSkill(SkillBase):
             # 导出JSON
             if output_format in ["json", "both"]:
                 json_file = output_path / f"{prefix}.json"
-                json_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
-                artifacts.append(Artifact(
-                    type="json",
-                    path=str(json_file),
-                    size=json_file.stat().st_size,
-                    description="完整参数报告(JSON)"
-                ))
+                json_file.write_text(
+                    json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
+                )
+                artifacts.append(
+                    Artifact(
+                        type="json",
+                        path=str(json_file),
+                        size=json_file.stat().st_size,
+                        description="完整参数报告(JSON)",
+                    )
+                )
                 log("INFO", f"  -> JSON报告: {json_file}")
 
             # 导出CSV
@@ -338,23 +383,27 @@ class ModelParameterExtractorSkill(SkillBase):
                     for comp_type, comp_list in component_groups.items():
                         csv_file = output_path / f"{prefix}_{comp_type}.csv"
                         self._export_csv_grouped(comp_list, csv_file)
-                        artifacts.append(Artifact(
-                            type="csv",
-                            path=str(csv_file),
-                            size=csv_file.stat().st_size,
-                            description=f"{comp_type}参数(CSV)"
-                        ))
+                        artifacts.append(
+                            Artifact(
+                                type="csv",
+                                path=str(csv_file),
+                                size=csv_file.stat().st_size,
+                                description=f"{comp_type}参数(CSV)",
+                            )
+                        )
                         log("INFO", f"  -> {comp_type} CSV: {csv_file}")
                 else:
                     # 统一导出
                     csv_file = output_path / f"{prefix}_all.csv"
                     self._export_csv_all(all_components, csv_file)
-                    artifacts.append(Artifact(
-                        type="csv",
-                        path=str(csv_file),
-                        size=csv_file.stat().st_size,
-                        description="参数汇总(CSV)"
-                    ))
+                    artifacts.append(
+                        Artifact(
+                            type="csv",
+                            path=str(csv_file),
+                            size=csv_file.stat().st_size,
+                            description="参数汇总(CSV)",
+                        )
+                    )
                     log("INFO", f"  -> 汇总 CSV: {csv_file}")
 
             # 统计
@@ -381,9 +430,19 @@ class ModelParameterExtractorSkill(SkillBase):
                 logs=logs,
             )
 
-        except (AttributeError, KeyError, RuntimeError, ValueError, TypeError, FileNotFoundError, ConnectionError, Exception) as e:
+        except (
+            AttributeError,
+            KeyError,
+            RuntimeError,
+            ValueError,
+            TypeError,
+            FileNotFoundError,
+            ConnectionError,
+            Exception,
+        ) as e:
             log("ERROR", f"执行失败: {e}")
             import traceback
+
             log("DEBUG", traceback.format_exc())
             return SkillResult(
                 skill_name=self.name,
@@ -396,10 +455,13 @@ class ModelParameterExtractorSkill(SkillBase):
                 error=str(e),
             )
 
-    def _generate_report(self, all_components: List[ComponentParameter],
-                         component_groups: Dict[str, List[ComponentParameter]],
-                         connections: List[Dict],
-                         model: Any) -> Dict:
+    def _generate_report(
+        self,
+        all_components: List[ComponentParameter],
+        component_groups: Dict[str, List[ComponentParameter]],
+        connections: List[Dict],
+        model: Any,
+    ) -> Dict:
         """生成完整报告"""
         # 统计各类型参数
         type_summaries = {}
@@ -418,13 +480,15 @@ class ModelParameterExtractorSkill(SkillBase):
         # 构建详细参数列表
         components_detail = []
         for comp in all_components:
-            components_detail.append({
-                "key": comp.comp_key,
-                "type": comp.comp_type,
-                "label": comp.label,
-                "args": comp.args,
-                "pins": comp.pins,
-            })
+            components_detail.append(
+                {
+                    "key": comp.comp_key,
+                    "type": comp.comp_type,
+                    "label": comp.label,
+                    "args": comp.args,
+                    "pins": comp.pins,
+                }
+            )
 
         return {
             "summary": {
@@ -451,17 +515,17 @@ class ModelParameterExtractorSkill(SkillBase):
         all_fields = sorted(all_fields)
 
         # 写入CSV
-        with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
+        with open(filepath, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.writer(f)
             # 表头
-            header = ['component_key', 'label'] + all_fields
+            header = ["component_key", "label"] + all_fields
             writer.writerow(header)
 
             # 数据行
             for comp in components:
                 row = [comp.comp_key, comp.label]
                 for field in all_fields:
-                    row.append(comp.args.get(field, ''))
+                    row.append(comp.args.get(field, ""))
                 writer.writerow(row)
 
     def _export_csv_all(self, components: List[ComponentParameter], filepath: Path):
@@ -476,11 +540,15 @@ class ModelParameterExtractorSkill(SkillBase):
                 by_type[comp.comp_type] = []
             by_type[comp.comp_type].append(comp)
 
-        with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
+        with open(filepath, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.writer(f)
-            writer.writerow(['component_type', 'component_key', 'label', 'parameter', 'value'])
+            writer.writerow(
+                ["component_type", "component_key", "label", "parameter", "value"]
+            )
 
             for comp_type, comp_list in by_type.items():
                 for comp in comp_list:
                     for key, value in comp.args.items():
-                        writer.writerow([comp_type, comp.comp_key, comp.label, key, value])
+                        writer.writerow(
+                            [comp_type, comp.comp_key, comp.label, key, value]
+                        )

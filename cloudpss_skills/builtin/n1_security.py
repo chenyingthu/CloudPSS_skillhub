@@ -11,7 +11,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import setup_auth
 
 logger = logging.getLogger(__name__)
 
@@ -56,12 +65,20 @@ class N1SecuritySkill(SkillBase):
                         "branches": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "要检查的支路列表，空表示全部"
+                            "description": "要检查的支路列表，空表示全部",
                         },
                         "check_voltage": {"type": "boolean", "default": True},
                         "check_thermal": {"type": "boolean", "default": True},
-                        "voltage_threshold": {"type": "number", "default": 0.05, "description": "电压越限阈值(标幺值)"},
-                        "thermal_threshold": {"type": "number", "default": 1.0, "description": "热稳定阈值(标幺值)"},
+                        "voltage_threshold": {
+                            "type": "number",
+                            "default": 0.05,
+                            "description": "电压越限阈值(标幺值)",
+                        },
+                        "thermal_threshold": {
+                            "type": "number",
+                            "default": 1.0,
+                            "description": "热稳定阈值(标幺值)",
+                        },
                     },
                 },
                 "output": {
@@ -105,27 +122,14 @@ class N1SecuritySkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(
-                timestamp=datetime.now(),
-                level=level,
-                message=message
-            ))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
             # 1. 认证
-            log("INFO", "加载认证信息...")
-            auth = config.get("auth", {})
-            token = auth.get("token")
-
-            if not token:
-                token_file = auth.get("token_file", ".cloudpss_token")
-                token_path = Path(token_file)
-                if not token_path.exists():
-                    raise FileNotFoundError(f"Token文件不存在: {token_file}")
-                token = token_path.read_text().strip()
-
-            setToken(token)
+            setup_auth(config)
             log("INFO", "认证成功")
 
             # 2. 获取模型
@@ -158,11 +162,13 @@ class N1SecuritySkill(SkillBase):
             for comp_id, comp in components.items():
                 definition = getattr(comp, "definition", "")
                 if any(bt in definition for bt in branch_types):
-                    branches.append({
-                        "id": comp_id,
-                        "name": getattr(comp, "name", comp_id),
-                        "type": definition.split("/")[-1],
-                    })
+                    branches.append(
+                        {
+                            "id": comp_id,
+                            "name": getattr(comp, "name", comp_id),
+                            "type": definition.split("/")[-1],
+                        }
+                    )
 
             log("INFO", f"发现 {len(branches)} 条支路")
 
@@ -172,7 +178,11 @@ class N1SecuritySkill(SkillBase):
 
             if target_branches:
                 # 只检查指定的支路
-                branches = [b for b in branches if b["name"] in target_branches or b["id"] in target_branches]
+                branches = [
+                    b
+                    for b in branches
+                    if b["name"] in target_branches or b["id"] in target_branches
+                ]
                 log("INFO", f"将检查 {len(branches)} 条指定支路")
 
             results = []
@@ -180,7 +190,7 @@ class N1SecuritySkill(SkillBase):
             failed = 0
 
             for i, branch in enumerate(branches):
-                log("INFO", f"[{i+1}/{len(branches)}] 停运支路: {branch['name']}")
+                log("INFO", f"[{i + 1}/{len(branches)}] 停运支路: {branch['name']}")
 
                 # 加载原始模型（每次重新加载以确保干净状态）
                 if model_config.get("source") == "local":
@@ -202,6 +212,7 @@ class N1SecuritySkill(SkillBase):
 
                     # 等待仿真完成
                     import time
+
                     max_wait = 120
                     waited = 0
                     status = 0
@@ -255,7 +266,10 @@ class N1SecuritySkill(SkillBase):
             # 5. 汇总结果
             log("INFO", "=" * 50)
             log("INFO", f"N-1校核完成: 通过 {passed}, 失败 {failed}")
-            log("INFO", f"通过率: {passed/len(branches)*100:.1f}%" if branches else "N/A")
+            log(
+                "INFO",
+                f"通过率: {passed / len(branches) * 100:.1f}%" if branches else "N/A",
+            )
 
             # 6. 导出结果
             output_config = config.get("output", {})
@@ -280,21 +294,23 @@ class N1SecuritySkill(SkillBase):
                     "total_branches": len(branches),
                     "passed": passed,
                     "failed": failed,
-                    "pass_rate": passed/len(branches) if branches else 0,
+                    "pass_rate": passed / len(branches) if branches else 0,
                 },
                 "results": results,
                 "failed_branches": [r for r in results if r["status"] != "passed"],
             }
 
-            with open(filepath, 'w', encoding='utf-8') as f:
+            with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(result_data, f, indent=2, ensure_ascii=False)
 
-            artifacts.append(Artifact(
-                type="json",
-                path=str(filepath),
-                size=filepath.stat().st_size,
-                description="N-1安全校核报告"
-            ))
+            artifacts.append(
+                Artifact(
+                    type="json",
+                    path=str(filepath),
+                    size=filepath.stat().st_size,
+                    description="N-1安全校核报告",
+                )
+            )
 
             log("INFO", f"结果已保存: {filepath}")
 

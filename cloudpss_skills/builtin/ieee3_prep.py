@@ -9,7 +9,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import setup_auth
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +68,10 @@ class IEEE3PrepSkill(SkillBase):
                     "properties": {
                         "sampling_freq": {"type": "integer", "default": 2000},
                         "path": {"type": "string", "default": "./"},
-                        "filename": {"type": "string", "default": "ieee3_prepared.yaml"},
+                        "filename": {
+                            "type": "string",
+                            "default": "ieee3_prepared.yaml",
+                        },
                     },
                 },
             },
@@ -90,25 +102,15 @@ class IEEE3PrepSkill(SkillBase):
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(
-                timestamp=datetime.now(),
-                level=level,
-                message=message
-            ))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
             # 1. 认证
-            log("INFO", "加载认证...")
-            auth = config.get("auth", {})
-            token = auth.get("token")
-
-            if not token:
-                token_file = auth.get("token_file", ".cloudpss_token")
-                token_path = Path(token_file)
-                if token_path.exists():
-                    token = token_path.read_text().strip()
-                    setToken(token)
+            setup_auth(config)
+            log("INFO", "认证成功")
 
             # 2. 获取模型
             log("INFO", "获取IEEE3模型...")
@@ -139,7 +141,10 @@ class IEEE3PrepSkill(SkillBase):
                 components = model.getAllComponents()
                 fault = None
                 for comp in components.values():
-                    if getattr(comp, "definition", "") == "model/CloudPSS/_newFaultResistor_3p":
+                    if (
+                        getattr(comp, "definition", "")
+                        == "model/CloudPSS/_newFaultResistor_3p"
+                    ):
                         fault = comp
                         break
 
@@ -164,12 +169,14 @@ class IEEE3PrepSkill(SkillBase):
             log("INFO", f"保存到: {filepath}")
             Model.dump(model, str(filepath), compress=None)
 
-            artifacts.append(Artifact(
-                type="yaml",
-                path=str(filepath),
-                size=filepath.stat().st_size,
-                description="准备好的IEEE3模型"
-            ))
+            artifacts.append(
+                Artifact(
+                    type="yaml",
+                    path=str(filepath),
+                    size=filepath.stat().st_size,
+                    description="准备好的IEEE3模型",
+                )
+            )
 
             return SkillResult(
                 skill_name=self.name,

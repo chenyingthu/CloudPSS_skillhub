@@ -10,7 +10,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from cloudpss_skills.core import Artifact, LogEntry, SkillBase, SkillResult, SkillStatus, ValidationResult, register
+from cloudpss_skills.core import (
+    Artifact,
+    LogEntry,
+    SkillBase,
+    SkillResult,
+    SkillStatus,
+    ValidationResult,
+    register,
+)
+from cloudpss_skills.core.auth_utils import setup_auth
 
 logger = logging.getLogger(__name__)
 
@@ -52,10 +61,26 @@ class TopologyCheckSkill(SkillBase):
                 "checks": {
                     "type": "object",
                     "properties": {
-                        "islands": {"type": "boolean", "default": True, "description": "检查孤岛"},
-                        "dangling": {"type": "boolean", "default": True, "description": "检查悬空元件"},
-                        "parameter": {"type": "boolean", "default": True, "description": "检查参数完整性"},
-                        "emt_ready": {"type": "boolean", "default": False, "description": "检查EMT仿真准备"},
+                        "islands": {
+                            "type": "boolean",
+                            "default": True,
+                            "description": "检查孤岛",
+                        },
+                        "dangling": {
+                            "type": "boolean",
+                            "default": True,
+                            "description": "检查悬空元件",
+                        },
+                        "parameter": {
+                            "type": "boolean",
+                            "default": True,
+                            "description": "检查参数完整性",
+                        },
+                        "emt_ready": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": "检查EMT仿真准备",
+                        },
                     },
                 },
                 "output": {
@@ -91,34 +116,21 @@ class TopologyCheckSkill(SkillBase):
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
         """执行拓扑检查"""
-        from cloudpss import Model, setToken
+        from cloudpss import Model
 
         start_time = datetime.now()
         logs = []
         artifacts = []
 
         def log(level: str, message: str):
-            logs.append(LogEntry(
-                timestamp=datetime.now(),
-                level=level,
-                message=message
-            ))
+            logs.append(
+                LogEntry(timestamp=datetime.now(), level=level, message=message)
+            )
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
             # 1. 认证
-            log("INFO", "加载认证信息...")
-            auth = config.get("auth", {})
-            token = auth.get("token")
-
-            if not token:
-                token_file = auth.get("token_file", ".cloudpss_token")
-                token_path = Path(token_file)
-                if not token_path.exists():
-                    raise FileNotFoundError(f"Token文件不存在: {token_file}")
-                token = token_path.read_text().strip()
-
-            setToken(token)
+            setup_auth(config)
             log("INFO", "认证成功")
 
             # 2. 获取模型
@@ -169,11 +181,13 @@ class TopologyCheckSkill(SkillBase):
                         buses.add(comp_id)
 
                 # 这里简化处理，实际应该使用图算法
-                check_results["details"].append({
-                    "check": "islands",
-                    "status": "passed",
-                    "message": f"发现 {len(buses)} 个母线节点",
-                })
+                check_results["details"].append(
+                    {
+                        "check": "islands",
+                        "status": "passed",
+                        "message": f"发现 {len(buses)} 个母线节点",
+                    }
+                )
                 check_results["summary"]["passed"] += 1
 
             # 检查2: 悬空元件
@@ -189,29 +203,35 @@ class TopologyCheckSkill(SkillBase):
                     if isinstance(pins, dict):
                         unconnected = [p for p, v in pins.items() if not v or v == ""]
                         if unconnected:
-                            dangling.append({
-                                "id": comp_id,
-                                "name": getattr(comp, "name", comp_id),
-                                "type": definition.split("/")[-1],
-                                "unconnected_pins": unconnected,
-                            })
+                            dangling.append(
+                                {
+                                    "id": comp_id,
+                                    "name": getattr(comp, "name", comp_id),
+                                    "type": definition.split("/")[-1],
+                                    "unconnected_pins": unconnected,
+                                }
+                            )
 
                 if dangling:
                     log("WARNING", f"发现 {len(dangling)} 个悬空元件")
-                    check_results["details"].append({
-                        "check": "dangling",
-                        "status": "warning",
-                        "message": f"发现 {len(dangling)} 个悬空元件",
-                        "items": dangling[:10],  # 只显示前10个
-                    })
+                    check_results["details"].append(
+                        {
+                            "check": "dangling",
+                            "status": "warning",
+                            "message": f"发现 {len(dangling)} 个悬空元件",
+                            "items": dangling[:10],  # 只显示前10个
+                        }
+                    )
                     check_results["summary"]["warnings"] += 1
                 else:
                     log("INFO", "无悬空元件")
-                    check_results["details"].append({
-                        "check": "dangling",
-                        "status": "passed",
-                        "message": "无悬空元件",
-                    })
+                    check_results["details"].append(
+                        {
+                            "check": "dangling",
+                            "status": "passed",
+                            "message": "无悬空元件",
+                        }
+                    )
                     check_results["summary"]["passed"] += 1
 
             # 检查3: 参数完整性
@@ -222,30 +242,38 @@ class TopologyCheckSkill(SkillBase):
                 for comp_id, comp in components.items():
                     args = getattr(comp, "args", {})
                     if isinstance(args, dict):
-                        empty_params = [k for k, v in args.items() if v is None or v == ""]
+                        empty_params = [
+                            k for k, v in args.items() if v is None or v == ""
+                        ]
                         if empty_params:
-                            incomplete.append({
-                                "id": comp_id,
-                                "name": getattr(comp, "name", comp_id),
-                                "empty_params": empty_params,
-                            })
+                            incomplete.append(
+                                {
+                                    "id": comp_id,
+                                    "name": getattr(comp, "name", comp_id),
+                                    "empty_params": empty_params,
+                                }
+                            )
 
                 if incomplete:
                     log("WARNING", f"发现 {len(incomplete)} 个元件参数不完整")
-                    check_results["details"].append({
-                        "check": "parameter",
-                        "status": "warning",
-                        "message": f"发现 {len(incomplete)} 个元件参数不完整",
-                        "items": incomplete[:10],
-                    })
+                    check_results["details"].append(
+                        {
+                            "check": "parameter",
+                            "status": "warning",
+                            "message": f"发现 {len(incomplete)} 个元件参数不完整",
+                            "items": incomplete[:10],
+                        }
+                    )
                     check_results["summary"]["warnings"] += 1
                 else:
                     log("INFO", "参数完整")
-                    check_results["details"].append({
-                        "check": "parameter",
-                        "status": "passed",
-                        "message": "所有元件参数完整",
-                    })
+                    check_results["details"].append(
+                        {
+                            "check": "parameter",
+                            "status": "passed",
+                            "message": "所有元件参数完整",
+                        }
+                    )
                     check_results["summary"]["passed"] += 1
 
             # 检查4: EMT就绪检查
@@ -253,19 +281,23 @@ class TopologyCheckSkill(SkillBase):
                 log("INFO", "检查EMT仿真准备...")
                 try:
                     topology = model.fetchTopology(implementType="emtp")
-                    check_results["details"].append({
-                        "check": "emt_ready",
-                        "status": "passed",
-                        "message": "EMT拓扑检查通过",
-                    })
+                    check_results["details"].append(
+                        {
+                            "check": "emt_ready",
+                            "status": "passed",
+                            "message": "EMT拓扑检查通过",
+                        }
+                    )
                     check_results["summary"]["passed"] += 1
                 except (KeyError, AttributeError) as e:
                     log("ERROR", f"EMT拓扑检查失败: {e}")
-                    check_results["details"].append({
-                        "check": "emt_ready",
-                        "status": "failed",
-                        "message": f"EMT拓扑检查失败: {e}",
-                    })
+                    check_results["details"].append(
+                        {
+                            "check": "emt_ready",
+                            "status": "failed",
+                            "message": f"EMT拓扑检查失败: {e}",
+                        }
+                    )
                     check_results["summary"]["issues"] += 1
 
             # 4. 导出结果
@@ -289,15 +321,17 @@ class TopologyCheckSkill(SkillBase):
 
             filepath = output_path / filename
 
-            with open(filepath, 'w', encoding='utf-8') as f:
+            with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(check_results, f, indent=2, ensure_ascii=False)
 
-            artifacts.append(Artifact(
-                type="json",
-                path=str(filepath),
-                size=filepath.stat().st_size,
-                description="拓扑检查报告"
-            ))
+            artifacts.append(
+                Artifact(
+                    type="json",
+                    path=str(filepath),
+                    size=filepath.stat().st_size,
+                    description="拓扑检查报告",
+                )
+            )
 
             log("INFO", f"结果已保存: {filepath}")
 
