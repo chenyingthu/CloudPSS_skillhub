@@ -151,19 +151,6 @@ class VoltageStabilitySkill(SkillBase):
 
         try:
             setup_auth(config)
-
-            log("INFO", "加载认证...")
-            from cloudpss import setToken
-
-            auth = config.get("auth", {})
-            token = auth.get("token")
-            if not token:
-                token_file = auth.get("token_file", ".cloudpss_token")
-                token_path = Path(token_file)
-                if not token_path.exists():
-                    raise FileNotFoundError(f"Token文件不存在: {token_file}")
-                token = token_path.read_text().strip()
-            setToken(token)
             log("INFO", "认证成功")
 
             model_config = config["model"]

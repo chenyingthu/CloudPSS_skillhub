@@ -23,6 +23,7 @@ from cloudpss_skills.core.base import (
     ValidationResult,
     Artifact,
 )
+from cloudpss_skills.core.auth_utils import setup_auth
 from cloudpss_skills.core.registry import register
 from cloudpss_skills.core.utils import get_components_by_type, convert_label_to_key
 
@@ -256,7 +257,7 @@ class ProtectionCoordinationSkill(SkillBase):
         """执行保护配合分析"""
         start_time = datetime.now()
         try:
-            self._setup_auth(config)
+            setup_auth(config)
 
             # 获取模型
             model_rid = config["model"]["rid"]
@@ -664,53 +665,6 @@ class ProtectionCoordinationSkill(SkillBase):
             )
 
         self.analysis_results["tcc_curves"] = tcc_data
-
-    def _setup_auth(self, config: Dict):
-        """设置认证"""
-        from cloudpss import setToken
-        import os
-
-        auth = config.get("auth", {})
-        token = auth.get("token")
-
-        # 确定服务器和对应的 token 文件
-        server = auth.get("server", "public")
-        base_url = auth.get("base_url") or auth.get("baseUrl")
-
-        # 设置 API URL
-        if base_url:
-            os.environ["CLOUDPSS_API_URL"] = base_url
-        elif server == "internal":
-            os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
-        else:
-            os.environ["CLOUDPSS_API_URL"] = "https://cloudpss.net/"
-
-        if not token and auth.get("token_file"):
-            try:
-                with open(auth["token_file"], "r") as f:
-                    token = f.read().strip()
-            except FileNotFoundError as e:
-                # 异常已捕获，无需额外处理
-                logger.debug(f"忽略预期异常: {e}")
-
-        if not token:
-            # 根据服务器选择 token 文件
-            if server == "internal":
-                token_files = [".cloudpss_token_internal", ".cloudpss_token"]
-            else:
-                token_files = [".cloudpss_token"]
-            for token_file in token_files:
-                try:
-                    with open(token_file, "r") as f:
-                        token = f.read().strip()
-                        break
-                except FileNotFoundError:
-                    continue
-
-        if not token:
-            raise ValueError("未找到CloudPSS token")
-
-        setToken(token)
 
     def _fetch_model(self, rid: str):
         """获取模型"""

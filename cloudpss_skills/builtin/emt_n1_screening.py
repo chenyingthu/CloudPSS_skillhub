@@ -23,6 +23,7 @@ from cloudpss_skills.core import (
     register,
 )
 from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_emt, setup_auth
+from cloudpss_skills.core.emt_fault_core import trace_rms
 
 logger = logging.getLogger(__name__)
 
@@ -570,11 +571,11 @@ class EmtN1ScreeningSkill(SkillBase):
         }
 
     def _trace_rms(self, trace, start, end):
-        """计算时间窗口RMS"""
-        samples = [v for t, v in zip(trace["x"], trace["y"]) if start <= t <= end]
-        if not samples:
+        """计算时间窗口RMS - 使用core中的共享函数"""
+        try:
+            return trace_rms(trace, start, end)
+        except ValueError:
             return 0.0
-        return math.sqrt(sum(v * v for v in samples) / len(samples))
 
     def _rank_results(self, results: List[Dict], thresholds: Dict) -> List[Dict]:
         """排序结果"""
