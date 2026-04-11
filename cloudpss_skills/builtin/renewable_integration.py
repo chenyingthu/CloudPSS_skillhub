@@ -36,6 +36,7 @@ from cloudpss_skills.core.auth_utils import (
 from cloudpss_skills.core.registry import register
 from cloudpss_skills.core.network_equivalent import (
     compute_positive_sequence_zth,
+    compute_scr,
     normalize_bus_name,
 )
 from cloudpss_skills.core.utils import parse_cloudpss_table
@@ -305,21 +306,16 @@ class RenewableIntegrationSkill(SkillBase):
         SCR = S_sc / P_n
         其中 S_sc 是接入点的短路容量，P_n 是新能源额定功率
 
-        SCR > 3: 强电网
-        2 < SCR < 3: 中等强度电网
+        SCR >= 3: 强电网
+        2 <= SCR < 3: 中等强度电网
         SCR < 2: 弱电网
         """
         renewable_config = config.get("renewable", {})
         renewable_bus = renewable_config.get("bus", "")
+        threshold = config.get("analysis", {}).get("scr", {}).get("threshold", 3.0)
 
         model = load_or_fetch_model({"rid": model_rid}, config)
         zth_result = compute_positive_sequence_zth(model, renewable_bus)
-        if not zth_result.verified:
-            return {
-                "error": zth_result.error or "无法计算PCC等值阻抗",
-                "passed": False,
-                "verified": False,
-            }
 
         renewable_components = self._find_renewable_components(model, config)
         inferred_capacity_mw = self._infer_renewable_capacity_mw(
@@ -338,51 +334,52 @@ class RenewableIntegrationSkill(SkillBase):
                 "verified": False,
             }
 
-        zth_pu = zth_result.z_th_pu
-        bus_nominal_voltage = float(zth_result.bus_nominal_voltage_kv)
-        system_base_mva = float(zth_result.system_base_mva)
-        zth_mag = float(abs(zth_pu))
-        short_circuit_capacity_mva = (
-            system_base_mva / zth_mag if zth_mag > 0 else float("inf")
-        )
-        scr = (
-            short_circuit_capacity_mva / float(capacity_mw)
-            if capacity_mw > 0
-            else float("inf")
-        )
+        scr_result = compute_scr(zth_result, capacity_mw, threshold)
 
-        # 判断电网强度
-        if scr >= 3:
-            strength = "强电网"
-            recommendation = "正常运行"
-        elif scr >= 2:
-            strength = "中等强度电网"
-            recommendation = "建议增加无功补偿"
-        else:
-            strength = "弱电网"
-            recommendation = "需要额外的电压支撑设备"
+        if not scr_result.verified:
+            return {
+                "error": scr_result.error or "SCR计算失败",
+                "passed": False,
+                "verified": False,
+            }
+
+        strength_map = {
+            "strong": "强电网",
+            "medium": "中等强度电网",
+            "weak": "弱电网",
+        }
+        recommendation_map = {
+            "strong": "正常运行",
+            "medium": "建议增加无功补偿",
+            "weak": "需要额外的电压支撑设备",
+        }
+
+        strength_cn = strength_map.get(scr_result.grid_strength, "未知")
+        recommendation = recommendation_map.get(scr_result.grid_strength, "请评估")
 
         return {
-            "scr": round(scr, 2),
-            "short_circuit_capacity_mva": round(short_circuit_capacity_mva, 2),
+            "scr": scr_result.scr,
+            "short_circuit_capacity_mva": scr_result.short_circuit_capacity_mva,
             "renewable_capacity_mw": float(capacity_mw),
             "configured_capacity_mw": configured_capacity_mw,
             "inferred_capacity_mw": inferred_capacity_mw,
-            "bus_nominal_voltage_kv": bus_nominal_voltage,
+            "bus_nominal_voltage_kv": scr_result.bus_nominal_voltage_kv,
             "z_th_pu": {
-                "real": round(zth_pu.real, 6),
-                "imag": round(zth_pu.imag, 6),
-                "magnitude": round(abs(zth_pu), 6),
+                "real": round(scr_result.z_th_pu.real, 6)
+                if scr_result.z_th_pu
+                else None,
+                "imag": round(scr_result.z_th_pu.imag, 6)
+                if scr_result.z_th_pu
+                else None,
+                "magnitude": round(abs(scr_result.z_th_pu), 6)
+                if scr_result.z_th_pu
+                else None,
             },
-            "bus_node": zth_result.bus_node,
-            "grid_strength": strength,
+            "bus_node": scr_result.bus_node,
+            "grid_strength": strength_cn,
             "recommendation": recommendation,
-            "threshold": config.get("analysis", {})
-            .get("scr", {})
-            .get("threshold", 3.0),
-            "passed": bool(
-                scr >= config.get("analysis", {}).get("scr", {}).get("threshold", 3.0)
-            ),
+            "threshold": threshold,
+            "passed": scr_result.scr >= threshold,
             "calculation_method": "基于拓扑正序网络构造PCC戴维南等值阻抗",
             "verified": True,
         }
