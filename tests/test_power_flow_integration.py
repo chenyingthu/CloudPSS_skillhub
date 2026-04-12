@@ -72,7 +72,7 @@ class TestPowerFlowSkillIntegration:
         """Test IEEE39 model converges"""
         config = {
             "skill": "power_flow",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/chenying/IEEE39"},
             "algorithm": {
                 "type": "newton_raphson",
@@ -90,7 +90,7 @@ class TestPowerFlowSkillIntegration:
         """Test IEEE3 model converges"""
         config = {
             "skill": "power_flow",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/chenying/IEEE3"},
             "algorithm": {
                 "type": "newton_raphson",
@@ -106,7 +106,7 @@ class TestPowerFlowSkillIntegration:
         """Test result has expected data structure"""
         config = {
             "skill": "power_flow",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/chenying/IEEE39"},
             "output": {"format": "json"},
         }
@@ -123,7 +123,7 @@ class TestPowerFlowSkillIntegration:
         """Test fast_decoupled algorithm"""
         config = {
             "skill": "power_flow",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/chenying/IEEE39"},
             "algorithm": {
                 "type": "fast_decoupled",
@@ -140,7 +140,7 @@ class TestPowerFlowSkillIntegration:
         """Test handling of nonexistent model"""
         config = {
             "skill": "power_flow",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/nonexistent/model"},
             "output": {"path": "/tmp"},
         }

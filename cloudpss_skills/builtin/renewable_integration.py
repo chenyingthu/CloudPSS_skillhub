@@ -378,8 +378,8 @@ class RenewableIntegrationSkill(SkillBase):
             "bus_node": scr_result.bus_node,
             "grid_strength": strength_cn,
             "recommendation": recommendation,
-            "threshold": threshold,
-            "passed": scr_result.scr >= threshold,
+            "threshold": float(threshold),
+            "passed": bool(scr_result.scr >= threshold),
             "calculation_method": "基于拓扑正序网络构造PCC戴维南等值阻抗",
             "verified": True,
         }
@@ -485,7 +485,7 @@ class RenewableIntegrationSkill(SkillBase):
             "max_voltage_change_pu": round(max_change, 4),
             "max_voltage_change_percent": round(max_change_percent, 2),
             "tolerance_percent": tolerance * 100,
-            "passed": max_change <= tolerance,
+            "passed": bool(max_change <= tolerance),
             "renewable_components_removed": renewable_components,
             "verified": True,
         }
@@ -585,7 +585,7 @@ class RenewableIntegrationSkill(SkillBase):
             "harmonics": harmonics,
             "thd_percent": round(thd, 2),
             "thd_limit_percent": limit * 100,
-            "passed": thd / 100 <= limit,
+            "passed": bool(thd / 100 <= limit),
             "warning": "此结果是基于典型值的简化估算，未进行实际仿真验证，仅供初步评估参考",
             "verified": False,
         }
@@ -965,12 +965,12 @@ class RenewableIntegrationSkill(SkillBase):
         assessment = "通过" if overall_passed and overall_verified else "仅供初步评估"
 
         return {
-            "total_analysis": total_count,
-            "passed": passed_count,
-            "overall_passed": overall_passed,
-            "overall_verified": overall_verified,
-            "certifiable": overall_passed and overall_verified,
-            "assessment": assessment,
+            "total_analysis": int(total_count),
+            "passed": int(passed_count),
+            "overall_passed": bool(overall_passed),
+            "overall_verified": bool(overall_verified),
+            "certifiable": bool(overall_passed and overall_verified),
+            "assessment": str(assessment),
             "recommendations": self._generate_recommendations(analysis_results),
             "limitations": []
             if overall_verified
