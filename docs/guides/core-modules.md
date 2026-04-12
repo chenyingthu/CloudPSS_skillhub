@@ -435,8 +435,265 @@ export_result = save_json(data, output)
 
 ---
 
+## 技能相互逻辑
+
+### 技能依赖关系
+
+技能之间存在以下依赖关系：
+
+```
+power_flow (基础)
+    ├── n1_security (依赖基线潮流)
+    ├── voltage_stability (依赖基线潮流)
+    ├── n2_security (依赖基线潮流)
+    ├── contingency_analysis (依赖基线潮流)
+    ├── maintenance_security (依赖基线潮流)
+    └── batch_powerflow (多次调用 power_flow)
+
+emt_simulation (独立)
+    ├── short_circuit (依赖 EMT)
+    └── param_scan (可依赖 EMT 或 power_flow)
+```
+
+### 技能组合使用
+
+#### 1. 完整安全评估流程
+```
+power_flow (基线) → n1_security → n2_security → contingency_analysis
+```
+
+```python
+# 示例：完整安全评估
+configs = [
+    {"skill": "power_flow", "model": {"rid": "model/holdme/IEEE39"}},
+    {"skill": "n1_security", "model": {"rid": "model/holdme/IEEE39"}},
+    {"skill": "contingency_analysis", "model": {"rid": "model/holdme/IEEE39"}, "contingency": {"level": "N-1"}},
+]
+```
+
+#### 2. 电压稳定性研究
+```
+power_flow (基线) → voltage_stability (PV曲线)
+```
+
+#### 3. EMT故障分析
+```
+emt_simulation (基线) → short_circuit (短路计算)
+                    → param_scan (参数扫描)
+```
+
+### 技能间数据传递
+
+#### 通过配置传递
+```python
+# 技能A：将结果路径传递给技能B
+skill_a_result = run_skill_a(config_a)
+config_b = {
+    "skill": "n1_security",
+    "model": {"rid": "model/holdme/IEEE39"},
+    "output": {
+        "path": skill_a_result.artifacts[0].path,  # 复用输出路径
+    }
+}
+```
+
+#### 通过 SkillResult.data 传递
+```python
+# 技能A的结果作为技能B的参考
+skill_a = get_skill("power_flow")
+result_a = skill_a.run(config_a)
+
+# 提取关键数据传递给技能B
+config_b = {
+    "skill": "voltage_stability",
+    "model": {"rid": "model/holdme/IEEE39"},
+    "monitoring": {
+        "buses": result_a.data.get("critical_buses", []),  # 使用技能A识别的薄弱母线
+    }
+}
+```
+
+---
+
+## 调用最佳实践
+
+### 1. 模型加载策略
+
+#### 何时使用 `reload_model()` vs `clone_model()`
+
+| 场景 | 方法 | 原因 |
+|------|------|------|
+| 批量仿真（每个场景独立修改） | `clone_model(base_model)` | 避免重复网络请求 |
+| 需要最新模型状态 | `reload_model()` | 获取云端最新版本 |
+| 检修模拟（需要先停运再复核） | 初始`reload_model()` + 后续`clone_model()` | 首场景用reload，后续用clone |
+
+```python
+# ✅ 推荐：批量仿真场景
+base_model = reload_model(model_rid, source, config)  # 只加载一次
+for scenario in scenarios:
+    working = clone_model(base_model)  # 每个场景克隆
+    modify_and_simulate(working, scenario)
+
+# ✅ 推荐：检修场景
+model = reload_model(model_rid, source, config)  # 获取原始状态
+# 检修态分析...
+working = clone_model(model)  # 用于后续N-1复核
+```
+
+### 2. 错误处理模式
+
+#### 分层错误处理
+```python
+def run(self, config: Dict) -> SkillResult:
+    try:
+        setup_auth(config)  # 认证错误：立即失败
+        model = reload_model(...)  # 模型加载错误：立即失败
+        
+        results = []
+        for scenario in scenarios:
+            try:
+                result = self._run_single_scenario(model, scenario)
+                results.append(result)
+            except RuntimeError as e:
+                # 单场景失败：记录但继续
+                results.append({"scenario": scenario, "error": str(e)})
+        
+        if not results:
+            return SkillResult(status=SkillStatus.FAILED, error="所有场景失败")
+        
+        return self._aggregate_results(results)
+    
+    except (ConnectionError, FileNotFoundError) as e:
+        # 致命错误：完全失败
+        return SkillResult(status=SkillStatus.FAILED, error=str(e))
+```
+
+#### 使用 `JobResult` 进行仿真错误检查
+```python
+job_result = run_powerflow_and_wait(model, config)
+
+if not job_result.success:
+    # 区分不同失败原因
+    if "timeout" in (job_result.error or "").lower():
+        raise RuntimeError("潮流计算超时")
+    else:
+        raise RuntimeError(f"潮流计算失败: {job_result.error}")
+```
+
+### 3. 性能优化
+
+#### 避免重复加载
+```python
+# ❌ 错误：每个场景都重新加载
+for branch in branches:
+    model = reload_model(model_rid, source, config)  # 慢！
+    remove_component(model, branch)
+    run_powerflow(model)
+
+# ✅ 正确：加载一次，克隆多次
+model = reload_model(model_rid, source, config)
+for branch in branches:
+    working = clone_model(model)  # 快！
+    remove_component(working, branch)
+    run_powerflow(working)
+```
+
+#### 使用批量操作
+```python
+# ❌ 低效：逐个更新
+for comp in components:
+    model.updateComponent(comp.id, args={...})
+
+# ✅ 高效：收集后批量更新（如果SDK支持）
+updates = {comp.id: {...} for comp in components}
+model.updateComponents(updates)
+```
+
+### 4. 日志记录规范
+
+#### 结构化日志
+```python
+def log(level: str, message: str):
+    logs.append(LogEntry(timestamp=datetime.now(), level=level, message=message))
+    # 添加上下文前缀
+    getattr(logger, level.lower())(f"[{self.name}] {message}")
+
+# 使用示例
+log("INFO", f"加载模型: {model.name}")
+log("DEBUG", f"支路数: {len(branches)}")
+log("WARNING", f"潮流不收敛: {branch['name']}")
+log("ERROR", f"仿真异常: {e}")
+```
+
+### 5. 输出管理
+
+#### 使用统一的 OutputConfig
+```python
+# ✅ 推荐：统一的输出管理
+output = OutputConfig(
+    path=config.get("output", {}).get("path", "./results/"),
+    prefix=f"{self.name}_{scenario_id}",
+    timestamp=True,
+)
+
+# JSON结果
+json_result = save_json(data, output, suffix="data")
+artifacts.append(json_result.artifact)
+
+# CSV表格
+csv_result = save_csv(table_data, output, suffix="table", headers=headers)
+artifacts.append(csv_result.artifact)
+
+# Markdown报告
+md_result = generate_report(report_content, output, suffix="report")
+artifacts.append(md_result.artifact)
+```
+
+### 6. 技能链式调用
+
+#### 创建可复用的研究流程
+```python
+class SecurityAssessmentPipeline:
+    def __init__(self, model_rid: str, config: dict):
+        self.model_rid = model_rid
+        self.config = config
+        self.results = {}
+    
+    def run(self) -> Dict[str, SkillResult]:
+        # 1. 基线潮流
+        pf = get_skill("power_flow")
+        self.results["baseline"] = pf.run({
+            "skill": "power_flow",
+            "model": {"rid": self.model_rid},
+            **self.config
+        })
+        
+        # 2. N-1安全筛查
+        n1 = get_skill("n1_security")
+        self.results["n1"] = n1.run({
+            "skill": "n1_security",
+            "model": {"rid": self.model_rid},
+            "output": {"path": self.results["baseline"].artifacts[0].path},
+            **self.config
+        })
+        
+        # 3. 电压稳定性
+        vs = get_skill("voltage_stability")
+        self.results["voltage"] = vs.run({
+            "skill": "voltage_stability",
+            "model": {"rid": self.model_rid},
+            "monitoring": {"buses": self._get_critical_buses()},
+            **self.config
+        })
+        
+        return self.results
+```
+
+---
+
 ## 版本历史
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
-| 1.1.0 | 2024-01 | 新增 job_runner, exporter, model_utils 模块 |
+| 1.1.0 | 2026-04 | 新增 job_runner, exporter, model_utils 模块 |
+| 1.0.0 | 2026-04 | 初始版本 |
