@@ -62,7 +62,7 @@ class TestTopologyCheckSkillIntegration:
         """Test topology check on IEEE39 model"""
         config = {
             "skill": "topology_check",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/chenying/IEEE39"},
             "output": {"format": "json", "path": "/tmp", "prefix": "topology_test"},
         }
@@ -76,7 +76,7 @@ class TestTopologyCheckSkillIntegration:
         """Test topology check on IEEE3 model"""
         config = {
             "skill": "topology_check",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/chenying/IEEE3"},
         }
 
@@ -88,7 +88,7 @@ class TestTopologyCheckSkillIntegration:
         """Test result has expected data structure"""
         config = {
             "skill": "topology_check",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/chenying/IEEE39"},
         }
 
