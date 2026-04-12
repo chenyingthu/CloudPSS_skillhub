@@ -1,6 +1,6 @@
 # CloudPSS 技能系统文档
 
-配置驱动的电力系统仿真工具包，包含40个专业仿真技能。
+配置驱动的电力系统仿真工具包，包含47个专业仿真技能。
 
 ## 技能文档索引
 
@@ -26,9 +26,16 @@
 | 技能 | 描述 | 文档 |
 |------|------|------|
 | `n1_security` | N-1安全校核 | [查看文档](n1_security.md) |
+| `n2_security` | N-2安全校核 | [查看文档](n2_security.md) |
 | `emt_n1_screening` | EMT N-1安全筛查 | [查看文档](emt_n1_screening.md) |
 | `contingency_analysis` | 预想事故分析 | [查看文档](contingency_analysis.md) |
 | `maintenance_security` | 检修方式安全校核 | [查看文档](maintenance_security.md) |
+
+### 安全与保护类
+
+| 技能 | 描述 | 文档 |
+|------|------|------|
+| `protection_coordination` | 保护整定与配合分析 | [查看文档](protection_coordination.md) |
 
 ### 批量与扫描类
 
@@ -48,6 +55,7 @@
 |------|------|------|
 | `voltage_stability` | 电压稳定分析 | [查看文档](voltage_stability.md) |
 | `transient_stability` | 暂态稳定分析 | [查看文档](transient_stability.md) |
+| `transient_stability_margin` | 暂态稳定裕度评估 | [查看文档](transient_stability_margin.md) |
 | `small_signal_stability` | 小信号稳定分析 | [查看文档](small_signal_stability.md) |
 | `frequency_response` | 频率响应分析 | [查看文档](frequency_response.md) |
 | `vsi_weak_bus` | VSI弱母线分析 | [查看文档](vsi_weak_bus.md) |
@@ -65,6 +73,15 @@
 | `comtrade_export` | COMTRADE标准格式导出 | [查看文档](comtrade_export.md) |
 | `compare_visualization` | 结果对比可视化 | [查看文档](compare_visualization.md) |
 | `disturbance_severity` | 扰动严重度分析 | [查看文档](disturbance_severity.md) |
+| `loss_analysis` | 网损分析 | [查看文档](loss_analysis.md) |
+| `report_generator` | 智能报告生成 | [查看文档](report_generator.md) |
+
+### 新能源接入类
+
+| 技能 | 描述 | 文档 |
+|------|------|------|
+| `renewable_integration` | 新能源接入评估 | [查看文档](renewable_integration.md) |
+| `thevenin_equivalent` | PCC戴维南等值 | [查看文档](thevenin_equivalent.md) |
 
 ### 电能质量类
 
