@@ -222,7 +222,10 @@ class N1SecuritySkill(SkillBase):
                 results.append(result)
 
             log("INFO", f"N-1校核完成: 通过 {passed}, 失败 {failed}")
-            log(f"通过率: {passed / len(branches) * 100:.1f}%" if branches else "N/A")
+            log(
+                "INFO",
+                f"通过率: {passed / len(branches) * 100:.1f}%" if branches else "N/A",
+            )
 
             output_config = config.get("output", {})
             output = OutputConfig(
