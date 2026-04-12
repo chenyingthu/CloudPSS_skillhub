@@ -16,6 +16,7 @@
 - [主线研究场景矩阵](./guides/mainline-study-scenarios.md) - 以工程研究问题组织当前主线案例，而不是只按 API 枚举
 - [参数化研究矩阵](./guides/parameterized-study-matrix.md) - 当前 `IEEE39/IEEE3` 已验证参数化案例库索引，包含脚本入口、本地/ live 验证、复核命令与结论边界
 - [主线覆盖矩阵](./guides/mainline-coverage-matrix.md) - 当前主线 API 的文档、示例、测试对应关系
+- [核心模块开发指南](./guides/core-modules.md) - job_runner, exporter, model_utils 等可复用核心模块的使用指南
 - [主线验收基线](./guides/mainline-acceptance-baseline.md) - 当前阶段主线完成判断、证据基线和延后范围
 - [主线证据登记表](./guides/mainline-evidence-register.md) - 当前主线能力与本地测试、live 集成测试、手工 live 探针的对应清单
 - [SDK Inventory](./api-inventory.md) - 基于已安装 SDK 自动生成的 API 清单与 gap report
