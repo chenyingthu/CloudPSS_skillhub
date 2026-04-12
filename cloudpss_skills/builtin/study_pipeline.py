@@ -2,13 +2,14 @@
 Study Pipeline Skill
 
 研究流水线 - 自动串联多个技能执行完整研究流程
-支持步骤依赖、数据传递、结果聚合和断点续跑
+支持并行执行、条件分支、循环遍历、数据传递和断点续跑
 """
 
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from cloudpss_skills.core import (
     Artifact,
@@ -62,15 +63,9 @@ class StudyPipelineSkill(SkillBase):
                         "type": "object",
                         "required": ["skill"],
                         "properties": {
-                            "name": {
-                                "type": "string",
-                                "description": "步骤名称（可选）",
-                            },
+                            "name": {"type": "string", "description": "步骤名称"},
                             "skill": {"type": "string", "description": "技能名称"},
-                            "config": {
-                                "type": "object",
-                                "description": "技能配置（支持变量替换）",
-                            },
+                            "config": {"type": "object", "description": "技能配置"},
                             "skip_on_failure": {
                                 "type": "boolean",
                                 "default": False,
@@ -80,6 +75,29 @@ class StudyPipelineSkill(SkillBase):
                                 "type": "array",
                                 "items": {"type": "string"},
                                 "description": "依赖的前置步骤名称",
+                            },
+                            "parallel": {
+                                "type": "boolean",
+                                "default": False,
+                                "description": "是否与其他并行步骤一起执行",
+                            },
+                            "when": {
+                                "type": "string",
+                                "description": "执行条件（如 'steps.n1.success'）",
+                            },
+                            "foreach": {
+                                "type": "object",
+                                "properties": {
+                                    "items": {
+                                        "type": "string",
+                                        "description": "迭代变量路径（如 'steps.scan.data.items'）",
+                                    },
+                                    "item_name": {
+                                        "type": "string",
+                                        "default": "item",
+                                        "description": "循环中当前项的变量名",
+                                    },
+                                },
                             },
                         },
                     },
@@ -98,6 +116,11 @@ class StudyPipelineSkill(SkillBase):
                     "default": False,
                     "description": "步骤失败时是否继续执行后续步骤",
                 },
+                "max_workers": {
+                    "type": "integer",
+                    "default": 4,
+                    "description": "并行执行的最大线程数",
+                },
             },
         }
 
@@ -112,6 +135,7 @@ class StudyPipelineSkill(SkillBase):
                 "generate_report": True,
             },
             "continue_on_failure": False,
+            "max_workers": 4,
         }
 
     def validate(self, config: Dict[str, Any]) -> ValidationResult:
@@ -122,14 +146,20 @@ class StudyPipelineSkill(SkillBase):
             result.add_error("pipeline不能为空")
             return result
 
-        skill_names = set()
+        step_names: Set[str] = set()
         for i, step in enumerate(pipeline):
             step_name = step.get("name") or step.get("skill")
             if not step.get("skill"):
                 result.add_error(f"pipeline[{i}]: 必须指定skill")
-            if step_name in skill_names and not step.get("name"):
+
+            if step_name in step_names:
                 result.add_warning(f"pipeline[{i}]: 多个步骤使用相同名称 '{step_name}'")
-            skill_names.add(step_name)
+            step_names.add(step_name)
+
+            deps = step.get("depends_on", [])
+            for dep in deps:
+                if dep not in step_names and dep != step_name:
+                    result.add_warning(f"pipeline[{i}]: 依赖的步骤 '{dep}' 尚未定义")
 
         return result
 
@@ -137,7 +167,6 @@ class StudyPipelineSkill(SkillBase):
         start_time = datetime.now()
         logs = []
         artifacts = []
-        step_results = []
 
         def log(level: str, message: str):
             logs.append(
@@ -149,84 +178,53 @@ class StudyPipelineSkill(SkillBase):
             setup_auth(config)
             log("INFO", "认证成功")
 
-            pipeline = config.get("pipeline", [])
+            pipeline = self._expand_pipeline(config.get("pipeline", []), {})
             output_config = config.get("output", {})
             continue_on_failure = config.get("continue_on_failure", False)
+            max_workers = config.get("max_workers", 4)
 
             log("INFO", f"=" * 50)
             log("INFO", f"开始执行研究流水线，共 {len(pipeline)} 个步骤")
-            log("INFO", f"=" * 50)
+            log("INFO", "=" * 50)
 
-            context = {"steps": {}, "artifacts": []}
+            context = {"steps": {}, "artifacts": [], "_pipeline": pipeline}
+            step_results = []
 
-            for i, step_config in enumerate(pipeline):
-                step_name = step_config.get("name") or step_config.get("skill")
-                skill_name = step_config["skill"]
-                step_log_prefix = f"[{i + 1}/{len(pipeline)}] {step_name}"
+            executed: Set[str] = set()
+            total_iterations = 0
 
-                log("INFO", f"{step_log_prefix}: 开始执行...")
+            while len(executed) < len(pipeline):
+                ready_steps = self._get_ready_steps(
+                    pipeline, executed, context, continue_on_failure
+                )
 
-                try:
-                    skill = get_skill(skill_name)
-                    if skill is None:
-                        raise ValueError(f"技能 '{skill_name}' 不存在")
+                if not ready_steps:
+                    if len(executed) < len(pipeline):
+                        log("ERROR", "没有可执行的步骤，可能存在循环依赖")
+                    break
 
-                    step_config_final = self._resolve_config(
-                        step_config.get("config", {}),
-                        context,
+                if len(ready_steps) > 1 and all(
+                    s.get("parallel", False) for s in ready_steps
+                ):
+                    log("INFO", f"并行执行 {len(ready_steps)} 个步骤...")
+                    batch_results = self._execute_parallel(
+                        ready_steps, pipeline, context, max_workers, log
                     )
+                    step_results.extend(batch_results)
+                    for r in batch_results:
+                        executed.add(r["name"])
+                else:
+                    for step_config in ready_steps:
+                        if step_config.get("parallel", False):
+                            continue
+                        result = self._execute_step(step_config, pipeline, context, log)
+                        step_results.append(result)
+                        executed.add(step_config.get("name") or step_config["skill"])
 
-                    result = skill.run(step_config_final)
-
-                    context["steps"][step_name] = {
-                        "result": result,
-                        "status": result.status,
-                        "data": result.data,
-                        "artifacts": result.artifacts,
-                    }
-                    context["artifacts"].extend(result.artifacts)
-
-                    if result.status == SkillStatus.SUCCESS:
-                        log("INFO", f"{step_log_prefix}: ✓ 成功")
-                        step_results.append(
-                            {
-                                "name": step_name,
-                                "skill": skill_name,
-                                "status": "success",
-                                "duration": (
-                                    result.end_time - result.start_time
-                                ).total_seconds()
-                                if result.end_time and result.start_time
-                                else 0,
-                            }
-                        )
-                    else:
-                        log("WARNING", f"{step_log_prefix}: ✗ 失败 - {result.error}")
-                        step_results.append(
-                            {
-                                "name": step_name,
-                                "skill": skill_name,
-                                "status": "failed",
-                                "error": result.error,
-                            }
-                        )
-                        if not continue_on_failure:
-                            log("ERROR", "停止流水线执行")
-                            break
-
-                except Exception as e:
-                    log("ERROR", f"{step_log_prefix}: ✗ 异常 - {e}")
-                    step_results.append(
-                        {
-                            "name": step_name,
-                            "skill": skill_name,
-                            "status": "error",
-                            "error": str(e),
-                        }
-                    )
-                    if not continue_on_failure:
-                        log("ERROR", "停止流水线执行")
-                        break
+                total_iterations += 1
+                if total_iterations > 100:
+                    log("WARNING", "达到最大迭代次数，停止执行")
+                    break
 
             log("INFO", f"=" * 50)
             success_count = sum(1 for r in step_results if r["status"] == "success")
@@ -241,6 +239,7 @@ class StudyPipelineSkill(SkillBase):
             pipeline_result = {
                 "timestamp": datetime.now().isoformat(),
                 "total_steps": len(pipeline),
+                "executed_steps": len(step_results),
                 "success_count": success_count,
                 "failed_count": len(step_results) - success_count,
                 "steps": step_results,
@@ -305,6 +304,204 @@ class StudyPipelineSkill(SkillBase):
                 error=str(e),
             )
 
+    def _expand_pipeline(self, pipeline: List[Dict], context: Dict) -> List[Dict]:
+        """展开循环步骤"""
+        expanded = []
+        for step in pipeline:
+            foreach = step.get("foreach")
+            if foreach:
+                items_path = foreach.get("items", "")
+                items = self._resolve_var_path(items_path, context) or []
+                item_name = foreach.get("item_name", "item")
+
+                if isinstance(items, list):
+                    for i, item in enumerate(items):
+                        new_step = {
+                            **step,
+                            "name": f"{step.get('name', step['skill'])}_{i}",
+                        }
+                        new_config = {**step.get("config", {})}
+                        new_config[item_name] = item
+                        new_config[f"{item_name}_index"] = i
+                        new_step["config"] = new_config
+                        new_step.pop("foreach", None)
+                        expanded.append(new_step)
+                else:
+                    step_copy = {**step}
+                    step_copy.pop("foreach", None)
+                    expanded.append(step_copy)
+            else:
+                expanded.append(step)
+        return expanded
+
+    def _get_ready_steps(
+        self,
+        pipeline: List[Dict],
+        executed: Set[str],
+        context: Dict,
+        continue_on_failure: bool,
+    ) -> List[Dict]:
+        """获取当前可执行的步骤"""
+        ready = []
+        for step in pipeline:
+            step_name = step.get("name") or step["skill"]
+            if step_name in executed:
+                continue
+
+            deps = step.get("depends_on", [])
+            deps_satisfied = all(d in executed for d in deps)
+
+            if not deps_satisfied:
+                continue
+
+            when = step.get("when")
+            if when and not self._evaluate_condition(when, context):
+                executed.add(step_name)
+                continue
+
+            if continue_on_failure:
+                ready.append(step)
+            else:
+                failed_deps = [
+                    d
+                    for d in deps
+                    if d in context["steps"]
+                    and context["steps"][d]["status"] != SkillStatus.SUCCESS
+                ]
+                if failed_deps:
+                    executed.add(step_name)
+                    continue
+                ready.append(step)
+
+        return ready
+
+    def _evaluate_condition(self, condition: str, context: Dict) -> bool:
+        """评估条件表达式"""
+        condition = condition.strip()
+
+        success_pattern = r"steps\.(\w+)\.success"
+        match = re.search(success_pattern, condition)
+        if match:
+            step_name = match.group(1)
+            if step_name in context["steps"]:
+                return context["steps"][step_name]["status"] == SkillStatus.SUCCESS
+            return False
+
+        failed_pattern = r"steps\.(\w+)\.failed"
+        match = re.search(failed_pattern, condition)
+        if match:
+            step_name = match.group(1)
+            if step_name in context["steps"]:
+                return context["steps"][step_name]["status"] != SkillStatus.SUCCESS
+            return False
+
+        data_pattern = r"steps\.(\w+)\.data\.(\S+)\s*([<>=!]+)\s*(\S+)"
+        match = re.search(data_pattern, condition)
+        if match:
+            step_name, field, operator, value = match.groups()
+            if step_name in context["steps"]:
+                data = context["steps"][step_name].get("data", {})
+                field_value = self._get_nested(data, field)
+                if field_value is not None:
+                    try:
+                        return eval(f"{field_value} {operator} {value}")
+                    except:
+                        pass
+            return False
+
+        return True
+
+    def _get_nested(self, data: Dict, path: str) -> Any:
+        """获取嵌套字典的值"""
+        parts = path.split(".")
+        val = data
+        for p in parts:
+            if isinstance(val, dict):
+                val = val.get(p)
+            else:
+                return None
+        return val
+
+    def _execute_step(
+        self,
+        step_config: Dict,
+        pipeline: List[Dict],
+        context: Dict,
+        log,
+    ) -> Dict:
+        """执行单个步骤"""
+        step_name = step_config.get("name") or step_config["skill"]
+        skill_name = step_config["skill"]
+
+        try:
+            skill = get_skill(skill_name)
+            if skill is None:
+                raise ValueError(f"技能 '{skill_name}' 不存在")
+
+            step_config_final = self._resolve_config(
+                step_config.get("config", {}),
+                context,
+            )
+
+            result = skill.run(step_config_final)
+
+            context["steps"][step_name] = {
+                "result": result,
+                "status": result.status,
+                "data": result.data,
+                "artifacts": result.artifacts,
+            }
+            context["artifacts"].extend(result.artifacts)
+
+            if result.status == SkillStatus.SUCCESS:
+                log("INFO", f"✓ {step_name}: 成功")
+                return {
+                    "name": step_name,
+                    "skill": skill_name,
+                    "status": "success",
+                    "duration": (result.end_time - result.start_time).total_seconds()
+                    if result.end_time and result.start_time
+                    else 0,
+                }
+            else:
+                log("WARNING", f"✗ {step_name}: 失败 - {result.error}")
+                return {
+                    "name": step_name,
+                    "skill": skill_name,
+                    "status": "failed",
+                    "error": result.error,
+                }
+
+        except Exception as e:
+            log("ERROR", f"✗ {step_name}: 异常 - {e}")
+            return {
+                "name": step_name,
+                "skill": skill_name,
+                "status": "error",
+                "error": str(e),
+            }
+
+    def _execute_parallel(
+        self,
+        steps: List[Dict],
+        pipeline: List[Dict],
+        context: Dict,
+        max_workers: int,
+        log,
+    ) -> List[Dict]:
+        """并行执行多个步骤"""
+        results = []
+
+        def run_step(step_config):
+            return self._execute_step(step_config, pipeline, context, log)
+
+        with ThreadPoolExecutor(max_workers=min(max_workers, len(steps))) as executor:
+            futures = {executor.submit(run_step, s): s for s in steps}
+            for future in as_completed(futures):
+                results.append(future.result())
+
+        return results
+
     def _resolve_config(
         self,
         config: Dict[str, Any],
@@ -347,12 +544,7 @@ class StudyPipelineSkill(SkillBase):
             var_path = match.group(1).strip()
             resolved = self._resolve_var_path(var_path, context)
             if resolved is not None:
-                if isinstance(resolved, list):
-                    parts.append(str(resolved))
-                elif isinstance(resolved, dict):
-                    parts.append(str(resolved))
-                else:
-                    parts.append(str(resolved))
+                parts.append(str(resolved))
             else:
                 parts.append(match.group(0))
             last_end = match.end()
@@ -405,6 +597,7 @@ class StudyPipelineSkill(SkillBase):
             "",
             f"**执行时间**: {pipeline_result['timestamp']}",
             f"**总步骤数**: {pipeline_result['total_steps']}",
+            f"**执行步骤数**: {pipeline_result.get('executed_steps', len(pipeline_result.get('steps', [])))}",
             f"**成功**: {pipeline_result['success_count']}",
             f"**失败**: {pipeline_result['failed_count']}",
             "",
@@ -425,12 +618,7 @@ class StudyPipelineSkill(SkillBase):
 
             lines.append("")
 
-        lines.extend(
-            [
-                "## 上下文数据",
-                "",
-            ]
-        )
+        lines.extend(["## 上下文数据", ""])
 
         for name, data in pipeline_result.get("context", {}).items():
             lines.append(f"### {name}")
@@ -439,12 +627,7 @@ class StudyPipelineSkill(SkillBase):
             lines.append(f"- 产物数: {data['artifacts_count']}")
             lines.append("")
 
-        lines.extend(
-            [
-                "## 结论",
-                "",
-            ]
-        )
+        lines.extend(["## 结论", ""])
 
         if pipeline_result["failed_count"] == 0:
             lines.append("✅ 所有步骤执行成功")

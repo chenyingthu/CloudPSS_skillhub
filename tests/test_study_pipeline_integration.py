@@ -91,9 +91,8 @@ class TestStudyPipelineIntegration:
         assert result.data["total_steps"] == 3
         assert result.data["success_count"] == 2
 
-    @pytest.mark.slow
     def test_pipeline_with_n1_security(self, tmp_path):
-        """测试：power_flow + n1_security 流水线（慢速测试）"""
+        """测试：power_flow + n1_security 流水线"""
         skill = StudyPipelineSkill()
 
         config = {
