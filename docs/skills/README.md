@@ -48,6 +48,7 @@
 | `ieee3_prep` | IEEE3模型准备 | [查看文档](ieee3_prep.md) |
 | `batch_task_manager` | 批处理任务管理 | [查看文档](batch_task_manager.md) |
 | `config_batch_runner` | 多配置批量运行 | [查看文档](config_batch_runner.md) |
+| `study_pipeline` | 研究流水线编排 | [查看文档](study_pipeline.md) |
 
 ### 稳定性分析类
 
