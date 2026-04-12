@@ -5,13 +5,9 @@ Voltage Stability Analysis Skill
 支持负荷增长扫描和关键母线电压监测
 """
 
-import csv
-import json
 import logging
-from copy import deepcopy
 from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from cloudpss_skills.core import (
     Artifact,
@@ -22,12 +18,17 @@ from cloudpss_skills.core import (
     ValidationResult,
     register,
 )
-from cloudpss_skills.core.utils import parse_cloudpss_table
-from cloudpss_skills.core.auth_utils import (
-    load_or_fetch_model,
-    run_powerflow,
+from cloudpss_skills.core import (
     setup_auth,
+    clone_model,
+    reload_model,
+    run_powerflow_and_wait,
+    OutputConfig,
+    save_json,
+    save_csv,
+    generate_report,
 )
+from cloudpss_skills.core.utils import parse_cloudpss_table
 
 logger = logging.getLogger(__name__)
 
@@ -137,8 +138,6 @@ class VoltageStabilitySkill(SkillBase):
         }
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
-        import time
-
         start_time = datetime.now()
         logs = []
         artifacts = []
@@ -154,7 +153,11 @@ class VoltageStabilitySkill(SkillBase):
             log("INFO", "认证成功")
 
             model_config = config["model"]
-            base_model = load_or_fetch_model(model_config, config)
+            base_model = reload_model(
+                model_config["rid"],
+                model_config.get("source", "cloud"),
+                config,
+            )
             log("INFO", f"模型: {base_model.name}")
 
             scan_config = config.get("scan", {})
@@ -175,11 +178,9 @@ class VoltageStabilitySkill(SkillBase):
             log("INFO", f"监测母线: {target_buses}")
             log("INFO", f"电压崩溃阈值: {collapse_threshold} pu")
 
-            # 获取基线负荷和发电机信息
             base_loads, base_gens = self._get_base_components(base_model, load_target)
             log("INFO", f"基线负荷数: {len(base_loads)}, 发电机数: {len(base_gens)}")
 
-            # 连续潮流计算
             results = []
             converged_cases = []
             collapse_point = None
@@ -187,34 +188,20 @@ class VoltageStabilitySkill(SkillBase):
 
             for i, scale in enumerate(load_scaling):
                 log("INFO", f"[{i + 1}/{len(load_scaling)}] 负荷水平={scale}x")
-                from cloudpss import Model
 
-                working_model = Model(deepcopy(base_model.toJSON()))
+                working_model = clone_model(base_model)
 
-                # 调整负荷和发电机
                 self._scale_loads_and_generation(
                     working_model, base_loads, base_gens, scale, scale_generation, log
                 )
 
-                # 运行潮流
                 try:
-                    job = run_powerflow(working_model, config)
-                    log("INFO", f"  Job ID: {job.id}")
+                    job_result = run_powerflow_and_wait(
+                        working_model, config, log_func=log
+                    )
 
-                    # 等待完成
-                    max_wait = 60
-                    waited = 0
-                    while waited < max_wait:
-                        status = job.status()
-                        if status == 1:
-                            break
-                        if status == 2:
-                            raise RuntimeError("潮流计算失败")
-                        time.sleep(1)
-                        waited += 1
-
-                    if job.status() != 1:
-                        log("WARNING", f"  潮流计算超时或失败")
+                    if not job_result.success:
+                        log("WARNING", f"  潮流计算失败")
                         results.append(
                             {
                                 "scale": scale,
@@ -224,8 +211,7 @@ class VoltageStabilitySkill(SkillBase):
                         )
                         continue
 
-                    # 提取结果
-                    result = job.result
+                    result = job_result.result
                     voltages = self._extract_bus_voltages(result, target_buses)
                     if target_buses and len(voltages) == 0:
                         raise RuntimeError("未从潮流结果中提取到任何目标母线电压")
@@ -275,10 +261,11 @@ class VoltageStabilitySkill(SkillBase):
             pv_curve_data = self._generate_pv_curve(converged_cases, target_buses)
 
             # 导出结果
-            output_path = Path(output_config.get("path", "./results/"))
-            output_path.mkdir(parents=True, exist_ok=True)
-            prefix = output_config.get("prefix", "voltage_stability")
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output = OutputConfig(
+                path=output_config.get("path", "./results/"),
+                prefix=output_config.get("prefix", "voltage_stability"),
+                timestamp=True,
+            )
 
             result_data = {
                 "model": base_model.name,
@@ -292,75 +279,58 @@ class VoltageStabilitySkill(SkillBase):
             }
 
             # JSON输出
-            json_path = output_path / f"{prefix}_{timestamp}.json"
-            with open(json_path, "w") as f:
-                json.dump(result_data, f, indent=2)
-            artifacts.append(
-                Artifact(
-                    type="json",
-                    path=str(json_path),
-                    size=json_path.stat().st_size,
-                    description="电压稳定性分析结果",
-                )
+            export_result = save_json(
+                result_data, output, description="电压稳定性分析结果"
             )
+            if export_result.artifact:
+                artifacts.append(export_result.artifact)
 
             # CSV输出
-            csv_path = output_path / f"{prefix}_{timestamp}.csv"
-            with open(csv_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                headers = ["load_scale", "converged", "min_voltage"] + [
-                    f"V_{bus}" for bus in target_buses
-                ]
-                writer.writerow(headers)
-                for r in results:
-                    row = [
-                        r["scale"],
-                        r.get("converged", False),
-                        r.get("min_voltage", 0),
-                    ]
-                    for bus in target_buses:
-                        row.append(r.get("voltages", {}).get(bus, 0))
-                    writer.writerow(row)
-            artifacts.append(
-                Artifact(
-                    type="csv",
-                    path=str(csv_path),
-                    size=csv_path.stat().st_size,
-                    description="电压稳定性CSV",
-                )
+            csv_data = []
+            headers = ["load_scale", "converged", "min_voltage"] + [
+                f"V_{bus}" for bus in target_buses
+            ]
+            for r in results:
+                row = [r["scale"], r.get("converged", False), r.get("min_voltage", 0)]
+                for bus in target_buses:
+                    row.append(r.get("voltages", {}).get(bus, 0))
+                csv_data.append(row)
+            export_csv = save_csv(
+                csv_data,
+                output,
+                suffix="data",
+                headers=headers,
+                description="电压稳定性CSV",
             )
+            if export_csv.artifact:
+                artifacts.append(export_csv.artifact)
 
             # PV曲线数据
             if output_config.get("export_pv_curve", True) and pv_curve_data:
-                pv_path = output_path / f"{prefix}_pv_curve_{timestamp}.csv"
-                with open(pv_path, "w", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f)
-                    writer.writerow(["bus", "load_scale", "voltage_pu"])
-                    for point in pv_curve_data:
-                        writer.writerow(
-                            [point["bus"], point["scale"], point["voltage"]]
-                        )
-                artifacts.append(
-                    Artifact(
-                        type="csv",
-                        path=str(pv_path),
-                        size=pv_path.stat().st_size,
-                        description="PV曲线数据",
-                    )
+                pv_data = [[p["bus"], p["scale"], p["voltage"]] for p in pv_curve_data]
+                export_pv = save_csv(
+                    pv_data,
+                    output,
+                    suffix="pv_curve",
+                    headers=["bus", "load_scale", "voltage_pu"],
+                    description="PV曲线数据",
                 )
+                if export_pv.artifact:
+                    artifacts.append(export_pv.artifact)
 
             # 生成报告
             if output_config.get("generate_report", True):
-                report_path = output_path / f"{prefix}_report_{timestamp}.md"
-                self._generate_report(result_data, report_path, target_buses)
-                artifacts.append(
-                    Artifact(
-                        type="markdown",
-                        path=str(report_path),
-                        size=report_path.stat().st_size,
-                        description="电压稳定性分析报告",
-                    )
+                report_content = self._generate_report_content(
+                    result_data, target_buses
                 )
+                export_md = generate_report(
+                    report_content,
+                    output,
+                    suffix="report",
+                    description="电压稳定性分析报告",
+                )
+                if export_md.artifact:
+                    artifacts.append(export_md.artifact)
 
             overall_status = (
                 SkillStatus.SUCCESS if converged_cases else SkillStatus.FAILED
@@ -587,8 +557,8 @@ class VoltageStabilitySkill(SkillBase):
                 )
         return pv_data
 
-    def _generate_report(self, data: Dict, path: Path, target_buses: List[str]):
-        """生成Markdown报告"""
+    def _generate_report_content(self, data: Dict, target_buses: List[str]) -> str:
+        """生成Markdown报告内容"""
         lines = [
             "# 电压稳定性分析报告",
             "",
@@ -667,4 +637,4 @@ class VoltageStabilitySkill(SkillBase):
                 f"系统在测试范围内保持电压稳定，最大负荷能力约为 {data.get('max_loadability', 'N/A')}x。"
             )
 
-        path.write_text("\n".join(lines), encoding="utf-8")
+        return "\n".join(lines)

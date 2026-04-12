@@ -7,8 +7,7 @@ Parameter Scan Skill
 import json
 import logging
 from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List
 
 from cloudpss_skills.core import (
     Artifact,
@@ -19,11 +18,14 @@ from cloudpss_skills.core import (
     ValidationResult,
     register,
 )
-from cloudpss_skills.core.auth_utils import (
-    load_or_fetch_model,
-    run_emt,
-    run_powerflow,
+from cloudpss_skills.core import (
     setup_auth,
+    clone_model,
+    reload_model,
+    run_powerflow_and_wait,
+    run_emt_and_wait,
+    OutputConfig,
+    save_json,
 )
 
 logger = logging.getLogger(__name__)
@@ -138,8 +140,6 @@ class ParamScanSkill(SkillBase):
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
         """执行参数扫描"""
-        from cloudpss import Model, setToken
-
         start_time = datetime.now()
         logs = []
         artifacts = []
@@ -152,28 +152,15 @@ class ParamScanSkill(SkillBase):
 
         try:
             setup_auth(config)
-
-            # 1. 认证
-            log("INFO", "加载认证信息...")
-            auth = config.get("auth", {})
-            token = auth.get("token")
-
-            if not token:
-                token_file = auth.get("token_file", ".cloudpss_token")
-                token_path = Path(token_file)
-                if not token_path.exists():
-                    raise FileNotFoundError(f"Token文件不存在: {token_file}")
-                token = token_path.read_text().strip()
-
-            setToken(token)
             log("INFO", "认证成功")
 
-            # 2. 获取模型
-            log("INFO", "获取模型...")
             model_config = config["model"]
-            model_rid = model_config["rid"]
+            base_model = reload_model(
+                model_config["rid"],
+                model_config.get("source", "cloud"),
+                config,
+            )
 
-            # 3. 获取扫描配置
             scan_config = config["scan"]
             component_key = scan_config["component"]
             param_name = scan_config["parameter"]
@@ -184,24 +171,19 @@ class ParamScanSkill(SkillBase):
             log("INFO", f"扫描值: {values}")
             log("INFO", f"仿真类型: {sim_type}")
 
-            # 4. 执行扫描
             results = []
             for i, value in enumerate(values):
                 log("INFO", f"[{i + 1}/{len(values)}] {param_name} = {value}")
 
-                # 重新加载模型
-                model = load_or_fetch_model(model_config, config)
+                model = clone_model(base_model)
 
-                # 查找并更新元件参数
                 try:
                     components = model.getAllComponents()
                     target_comp = None
 
-                    # 先尝试直接匹配ID
                     if component_key in components:
                         target_comp = components[component_key]
                     else:
-                        # 尝试匹配名称
                         for comp_id, comp in components.items():
                             if getattr(comp, "name", "") == component_key:
                                 target_comp = comp
@@ -210,7 +192,6 @@ class ParamScanSkill(SkillBase):
                     if not target_comp:
                         raise ValueError(f"找不到元件: {component_key}")
 
-                    # 更新参数
                     model.updateComponent(
                         target_comp.id,
                         args={param_name: {"source": str(value), "ɵexp": ""}},
@@ -228,46 +209,35 @@ class ParamScanSkill(SkillBase):
                     )
                     continue
 
-                # 运行仿真
                 try:
                     if sim_type == "emt":
-                        job = run_emt(model, config)
+                        job_result = run_emt_and_wait(model, config, log_func=log)
                     else:
-                        job = run_powerflow(model, config)
+                        job_result = run_powerflow_and_wait(model, config, log_func=log)
 
-                    # 等待仿真完成
-                    import time
-
-                    max_wait = 120
-                    waited = 0
-                    status = 0
-                    while waited < max_wait:
-                        status = job.status()
-                        if status == 1:  # 完成
-                            break
-                        elif status == 2:  # 失败
-                            break
-                        time.sleep(2)
-                        waited += 2
-
-                    if status == 1:
-                        result_data = {
-                            "value": value,
-                            "status": "success",
-                            "job_id": job.id,
-                            "converged": True,
-                        }
-                        log("INFO", f"  -> 仿真成功 ({waited}s)")
+                    if job_result.success:
+                        results.append(
+                            {
+                                "value": value,
+                                "status": "success",
+                                "job_id": job_result.job.id if job_result.job else "",
+                                "converged": True,
+                            }
+                        )
+                        log("INFO", f"  -> 仿真成功 ({job_result.waited_seconds:.1f}s)")
                     else:
-                        result_data = {
-                            "value": value,
-                            "status": "failed",
-                            "job_id": job.id,
-                            "converged": False,
-                        }
-                        log("WARNING", f"  -> 仿真未收敛 ({waited}s, status={status})")
-
-                    results.append(result_data)
+                        results.append(
+                            {
+                                "value": value,
+                                "status": "failed",
+                                "job_id": job_result.job.id if job_result.job else "",
+                                "converged": False,
+                            }
+                        )
+                        log(
+                            "WARNING",
+                            f"  -> 仿真未收敛 ({job_result.waited_seconds:.1f}s)",
+                        )
 
                 except (
                     AttributeError,
@@ -290,21 +260,14 @@ class ParamScanSkill(SkillBase):
             log("INFO", f"参数扫描完成: {len(results)} 次仿真")
 
             output_config = config.get("output", {})
-            output_path = Path(output_config.get("path", "./results/"))
-            output_path.mkdir(parents=True, exist_ok=True)
-
-            prefix = output_config.get("prefix", "param_scan")
-            use_timestamp = output_config.get("timestamp", True)
-
-            filename = prefix
-            if use_timestamp:
-                filename += f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            filename += ".json"
-
-            filepath = output_path / filename
+            output = OutputConfig(
+                path=output_config.get("path", "./results/"),
+                prefix=output_config.get("prefix", "param_scan"),
+                timestamp=output_config.get("timestamp", True),
+            )
 
             scan_result = {
-                "model_rid": model_rid,
+                "model_rid": model_config["rid"],
                 "scan": scan_config,
                 "timestamp": datetime.now().isoformat(),
                 "summary": {
@@ -315,21 +278,12 @@ class ParamScanSkill(SkillBase):
                 "results": results,
             }
 
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(scan_result, f, indent=2, ensure_ascii=False)
+            export_result = save_json(scan_result, output, description="参数扫描结果")
+            if export_result.artifact:
+                artifacts.append(export_result.artifact)
 
-            artifacts.append(
-                Artifact(
-                    type="json",
-                    path=str(filepath),
-                    size=filepath.stat().st_size,
-                    description="参数扫描结果",
-                )
-            )
+            log("INFO", f"结果已保存: {export_result.filepath}")
 
-            log("INFO", f"结果已保存: {filepath}")
-
-            # 根据结果确定状态
             failed_count = sum(1 for r in results if r["status"] != "success")
 
             return SkillResult(

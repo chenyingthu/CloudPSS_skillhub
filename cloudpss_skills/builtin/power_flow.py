@@ -4,10 +4,8 @@ Power Flow Skill
 运行潮流计算。
 """
 
-import json
 import logging
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict
 
 from cloudpss_skills.core import (
@@ -19,10 +17,13 @@ from cloudpss_skills.core import (
     ValidationResult,
     register,
 )
-from cloudpss_skills.core.auth_utils import (
-    load_or_fetch_model,
-    run_powerflow,
+from cloudpss_skills.core import (
     setup_auth,
+    reload_model,
+    run_powerflow_and_wait,
+    OutputConfig,
+    save_json,
+    build_artifact,
 )
 from cloudpss_skills.core.utils import parse_cloudpss_table
 
@@ -106,7 +107,7 @@ class PowerFlowSkill(SkillBase):
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
         """执行潮流计算"""
-        from cloudpss import Model, setToken
+        from cloudpss import Model
 
         start_time = datetime.now()
         logs = []
@@ -120,61 +121,23 @@ class PowerFlowSkill(SkillBase):
 
         try:
             setup_auth(config)
-            # 1. 认证
-            log("INFO", "加载认证信息...")
-            auth = config.get("auth", {})
-            token = auth.get("token")
-
-            if not token:
-                token_file = auth.get("token_file", ".cloudpss_token")
-                token_path = Path(token_file)
-                if not token_path.exists():
-                    raise FileNotFoundError(f"Token文件不存在: {token_file}")
-                token = token_path.read_text().strip()
-
-            setToken(token)
             log("INFO", "认证成功")
 
-            # 2. 获取模型
-            log("INFO", "获取模型...")
             model_config = config["model"]
-            model_rid = model_config["rid"]
-
-            if model_config.get("source") == "local":
-                model = Model.load(model_rid)
-            else:
-                model = load_or_fetch_model(model_config, config)
-
+            model = reload_model(
+                model_config["rid"],
+                model_config.get("source", "cloud"),
+                config,
+            )
             log("INFO", f"模型: {model.name} ({model.rid})")
 
-            # 3. 运行潮流
             log("INFO", "运行潮流计算...")
-            job = run_powerflow(model, config)
-            log("INFO", f"任务已创建: {job.id}")
+            job_result = run_powerflow_and_wait(model, config, log_func=log)
 
-            # 4. 等待完成
-            import time
+            if not job_result.success:
+                raise RuntimeError(job_result.error or "潮流计算失败")
 
-            max_wait = 120
-            waited = 0
-            status = 0
-            while waited < max_wait:
-                status = job.status()
-                if status == 1:  # 完成
-                    break
-                elif status == 2:  # 失败
-                    break
-                time.sleep(2)
-                waited += 2
-
-            log("INFO", f"任务状态: {status} ({waited}s)")
-
-            if status != 1:
-                raise RuntimeError(f"潮流计算未成功完成，状态: {status}")
-
-            # 5. 获取结果
-            log("INFO", "提取结果...")
-            result = job.result
+            result = job_result.result
             if result is None or not result.getBuses() or not result.getBranches():
                 raise RuntimeError("潮流结果为空或缺少母线/支路表")
 
@@ -183,43 +146,31 @@ class PowerFlowSkill(SkillBase):
             if not bus_rows or not branch_rows:
                 raise RuntimeError("潮流结果表为空，不能判定为有效收敛")
 
-            # 6. 导出
             output_config = config.get("output", {})
-            output_path = Path(output_config.get("path", "./results/"))
-            output_path.mkdir(parents=True, exist_ok=True)
+            output = OutputConfig(
+                path=output_config.get("path", "./results/"),
+                prefix=output_config.get("prefix", "power_flow"),
+                timestamp=output_config.get("timestamp", True),
+            )
 
-            prefix = output_config.get("prefix", "power_flow")
-            use_timestamp = output_config.get("timestamp", True)
-
-            filename = prefix
-            if use_timestamp:
-                filename += f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            filename += ".json"
-
-            filepath = output_path / filename
-
-            # 保存结果
             result_data = {
                 "model": model.name,
                 "model_rid": model.rid,
-                "job_id": job.id,
+                "job_id": job_result.job.id,
                 "converged": True,
                 "bus_count": len(bus_rows),
                 "branch_count": len(branch_rows),
                 "timestamp": datetime.now().isoformat(),
             }
 
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(result_data, f, indent=2, ensure_ascii=False)
-
-            artifacts.append(
-                Artifact(
-                    type="json",
-                    path=str(filepath),
-                    size=filepath.stat().st_size,
-                    description="潮流计算结果",
-                )
+            export_result = save_json(
+                result_data,
+                output,
+                description="潮流计算结果",
             )
+
+            if export_result.artifact:
+                artifacts.append(export_result.artifact)
 
             return SkillResult(
                 skill_name=self.name,

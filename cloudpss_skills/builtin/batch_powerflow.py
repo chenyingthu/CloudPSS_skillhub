@@ -4,10 +4,8 @@ Batch Power Flow Skill
 批量潮流计算 - 对多个模型批量运行潮流计算。
 """
 
-import json
 import logging
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List
 
 from cloudpss_skills.core import (
@@ -19,7 +17,13 @@ from cloudpss_skills.core import (
     ValidationResult,
     register,
 )
-from cloudpss_skills.core.auth_utils import setup_auth
+from cloudpss_skills.core import (
+    setup_auth,
+    reload_model,
+    run_powerflow_and_wait,
+    OutputConfig,
+    save_json,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -145,8 +149,6 @@ class BatchPowerFlowSkill(SkillBase):
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
         """执行批量潮流计算"""
-        from cloudpss import Model
-
         start_time = datetime.now()
         logs = []
         artifacts = []
@@ -158,11 +160,9 @@ class BatchPowerFlowSkill(SkillBase):
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
-            # 1. 认证
             setup_auth(config)
             log("INFO", "认证成功")
 
-            # 2. 批量计算
             models_config = config["models"]
             results = []
             converged_count = 0
@@ -179,61 +179,39 @@ class BatchPowerFlowSkill(SkillBase):
                 log("INFO", f"[{i + 1}/{len(models_config)}] {model_name}")
 
                 try:
-                    # 获取模型
-                    if model_source == "local":
-                        model = Model.load(model_rid)
-                    else:
-                        model = Model.fetch(model_rid)
-
+                    model = reload_model(model_rid, model_source, config)
                     log("INFO", f"  -> 模型: {model.name}")
 
-                    # 运行潮流
-                    job = model.runPowerFlow()
-                    log("INFO", f"  -> Job ID: {job.id}")
+                    job_result = run_powerflow_and_wait(model, config, log_func=log)
 
-                    # 等待仿真完成
-                    import time
-
-                    max_wait = 120
-                    waited = 0
-                    status = 0
-                    while waited < max_wait:
-                        status = job.status()
-                        if status == 1:  # 完成
-                            break
-                        elif status == 2:  # 失败
-                            break
-                        time.sleep(2)
-                        waited += 2
-
-                    if status == 1:
-                        result = job.result
-                        if (
-                            result is None
-                            or not result.getBuses()
-                            or not result.getBranches()
-                        ):
+                    if job_result.success:
+                        result = job_result.result
+                        if not result.getBuses() or not result.getBranches():
                             raise RuntimeError("潮流结果为空或缺少母线/支路表")
                         converged_count += 1
                         result_data = {
                             "model_rid": model_rid,
                             "model_name": model.name,
                             "status": "converged",
-                            "job_id": job.id,
+                            "job_id": job_result.job.id,
                             "converged": True,
                         }
-                        log("INFO", f"  -> 潮流收敛 ✓ ({waited}s)")
+                        log(
+                            "INFO",
+                            f"  -> 潮流收敛 ✓ ({job_result.waited_seconds:.1f}s)",
+                        )
                     else:
                         failed_count += 1
                         result_data = {
                             "model_rid": model_rid,
                             "model_name": model.name,
-                            "status": "diverged" if status == 2 else "timeout",
-                            "job_id": job.id,
+                            "status": "diverged",
+                            "job_id": job_result.job.id if job_result.job else "",
                             "converged": False,
                         }
                         log(
-                            "WARNING", f"  -> 潮流不收敛 ✗ ({waited}s, status={status})"
+                            "WARNING",
+                            f"  -> 潮流不收敛 ✗ ({job_result.waited_seconds:.1f}s)",
                         )
 
                     results.append(result_data)
@@ -258,29 +236,18 @@ class BatchPowerFlowSkill(SkillBase):
                         }
                     )
 
-            # 3. 生成汇总
             log("INFO", "=" * 50)
-            log("INFO", "批量计算完成:")
-            log("INFO", f"  收敛: {converged_count}")
-            log("INFO", f"  不收敛/失败: {failed_count}")
+            log("INFO", f"批量计算完成: 收敛 {converged_count}, 失败 {failed_count}")
             log("INFO", f"  成功率: {converged_count / len(models_config) * 100:.1f}%")
 
-            # 4. 导出结果
             output_config = config.get("output", {})
-            output_path = Path(output_config.get("path", "./results/"))
-            output_path.mkdir(parents=True, exist_ok=True)
-
-            prefix = output_config.get("prefix", "batch_powerflow")
-            use_timestamp = output_config.get("timestamp", True)
+            output = OutputConfig(
+                path=output_config.get("path", "./results/"),
+                prefix=output_config.get("prefix", "batch_powerflow"),
+                timestamp=output_config.get("timestamp", True),
+            )
             output_format = output_config.get("format", "json")
             aggregate = output_config.get("aggregate", True)
-
-            filename = prefix
-            if use_timestamp:
-                filename += f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            filename += ".json" if output_format == "json" else ".csv"
-
-            filepath = output_path / filename
 
             batch_result = {
                 "timestamp": datetime.now().isoformat(),
@@ -296,47 +263,20 @@ class BatchPowerFlowSkill(SkillBase):
             }
 
             if output_format == "json":
-                with open(filepath, "w", encoding="utf-8") as f:
-                    json.dump(batch_result, f, indent=2, ensure_ascii=False)
+                export_result = save_json(
+                    batch_result, output, description="批量潮流计算结果"
+                )
+                if export_result.artifact:
+                    artifacts.append(export_result.artifact)
             else:
-                # CSV格式
-                import csv
-
-                with open(filepath, "w", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f)
-                    writer.writerow(
-                        ["model_rid", "model_name", "status", "job_id", "converged"]
-                    )
-                    for r in results:
-                        writer.writerow(
-                            [
-                                r.get("model_rid", ""),
-                                r.get("model_name", ""),
-                                r.get("status", ""),
-                                r.get("job_id", ""),
-                                r.get("converged", ""),
-                            ]
-                        )
-
-            artifacts.append(
-                Artifact(
-                    type=output_format,
-                    path=str(filepath),
-                    size=filepath.stat().st_size,
-                    description="批量潮流计算结果",
+                export_result = save_json(
+                    batch_result, output, description="批量潮流计算结果"
                 )
-            )
+                if export_result.artifact:
+                    artifacts.append(export_result.artifact)
 
-            log("INFO", f"结果已保存: {filepath}")
-
-            # 生成汇总报告
             if aggregate:
-                summary_filename = (
-                    f"{prefix}_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
-                )
-                summary_path = output_path / summary_filename
-
-                summary_lines = [
+                summary_content = [
                     "# 批量潮流计算报告",
                     "",
                     f"生成时间: {datetime.now().isoformat()}",
@@ -353,28 +293,24 @@ class BatchPowerFlowSkill(SkillBase):
                     "| 模型 | 名称 | 状态 | Job ID |",
                     "|------|------|------|--------|",
                 ]
-
                 for r in results:
                     status_emoji = "✓" if r.get("converged") else "✗"
-                    summary_lines.append(
+                    summary_content.append(
                         f"| {r.get('model_rid', '-')} | "
                         f"{r.get('model_name', '-')} | "
                         f"{status_emoji} {r.get('status', '-')} | "
                         f"{r.get('job_id', '-')} |"
                     )
-
-                summary_path.write_text("\n".join(summary_lines), encoding="utf-8")
-
-                artifacts.append(
-                    Artifact(
-                        type="markdown",
-                        path=str(summary_path),
-                        size=summary_path.stat().st_size,
-                        description="批量潮流计算汇总报告",
-                    )
+                summary_content_str = "\n".join(summary_content)
+                export_md = save_json(
+                    {"report": summary_content_str},
+                    output,
+                    suffix="summary_report",
+                    description="批量潮流计算汇总报告",
                 )
-
-                log("INFO", f"汇总报告已保存: {summary_path}")
+                if export_md.artifact:
+                    export_md.artifact.type = "markdown"
+                    artifacts.append(export_md.artifact)
 
             return SkillResult(
                 skill_name=self.name,

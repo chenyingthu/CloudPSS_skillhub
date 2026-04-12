@@ -6,9 +6,7 @@ N-1安全校核 - 逐一断开每条支路，检查系统是否仍能正常运�
 
 import json
 import logging
-import sys
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List
 
 from cloudpss_skills.core import (
@@ -20,7 +18,14 @@ from cloudpss_skills.core import (
     ValidationResult,
     register,
 )
-from cloudpss_skills.core.auth_utils import setup_auth
+from cloudpss_skills.core import (
+    setup_auth,
+    reload_model,
+    run_powerflow_and_wait,
+    OutputConfig,
+    save_json,
+)
+from cloudpss_skills.core.model_utils import remove_component_safe
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +120,7 @@ class N1SecuritySkill(SkillBase):
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
         """执行N-1安全校核"""
-        from cloudpss import Model, setToken
+        from cloudpss import Model
 
         start_time = datetime.now()
         logs = []
@@ -128,34 +133,25 @@ class N1SecuritySkill(SkillBase):
             getattr(logger, level.lower(), logger.info)(message)
 
         try:
-            # 1. 认证
             setup_auth(config)
             log("INFO", "认证成功")
 
-            # 2. 获取模型
-            log("INFO", "获取模型...")
             model_config = config["model"]
-            model_rid = model_config["rid"]
-
-            if model_config.get("source") == "local":
-                model = Model.load(model_rid)
-            else:
-                model = Model.fetch(model_rid)
-
+            model = reload_model(
+                model_config["rid"],
+                model_config.get("source", "cloud"),
+                config,
+            )
             log("INFO", f"模型: {model.name} ({model.rid})")
 
-            # 3. 获取所有支路元件
-            log("INFO", "获取支路信息...")
             components = model.getAllComponents()
-
-            # 查找所有线路和变压器（支路类元件）
             branch_types = [
                 "model/CloudPSS/line",
                 "model/CloudPSS/3pline",
                 "model/CloudPSS/transformer",
                 "model/CloudPSS/3ptransformer",
-                "model/CloudPSS/TransmissionLine",  # IEEE39实际使用的类型
-                "model/CloudPSS/_newTransformer_3p2w",  # IEEE39实际使用的变压器类型
+                "model/CloudPSS/TransmissionLine",
+                "model/CloudPSS/_newTransformer_3p2w",
             ]
 
             branches = []
@@ -172,12 +168,10 @@ class N1SecuritySkill(SkillBase):
 
             log("INFO", f"发现 {len(branches)} 条支路")
 
-            # 4. 执行N-1校核
             analysis_config = config.get("analysis", {})
             target_branches = analysis_config.get("branches", [])
 
             if target_branches:
-                # 只检查指定的支路
                 branches = [
                     b
                     for b in branches
@@ -192,99 +186,50 @@ class N1SecuritySkill(SkillBase):
             for i, branch in enumerate(branches):
                 log("INFO", f"[{i + 1}/{len(branches)}] 停运支路: {branch['name']}")
 
-                # 加载原始模型（每次重新加载以确保干净状态）
-                if model_config.get("source") == "local":
-                    working_model = Model.load(model_rid)
-                else:
-                    working_model = Model.fetch(model_rid)
+                working_model = reload_model(
+                    model_config["rid"],
+                    model_config.get("source", "cloud"),
+                    config,
+                )
 
-                # 停运该支路（通过删除或禁用）
-                try:
-                    working_model.removeComponent(branch["id"])
-                    log("INFO", f"  -> 已移除支路 {branch['name']}")
-                except (KeyError, AttributeError) as e:
-                    log("WARNING", f"  -> 移除支路失败: {e}")
+                if not remove_component_safe(working_model, branch["id"]):
+                    log("WARNING", f"  -> 移除支路失败")
                     continue
 
-                # 运行潮流计算
-                try:
-                    job = working_model.runPowerFlow()
+                job_result = run_powerflow_and_wait(working_model, config, log_func=log)
 
-                    # 等待仿真完成
-                    import time
-
-                    max_wait = 120
-                    waited = 0
-                    status = 0
-                    while waited < max_wait:
-                        status = job.status()
-                        if status == 1:  # 完成
-                            break
-                        elif status == 2:  # 失败
-                            break
-                        time.sleep(2)
-                        waited += 2
-
-                    if status != 1:
-                        # 潮流不收敛，N-1失败
-                        result = {
-                            "branch_id": branch["id"],
-                            "branch_name": branch["name"],
-                            "status": "failed",
-                            "converged": False,
-                            "violation": "潮流不收敛",
-                        }
-                        failed += 1
-                        log("ERROR", f"  -> N-1失败: 潮流不收敛")
-                    else:
-                        # 潮流收敛，进一步检查结果
-                        # 注意：这里简化处理，实际应检查电压和功率
-                        result = {
-                            "branch_id": branch["id"],
-                            "branch_name": branch["name"],
-                            "status": "passed",
-                            "converged": True,
-                            "violation": None,
-                        }
-                        passed += 1
-                        log("INFO", f"  -> N-1通过")
-
-                    results.append(result)
-
-                except (KeyError, AttributeError, ConnectionError) as e:
+                if job_result.success:
                     result = {
                         "branch_id": branch["id"],
                         "branch_name": branch["name"],
-                        "status": "error",
+                        "status": "passed",
+                        "converged": True,
+                        "violation": None,
+                    }
+                    passed += 1
+                    log("INFO", f"  -> N-1通过")
+                else:
+                    result = {
+                        "branch_id": branch["id"],
+                        "branch_name": branch["name"],
+                        "status": "failed",
                         "converged": False,
-                        "violation": str(e),
+                        "violation": "潮流不收敛",
                     }
                     failed += 1
-                    log("ERROR", f"  -> N-1异常: {e}")
-                    results.append(result)
+                    log("ERROR", f"  -> N-1失败: 潮流不收敛")
 
-            # 5. 汇总结果
-            log("INFO", "=" * 50)
+                results.append(result)
+
             log("INFO", f"N-1校核完成: 通过 {passed}, 失败 {failed}")
-            log(
-                "INFO",
-                f"通过率: {passed / len(branches) * 100:.1f}%" if branches else "N/A",
-            )
+            log(f"通过率: {passed / len(branches) * 100:.1f}%" if branches else "N/A")
 
-            # 6. 导出结果
             output_config = config.get("output", {})
-            output_path = Path(output_config.get("path", "./results/"))
-            output_path.mkdir(parents=True, exist_ok=True)
-
-            prefix = output_config.get("prefix", "n1_security")
-            use_timestamp = output_config.get("timestamp", True)
-
-            filename = prefix
-            if use_timestamp:
-                filename += f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            filename += ".json"
-
-            filepath = output_path / filename
+            output = OutputConfig(
+                path=output_config.get("path", "./results/"),
+                prefix=output_config.get("prefix", "n1_security"),
+                timestamp=output_config.get("timestamp", True),
+            )
 
             result_data = {
                 "model_name": model.name,
@@ -300,19 +245,11 @@ class N1SecuritySkill(SkillBase):
                 "failed_branches": [r for r in results if r["status"] != "passed"],
             }
 
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(result_data, f, indent=2, ensure_ascii=False)
-
-            artifacts.append(
-                Artifact(
-                    type="json",
-                    path=str(filepath),
-                    size=filepath.stat().st_size,
-                    description="N-1安全校核报告",
-                )
+            export_result = save_json(
+                result_data, output, description="N-1安全校核报告"
             )
-
-            log("INFO", f"结果已保存: {filepath}")
+            if export_result.artifact:
+                artifacts.append(export_result.artifact)
 
             return SkillResult(
                 skill_name=self.name,

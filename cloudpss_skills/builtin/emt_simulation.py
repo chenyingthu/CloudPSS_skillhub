@@ -4,10 +4,9 @@ EMT Simulation Skill
 运行EMT暂态仿真并导出波形数据。
 """
 
+import csv
 import json
 import logging
-import sys
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
@@ -21,7 +20,12 @@ from cloudpss_skills.core import (
     ValidationResult,
     register,
 )
-from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_emt, setup_auth
+from cloudpss_skills.core import (
+    setup_auth,
+    reload_model,
+    run_emt_and_wait,
+    OutputConfig,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -135,8 +139,6 @@ class EmtSimulationSkill(SkillBase):
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
         """执行EMT仿真"""
-        from cloudpss import Model, setToken
-
         start_time = datetime.now()
         logs = []
         artifacts = []
@@ -149,36 +151,16 @@ class EmtSimulationSkill(SkillBase):
 
         try:
             setup_auth(config)
-
-            # 1. 加载token
-            log("INFO", "加载认证信息...")
-            auth = config.get("auth", {})
-            token = auth.get("token")
-
-            if not token:
-                token_file = auth.get("token_file", ".cloudpss_token")
-                token_path = Path(token_file)
-                if not token_path.exists():
-                    raise FileNotFoundError(f"Token文件不存在: {token_file}")
-                token = token_path.read_text().strip()
-
-            setToken(token)
             log("INFO", "认证成功")
 
-            # 2. 获取模型
-            log("INFO", "获取模型...")
             model_config = config["model"]
-            model_rid = model_config["rid"]
+            model = reload_model(
+                model_config["rid"],
+                model_config.get("source", "cloud"),
+                config,
+            )
+            log("INFO", f"模型: {model.name} ({model.rid})")
 
-            if model_config.get("source") == "local":
-                model = Model.load(model_rid)
-            else:
-                model = load_or_fetch_model(model_config, config)
-
-            log("INFO", f"模型名称: {model.name}")
-            log("INFO", f"模型RID: {model.rid}")
-
-            # 3. 检查EMT拓扑
             log("INFO", "检查EMT拓扑...")
             try:
                 topology = model.fetchTopology(implementType="emtp")
@@ -189,89 +171,65 @@ class EmtSimulationSkill(SkillBase):
                 log("ERROR", f"拓扑检查失败: {e}")
                 raise RuntimeError(f"EMT拓扑检查失败: {e}")
 
-            # 4. 运行仿真
             log("INFO", "启动EMT仿真...")
-            job = run_emt(model, config)
-            log("INFO", f"任务已创建，ID: {job.id}")
-
-            # 5. 等待完成
             timeout = config.get("simulation", {}).get("timeout", 300)
-            status = self._wait_for_completion(job, timeout, log)
+            job_result = run_emt_and_wait(model, config, timeout=timeout, log_func=log)
 
-            if status != 1:
-                raise RuntimeError(f"仿真未成功完成，状态码: {status}")
+            if not job_result.success:
+                raise RuntimeError(job_result.error or "EMT仿真失败")
 
-            log("INFO", "仿真成功完成")
-
-            # 6. 提取结果
-            log("INFO", "提取仿真结果...")
-            result = job.result
-
+            result = job_result.result
             if result is None:
                 raise RuntimeError("结果为空")
 
             plots = list(result.getPlots())
             log("INFO", f"波形分组数: {len(plots)}")
 
-            # 7. 导出数据
             output_config = config.get("output", {})
+            output = OutputConfig(
+                path=output_config.get("path", "./results/"),
+                prefix=output_config.get("prefix", "emt_output"),
+                timestamp=output_config.get("timestamp", True),
+            )
             output_format = output_config.get("format", "csv")
-            output_path = Path(output_config.get("path", "./results/"))
-            prefix = output_config.get("prefix", "emt_output")
-            use_timestamp = output_config.get("timestamp", True)
 
-            # 创建输出目录
-            output_path.mkdir(parents=True, exist_ok=True)
-
-            # 构建文件名
-            filename_parts = [prefix]
-            if use_timestamp:
-                filename_parts.append(datetime.now().strftime("%Y%m%d_%H%M%S"))
-            filename_base = "_".join(filename_parts)
-
-            # 导出每个波形分组
             exported_files = []
             for i, plot in enumerate(plots):
                 plot_key = plot.get("key") or plot.get("name") or f"plot_{i}"
                 channel_names = result.getPlotChannelNames(i)
-
                 if not channel_names:
                     continue
 
-                # 根据格式导出
                 if output_format == "csv":
                     filepath = self._export_csv(
                         result,
                         i,
                         channel_names,
-                        output_path / f"{filename_base}_{plot_key}.csv",
+                        output.get_path(suffix=plot_key, extension="csv"),
                     )
-                    exported_files.append(filepath)
-                elif output_format == "json":
+                else:
                     filepath = self._export_json(
                         result,
                         i,
                         channel_names,
-                        output_path / f"{filename_base}_{plot_key}.json",
+                        output.get_path(suffix=plot_key, extension="json"),
                     )
+                if filepath:
                     exported_files.append(filepath)
-
-            for filepath in exported_files:
-                artifacts.append(
-                    Artifact(
-                        type=output_format,
-                        path=str(filepath),
-                        size=filepath.stat().st_size,
-                        description=f"波形数据 ({output_format.upper()})",
+                    artifacts.append(
+                        Artifact(
+                            type=output_format,
+                            path=str(filepath),
+                            size=filepath.stat().st_size,
+                            description=f"波形数据 ({output_format.upper()})",
+                        )
                     )
-                )
-                log("INFO", f"导出: {filepath}")
+                    log("INFO", f"导出: {filepath}")
 
-            # 构建结果数据
             result_data = {
                 "model_name": model.name,
                 "model_rid": model.rid,
-                "job_id": job.id,
+                "job_id": job_result.job.id,
                 "plot_count": len(plots),
                 "plots": [],
             }
@@ -316,33 +274,6 @@ class EmtSimulationSkill(SkillBase):
                 logs=logs,
                 error=str(e),
             )
-
-    def _wait_for_completion(self, job, timeout: int, log_func) -> int:
-        """等待任务完成"""
-        status_map = {0: "运行中", 1: "已完成", 2: "失败"}
-        start_time = time.time()
-
-        while True:
-            status = job.status()
-
-            if status == 1:
-                log_func("INFO", "仿真已完成")
-                return status
-            if status == 2:
-                log_func("ERROR", "仿真失败")
-                return status
-
-            elapsed = int(time.time() - start_time)
-            if elapsed > timeout:
-                log_func("ERROR", f"仿真超时 ({timeout}s)")
-                return -1
-
-            if elapsed % 10 == 0:  # 每10秒报告一次
-                log_func(
-                    "INFO", f"仿真{status_map.get(status, status)}... ({elapsed}s)"
-                )
-
-            time.sleep(3)
 
     def _export_csv(
         self, result, plot_index: int, channel_names: list, filepath: Path

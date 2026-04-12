@@ -2,7 +2,7 @@
 Short Circuit Analysis Skill
 
 短路电流计算 - 基于EMT仿真计算短路电流
-支持三相短路、单相接地短路、两相短路
+支持三相短路、单相接地短路，两相短路
 提取峰值电流、稳态短路电流、直流分量
 """
 
@@ -10,7 +10,6 @@ import csv
 import json
 import logging
 import math
-from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -24,7 +23,14 @@ from cloudpss_skills.core import (
     ValidationResult,
     register,
 )
-from cloudpss_skills.core.auth_utils import load_or_fetch_model, run_emt, setup_auth
+from cloudpss_skills.core import (
+    setup_auth,
+    clone_model,
+    reload_model,
+    run_emt_and_wait,
+    OutputConfig,
+    save_json,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -171,8 +177,6 @@ class ShortCircuitSkill(SkillBase):
         }
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
-        from cloudpss import Model
-
         start_time = datetime.now()
         logs = []
         artifacts = []
@@ -186,7 +190,11 @@ class ShortCircuitSkill(SkillBase):
         try:
             setup_auth(config)
             model_config = config["model"]
-            base_model = load_or_fetch_model(model_config, config)
+            base_model = reload_model(
+                model_config["rid"],
+                model_config.get("source", "cloud"),
+                config,
+            )
             log("INFO", f"模型: {base_model.name}")
 
             fault_config = config["fault"]
@@ -212,17 +220,19 @@ class ShortCircuitSkill(SkillBase):
             log("INFO", f"短路电阻: {fault_resistance} Ω")
             log("INFO", f"故障时间: {fs}s ~ {fe}s")
 
-            # 准备模型
-            working_model = Model(deepcopy(base_model.toJSON()))
+            working_model = clone_model(base_model)
 
-            # 配置故障
             self._configure_fault(
                 working_model, fault_type, fault_resistance, fs, fe, log
             )
 
-            # 运行EMT
             log("INFO", "运行EMT仿真...")
-            result = run_emt(working_model, config)
+            job_result = run_emt_and_wait(working_model, config, log_func=log)
+
+            if not job_result.success:
+                raise RuntimeError(job_result.error or "EMT仿真失败")
+
+            result = job_result.result
             log("INFO", "EMT仿真完成")
 
             # 分析结果

@@ -7,7 +7,6 @@ Contingency Analysis Skill
 
 import json
 import logging
-from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -21,10 +20,13 @@ from cloudpss_skills.core import (
     ValidationResult,
     register,
 )
-from cloudpss_skills.core.auth_utils import (
-    load_or_fetch_model,
-    run_powerflow,
+from cloudpss_skills.core import (
     setup_auth,
+    clone_model,
+    reload_model,
+    run_powerflow_and_wait,
+    OutputConfig,
+    save_json,
 )
 from cloudpss_skills.core.utils import parse_cloudpss_table
 
@@ -177,8 +179,6 @@ class ContingencyAnalysisSkill(SkillBase):
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
         """执行预想事故分析"""
-        from cloudpss import Model, setToken
-
         start_time = datetime.now()
         logs = []
         artifacts = []
@@ -191,26 +191,16 @@ class ContingencyAnalysisSkill(SkillBase):
 
         try:
             setup_auth(config)
-
-            log("INFO", "加载认证...")
-            auth = config.get("auth", {})
-            token = auth.get("token")
-            if not token:
-                token_file = auth.get("token_file", ".cloudpss_token")
-                token_path = Path(token_file)
-                if not token_path.exists():
-                    raise FileNotFoundError(f"Token文件不存在: {token_file}")
-                token = token_path.read_text().strip()
-            setToken(token)
             log("INFO", "认证成功")
 
             model_config = config["model"]
-            model_rid = model_config["rid"]
-            model_source = model_config.get("source", "cloud")
-            base_model = load_or_fetch_model(model_config, config)
+            base_model = reload_model(
+                model_config["rid"],
+                model_config.get("source", "cloud"),
+                config,
+            )
             log("INFO", f"模型: {base_model.name}")
 
-            # 获取配置参数
             contingency_config = config.get("contingency", {})
             analysis_config = config.get("analysis", {})
             ranking_config = config.get("ranking", {})
@@ -238,20 +228,13 @@ class ContingencyAnalysisSkill(SkillBase):
             )
             log("INFO", f"热稳定限值: {thermal_limit:.3f} pu")
 
-            # 获取基态潮流结果
             log("INFO", "计算基态潮流...")
-            base_job = run_powerflow(base_model, config)
-            import time
+            base_job_result = run_powerflow_and_wait(base_model, config)
 
-            while True:
-                status = base_job.status()
-                if status == 1:
-                    break
-                if status == 2:
-                    raise RuntimeError("基态潮流计算失败")
-                time.sleep(1)
+            if not base_job_result.success:
+                raise RuntimeError(base_job_result.error or "基态潮流计算失败")
 
-            base_result = base_job.result
+            base_result = base_job_result.result
             base_buses_raw = base_result.getBuses()
             base_branches_raw = base_result.getBranches()
 
@@ -598,58 +581,36 @@ class ContingencyAnalysisSkill(SkillBase):
         check_voltage = analysis_config.get("check_voltage", True)
         check_thermal = analysis_config.get("check_thermal", True)
 
-        # 重新加载原始模型（每次重新加载以确保干净状态）
-        model_config = {"rid": model_rid, "source": model_source}
-        working_model = load_or_fetch_model(model_config, config)
+        working_model = clone_model(base_model)
 
         for comp_key in contingency["components"]:
             try:
-                # Remove leading '/' if present (fetchTopology adds it, but removeComponent doesn't need it)
                 clean_key = comp_key.lstrip("/")
                 working_model.removeComponent(clean_key)
             except (KeyError, AttributeError) as e:
                 log_func("WARNING", f"无法移除元件 {comp_key}: {e}")
 
-        # DEBUG: Check component count
         try:
             all_comps = working_model.getAllComponents()
             log_func("INFO", f"Model has {len(all_comps)} components after removal")
         except (KeyError, AttributeError) as e:
             log_func("WARNING", f"Could not get component count: {e}")
 
-        # 运行潮流计算
-        job = run_powerflow(working_model, config)
+        job_result = run_powerflow_and_wait(working_model, config)
 
-        import time
-
-        max_wait = 30
-        waited = 0
-        while waited < max_wait:
-            status = job.status()
-            if status == 1:
-                break
-            if status == 2:
-                result["status"] = "FAIL"
-                result["violations"].append(
-                    {
-                        "type": "CONVERGENCE",
-                        "description": "潮流计算不收敛",
-                    }
-                )
-                return result
-            time.sleep(1)
-            waited += 1
-
-        if waited >= max_wait:
-            result["status"] = "TIMEOUT"
+        if not job_result.success:
+            result["status"] = "FAIL"
+            result["violations"].append(
+                {
+                    "type": "CONVERGENCE",
+                    "description": "潮流计算不收敛",
+                }
+            )
             return result
 
-        # 获取结果
-        pf_result = job.result
+        pf_result = job_result.result
         buses_raw = pf_result.getBuses()
         branches_raw = pf_result.getBranches()
-
-        # Parse table format
         buses = self._parse_table(buses_raw)
         branches = self._parse_table(branches_raw)
 

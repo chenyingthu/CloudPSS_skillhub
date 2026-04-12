@@ -12,7 +12,10 @@ from cloudpss_skills.core.base import SkillStatus
 class TestPowerFlowUnit:
     @patch("cloudpss.setToken")
     @patch("cloudpss.Model")
-    def test_run_fails_when_result_tables_have_no_rows(self, mock_model_class, mock_set_token, tmp_path):
+    @patch("cloudpss_skills.core.model_utils.Model")
+    def test_run_fails_when_result_tables_have_no_rows(
+        self, mock_model_utils_model, mock_model_class, mock_set_token, tmp_path
+    ):
         skill = PowerFlowSkill()
 
         model = Mock()
@@ -22,10 +25,17 @@ class TestPowerFlowUnit:
         job = Mock()
         job.id = "job-1"
         job.status.return_value = 1
-        job.result.getBuses.return_value = [{"type": "table", "data": {"columns": [{"name": "Vm", "data": []}]}}]
-        job.result.getBranches.return_value = [{"type": "table", "data": {"columns": [{"name": "Branch", "data": []}]}}]
+        job.result.getBuses.return_value = [
+            {"type": "table", "data": {"columns": [{"name": "Vm", "data": []}]}}
+        ]
+        job.result.getBranches.return_value = [
+            {"type": "table", "data": {"columns": [{"name": "Branch", "data": []}]}}
+        ]
         model.runPowerFlow.return_value = job
         mock_model_class.fetch.return_value = model
+        mock_model_class.load.return_value = model
+        mock_model_utils_model.fetch.return_value = model
+        mock_model_utils_model.load.return_value = model
 
         token_file = tmp_path / ".cloudpss_token"
         token_file.write_text("dummy", encoding="utf-8")
@@ -35,7 +45,11 @@ class TestPowerFlowUnit:
                 "skill": "power_flow",
                 "auth": {"token_file": str(token_file)},
                 "model": {"rid": "model/test", "source": "cloud"},
-                "output": {"path": str(tmp_path), "timestamp": False, "prefix": "pf_unit"},
+                "output": {
+                    "path": str(tmp_path),
+                    "timestamp": False,
+                    "prefix": "pf_unit",
+                },
             }
         )
 

@@ -7,9 +7,7 @@ Maintenance Security Skill
 import csv
 import json
 import logging
-from copy import deepcopy
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from cloudpss_skills.core import (
@@ -21,10 +19,13 @@ from cloudpss_skills.core import (
     ValidationResult,
     register,
 )
-from cloudpss_skills.core.auth_utils import (
-    load_or_fetch_model,
-    run_powerflow,
+from cloudpss_skills.core import (
     setup_auth,
+    clone_model,
+    reload_model,
+    run_powerflow_and_wait,
+    OutputConfig,
+    save_json,
 )
 from cloudpss_skills.core.utils import parse_cloudpss_table
 
@@ -132,9 +133,6 @@ class MaintenanceSecuritySkill(SkillBase):
         return result
 
     def run(self, config: Dict[str, Any]) -> SkillResult:
-        from cloudpss import Model, setToken
-        import time
-
         start_time = datetime.now()
         logs = []
         artifacts = []
@@ -147,23 +145,14 @@ class MaintenanceSecuritySkill(SkillBase):
 
         try:
             setup_auth(config)
-
-            # 认证
-            log("INFO", "加载认证...")
-            auth = config.get("auth", {})
-            token = auth.get("token")
-            if not token:
-                token_file = auth.get("token_file", ".cloudpss_token")
-                token_path = Path(token_file)
-                if not token_path.exists():
-                    raise FileNotFoundError(f"Token文件不存在: {token_file}")
-                token = token_path.read_text().strip()
-            setToken(token)
             log("INFO", "认证成功")
 
-            # 获取模型
             model_config = config["model"]
-            base_model = load_or_fetch_model(model_config, config)
+            base_model = reload_model(
+                model_config["rid"],
+                model_config.get("source", "cloud"),
+                config,
+            )
             log("INFO", f"模型: {base_model.name}")
 
             # 获取配置
@@ -181,7 +170,7 @@ class MaintenanceSecuritySkill(SkillBase):
 
             # 计划停运
             log("INFO", f"执行计划停运: {maintenance_id} ({maintenance_desc})")
-            working_model = Model(deepcopy(base_model.toJSON()))
+            working_model = clone_model(base_model)
             self._disable_branch(working_model, maintenance_id)
             maint_buses, maint_branches = self._run_powerflow(working_model, config)
 
@@ -334,23 +323,14 @@ class MaintenanceSecuritySkill(SkillBase):
             )
 
     def _run_powerflow(self, model, config: Optional[Dict] = None):
-        job = run_powerflow(model, config)
-        while True:
-            status = job.status()
-            if status == 1:
-                break
-            if status == 2:
-                raise RuntimeError("潮流计算失败")
-            import time
-
-            time.sleep(2)
-        result = job.result
+        job_result = run_powerflow_and_wait(model, config)
+        if not job_result.success:
+            raise RuntimeError(job_result.error or "潮流计算失败")
+        result = job_result.result
         if result is None:
             raise RuntimeError("潮流结果为空")
-        # 获取原始表结构并转换为行字典列表
         buses_table = result.getBuses()
         branches_table = result.getBranches()
-        # 转换为行字典格式
         buses = self._table_to_rows(buses_table)
         branches = self._table_to_rows(branches_table)
         if not buses or not branches:

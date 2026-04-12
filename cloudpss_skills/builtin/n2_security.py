@@ -6,9 +6,6 @@ N-2安全校核技能 (n2_security)
       包括潮流收敛性、电压越限、设备过载等指标的校验。
 
 适用：关键输电通道分析、极端工况评估、系统韧性评估
-
-作者: Claude Code
-日期: 2026-04-01
 """
 
 import logging
@@ -22,12 +19,13 @@ from cloudpss_skills.core.base import (
     SkillResult,
     SkillStatus,
     ValidationResult,
+    Artifact,
+    LogEntry,
 )
-from cloudpss_skills.core.auth_utils import (
+from cloudpss_skills.core import (
     setup_auth,
-    DEFAULT_TIMEOUT,
-    load_or_fetch_model,
-    run_powerflow,
+    reload_model,
+    run_powerflow_and_wait,
 )
 from cloudpss_skills.core.registry import register
 from cloudpss_skills.core.utils import parse_cloudpss_table
@@ -335,7 +333,7 @@ class N2SecuritySkill(SkillBase):
         analysis_config: Dict,
     ) -> List[N2ContingencyResult]:
         """执行N-2分析"""
-        import time
+        from cloudpss_skills.core.model_utils import clone_model
 
         results = []
         check_voltage = analysis_config.get("check_voltage", True)
@@ -344,16 +342,20 @@ class N2SecuritySkill(SkillBase):
         voltage_max = analysis_config.get("voltage_max", 1.05)
         thermal_limit = analysis_config.get("thermal_limit", 1.0)
 
+        base_model = reload_model(
+            model_config["rid"],
+            model_config.get("source", "cloud"),
+            analysis_config,
+        )
+
         for i, (branch1, branch2) in enumerate(scenarios, 1):
             logger.info(
                 f"[{i}/{len(scenarios)}] N-2故障: {branch1['name']} + {branch2['name']}"
             )
 
             try:
-                # 重新加载模型
-                working_model = load_or_fetch_model(model_config, analysis_config)
+                working_model = clone_model(base_model)
 
-                # 移除两个支路
                 try:
                     working_model.removeComponent(branch1["id"])
                     working_model.removeComponent(branch2["id"])
@@ -378,24 +380,9 @@ class N2SecuritySkill(SkillBase):
                     )
                     continue
 
-                # 运行潮流计算
-                job = run_powerflow(working_model, analysis_config)
+                job_result = run_powerflow_and_wait(working_model, analysis_config)
 
-                # 等待完成
-                max_wait = 60
-                waited = 0
-                status = 0
-                while waited < max_wait:
-                    status = job.status()
-                    if status == 1:
-                        break
-                    elif status == 2:
-                        break
-                    time.sleep(1)
-                    waited += 1
-
-                if status != 1:
-                    # 潮流不收敛
+                if not job_result.success:
                     results.append(
                         N2ContingencyResult(
                             branch1_id=branch1["id"],
@@ -414,7 +401,7 @@ class N2SecuritySkill(SkillBase):
                     continue
 
                 # 潮流收敛，检查结果
-                pf_result = job.result
+                pf_result = job_result.result
                 violation = None
                 max_v = None
                 min_v = None
