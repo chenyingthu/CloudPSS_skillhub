@@ -139,6 +139,7 @@ python -m cloudpss_skills run --config pf.yaml
 
 - [用户手册](user_manual.md) - 完整的用户操作指南
 - [配置参考](config_reference.md) - 配置参数详细说明
+- [核心模块指南](../guides/core-modules.md) - job_runner, exporter, model_utils 等可复用核心模块
 
 ## 典型工作流
 
@@ -197,6 +198,70 @@ batch_task_manager → hdf5_export → result_compare
 5. **Agent使用指南** - 程序化调用方式
 6. **输出结果** - 结果数据结构
 7. **与其他技能的关联** - 技能组合建议
+
+## 技能调用最佳实践
+
+### 使用核心模块
+
+所有技能应使用核心模块（见[核心模块指南](../guides/core-modules.md)）：
+
+```python
+from cloudpss_skills.core import (
+    setup_auth,           # 认证
+    clone_model,          # 模型克隆
+    reload_model,         # 模型重载
+    run_powerflow_and_wait,  # 潮流执行
+    run_emt_and_wait,     # EMT执行
+    OutputConfig,         # 输出配置
+    save_json,            # JSON导出
+    save_csv,             # CSV导出
+)
+```
+
+### 技能链式调用
+
+```python
+from cloudpss_skills.core.registry import get_skill
+
+# 创建研究流程
+pipeline = get_skill("power_flow")
+pipeline.run({
+    "skill": "power_flow",
+    "model": {"rid": "model/holdme/IEEE39"},
+})
+
+# 链接后续技能
+n1 = get_skill("n1_security")
+result = n1.run({"skill": "n1_security", "model": {...}})
+```
+
+### 数据传递
+
+```python
+# 通过 artifacts 路径共享输出目录
+pf_result = pf_skill.run({"skill": "power_flow", "model": {...}})
+output_path = pf_result.artifacts[0].path
+
+n1_skill.run({
+    "skill": "n1_security",
+    "model": {...},
+    "output": {"path": output_path}  # 共享输出目录
+})
+```
+
+### 批量执行
+
+```python
+# 使用 batch_powerflow 批量计算多个模型
+batch_skill = get_skill("batch_powerflow")
+batch_skill.run({
+    "skill": "batch_powerflow",
+    "models": [
+        {"rid": "model/holdme/IEEE3"},
+        {"rid": "model/holdme/IEEE39"},
+    ]
+})
+```
 
 ## 文档规范
 
