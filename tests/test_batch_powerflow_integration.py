@@ -62,7 +62,7 @@ class TestBatchPowerFlowSkillIntegration:
         """Test batch power flow on IEEE39 model"""
         config = {
             "skill": "batch_powerflow",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/chenying/IEEE39"},
             "scenarios": [
                 {"name": "base", "modifications": {}},
@@ -80,7 +80,7 @@ class TestBatchPowerFlowSkillIntegration:
         """Test result has expected data structure"""
         config = {
             "skill": "batch_powerflow",
-            "auth": {"token": auth_token},
+            "auth": {"token": auth_token, "server": "internal"},
             "model": {"rid": "model/chenying/IEEE39"},
             "scenarios": [
                 {"name": "base", "modifications": {}},
