@@ -25,6 +25,8 @@ from cloudpss_skills.core import (
     reload_model,
     run_emt_and_wait,
     OutputConfig,
+    get_components_by_definition,
+    update_component_args,
 )
 
 logger = logging.getLogger(__name__)
@@ -83,6 +85,25 @@ class EmtSimulationSkill(SkillBase):
                             "default": 300,
                             "description": "超时时间（秒）",
                         },
+                        "sampling_freq": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "default": 2000,
+                            "description": "采样频率（Hz）",
+                        },
+                    },
+                },
+                "fault": {
+                    "type": "object",
+                    "properties": {
+                        "start_time": {
+                            "type": "number",
+                            "description": "故障开始时间（秒），修改_newFaultResistor_3p元件的fs参数",
+                        },
+                        "end_time": {
+                            "type": "number",
+                            "description": "故障结束时间（秒），修改_newFaultResistor_3p元件的fe参数",
+                        },
                     },
                 },
                 "output": {
@@ -107,7 +128,7 @@ class EmtSimulationSkill(SkillBase):
             "skill": self.name,
             "auth": {"token_file": ".cloudpss_token"},
             "model": {"rid": "model/holdme/IEEE3", "source": "cloud"},
-            "simulation": {"timeout": 300},
+            "simulation": {"timeout": 300, "sampling_freq": 2000},
             "output": {
                 "format": "csv",
                 "path": "./results/",
@@ -160,6 +181,17 @@ class EmtSimulationSkill(SkillBase):
                 config,
             )
             log("INFO", f"模型: {model.name} ({model.rid})")
+
+            # 可选：调整故障参数（ieee3_prep 功能合并）
+            fault_config = config.get("fault", {})
+            if fault_config:
+                model = self._apply_fault_parameters(model, fault_config, log)
+
+            # 可选：调整采样频率
+            sampling_freq = config.get("simulation", {}).get("sampling_freq")
+            if sampling_freq and sampling_freq != 2000:
+                log("INFO", f"设置采样频率: {sampling_freq}Hz")
+                model = self._set_sampling_freq(model, sampling_freq, log)
 
             log("INFO", "检查EMT拓扑...")
             try:
@@ -274,6 +306,45 @@ class EmtSimulationSkill(SkillBase):
                 logs=logs,
                 error=str(e),
             )
+
+    def _apply_fault_parameters(self, model, fault_config: Dict, log_func) -> Any:
+        """调整故障元件参数（fs/fe）"""
+        FAULT_DEFINITION = "model/CloudPSS/_newFaultResistor_3p"
+        components = get_components_by_definition(model, FAULT_DEFINITION)
+        if not components:
+            log_func("WARN", "未找到故障元件 model/CloudPSS/_newFaultResistor_3p，跳过故障参数调整")
+            return model
+
+        fault = components[0]
+        new_start = fault_config.get("start_time")
+        new_end = fault_config.get("end_time")
+
+        args = dict(fault.args) if hasattr(fault, "args") else {}
+        if new_start is not None:
+            args["fs"] = {"source": str(new_start), "ɵexp": ""}
+            log_func("INFO", f"故障开始时间: {new_start}s")
+        if new_end is not None:
+            args["fe"] = {"source": str(new_end), "ɵexp": ""}
+            log_func("INFO", f"故障结束时间: {new_end}s")
+
+        update_component_args(model, fault.id, args)
+        return model
+
+    def _set_sampling_freq(self, model, sampling_freq: int, log_func) -> Any:
+        """调整量测通道采样频率"""
+        CHANNEL_DEFINITION = "model/CloudPSS/_newChannel"
+        channels = get_components_by_definition(model, CHANNEL_DEFINITION)
+        if not channels:
+            log_func("WARN", "未找到量测通道，跳过采样频率调整")
+            return model
+
+        for channel in channels:
+            args = dict(channel.args) if hasattr(channel, "args") else {}
+            args["Freq"] = {"source": str(sampling_freq), "ɵexp": ""}
+            update_component_args(model, channel.id, args)
+
+        log_func("INFO", f"已设置 {len(channels)} 个通道的采样频率: {sampling_freq}Hz")
+        return model
 
     def _export_csv(
         self, result, plot_index: int, channel_names: list, filepath: Path

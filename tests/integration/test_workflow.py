@@ -65,10 +65,6 @@ class TestSkillExecution(unittest.TestCase):
         """测试潮流计算技能存在"""
         self.assertTrue(has_skill("power_flow"))
 
-    def test_ieee3_prep_skill_exists(self):
-        """测试IEEE3准备技能存在"""
-        self.assertTrue(has_skill("ieee3_prep"))
-
     def test_waveform_export_skill_exists(self):
         """测试波形导出技能存在"""
         self.assertTrue(has_skill("waveform_export"))

@@ -2,7 +2,7 @@
 """
 完整真实测试剩余6个技能 (Integration Tests)
 Requires valid CloudPSS token to run.
-测试目标：n1_security, topology_check, batch_powerflow, ieee3_prep, result_compare, param_scan
+测试目标：n1_security, topology_check, batch_powerflow, result_compare, param_scan
 """
 
 import pytest
@@ -158,51 +158,6 @@ def test_batch_powerflow_real():
         if result.artifacts:
             for art in result.artifacts:
                 print(f"\n  生成文件: {art.path}")
-
-        return True
-    else:
-        print(f"✗ 失败: {result.error}")
-        return False
-
-
-@pytest.mark.integration
-def test_ieee3_prep_real():
-    """真实测试IEEE3模型准备"""
-    log_step(4, "IEEE3模型准备 (ieee3_prep)")
-
-    skill = get_skill("ieee3_prep")
-    config = skill.get_default_config()
-    config["output"]["path"] = RESULTS_DIR
-
-    print("配置:")
-    print(f"  模型: {config['model']['rid']}")
-    print(
-        f"  故障时间: {config['fault']['start_time']}s - {config['fault']['end_time']}s"
-    )
-    print(f"  采样频率: {config['output']['sampling_freq']}Hz")
-
-    print("\n执行模型准备...")
-    result = skill.run(config)
-
-    print(f"状态: {result.status.value}")
-
-    if result.status.value == "success":
-        data = result.data
-        print(f"\n结果:")
-        print(f"  模型: {data['model_name']}")
-        print(f"  RID: {data['model_rid']}")
-        print(f"  输出: {data['output_path']}")
-
-        if result.artifacts:
-            for art in result.artifacts:
-                print(f"\n  生成文件: {art.path}")
-                print(f"    大小: {art.size} bytes")
-
-        # 验证文件存在
-        if os.path.exists(data["output_path"]):
-            print(f"\n  ✓ 文件验证: 存在")
-        else:
-            print(f"\n  ✗ 文件验证: 不存在")
 
         return True
     else:
@@ -437,9 +392,6 @@ def main():
     if job.status() == 1:
         job_ids.append(job.id)
         print(f"  ✓ PF Job: {job.id}")
-
-    # 测试4: IEEE3模型准备
-    results["ieee3_prep"] = test_ieee3_prep_real()
 
     # 测试5: 结果对比（如果有2个Job ID）
     if len(job_ids) >= 2:

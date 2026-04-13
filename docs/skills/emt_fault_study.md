@@ -323,7 +323,7 @@ if result.status.value == "FAILED":
     if "Token文件不存在" in error_msg:
         print("错误: 请创建.cloudpss_token文件")
     elif "未找到故障元件" in error_msg:
-        print("错误: 模型未配置故障元件，请先运行ieee3_prep")
+        print("错误: 模型未配置故障元件，请在emt_simulation中配置fault参数")
     elif "未找到电压量测通道" in error_msg:
         print("错误: 模型未配置电压量测通道")
     elif "未找到EMT任务" in error_msg:
@@ -427,9 +427,7 @@ RMS = sqrt(sum(v^2) / n)
 ## 与其他技能的关联
 
 ```
-ieee3_prep
-    ↓ (准备EMT模型)
-emt_simulation
+emt_simulation (配置fault参数)
     ↓ (基础EMT仿真)
 emt_fault_study
     ↓ (三工况对比)
@@ -440,7 +438,7 @@ fault_clearing_scan / fault_severity_scan
 
 ### 依赖关系
 
-- **前置依赖**: `ieee3_prep`（准备EMT模型）
+- **前置依赖**: 模型需已配置EMT拓扑和故障元件
 - **相关技能**:
   - `emt_simulation`: 基础EMT仿真
   - `fault_clearing_scan`: 故障切除时间扫描
@@ -463,8 +461,8 @@ fault_clearing_scan / fault_severity_scan
 
 **解决**:
 ```bash
-# 运行ieee3_prep准备模型
-python -m cloudpss_skills run --config config/ieee3_prep.yaml
+# 确保模型包含 _newFaultResistor_3p 故障元件
+# 可通过 emt_simulation 的 fault 配置自动调整故障参数
 ```
 
 ### 问题2: 未找到电压量测通道

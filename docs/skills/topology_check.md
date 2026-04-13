@@ -519,16 +519,9 @@ island_detection:
 - 未配置输出通道
 
 **解决**:
-- 使用`ieee3_prep`技能准备EMT模型
+- 使用 `auto_channel_setup` 技能配置EMT模型
 - 配置电压/电流量测信号
 - 添加输出通道配置
-
-```yaml
-# 运行EMT准备技能
-skill: ieee3_prep
-model:
-  rid: model/holdme/IEEE3
-```
 
 ### 问题4: 参数检查误报
 

@@ -267,7 +267,7 @@ if result.status.value == "FAILED":
     elif "模型不存在" in error_msg:
         print("错误: 请检查模型RID是否正确")
     elif "EMT拓扑检查失败" in error_msg:
-        print("错误: 模型未配置EMT参数，先运行ieee3_prep")
+        print("错误: 模型未配置EMT参数，请确保模型包含EMT拓扑和量测通道")
     else:
         print(f"未知错误: {error_msg}")
 ```
@@ -414,8 +414,8 @@ disturbance_severity
 
 **解决**:
 ```bash
-# 先运行ieee3_prep准备模型
-python -m cloudpss_skills run --config config/ieee3_prep.yaml
+# 确保模型已配置EMT拓扑和量测通道
+# 可直接在emt_simulation中配置fault参数和sampling_freq
 ```
 
 ### 问题2: 仿真时间过长

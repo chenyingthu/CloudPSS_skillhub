@@ -296,7 +296,7 @@ if result.status.value == "FAILED":
     elif "模型不存在" in error_msg:
         print("错误: 请检查模型RID是否正确")
     elif "EMT仿真失败" in error_msg:
-        print("错误: 模型未配置EMT参数，先运行ieee3_prep")
+        print("错误: 模型未配置EMT参数，请确保模型包含EMT拓扑和故障元件")
     else:
         print(f"未知错误: {error_msg}")
 ```
@@ -418,8 +418,8 @@ H_eq = (ΔP * f_base) / (2 * RoCoF_max * S_base)
 ```
 power_flow
     ↓ (基础潮流)
-ieee3_prep
-    ↓ (EMT模型准备)
+emt_simulation (配置fault参数)
+    ↓ (EMT仿真)
 frequency_response
     ↓ (频率响应分析)
 transient_stability

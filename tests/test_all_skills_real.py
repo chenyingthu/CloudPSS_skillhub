@@ -308,48 +308,6 @@ output:
 
 
 @pytest.mark.integration
-def test_ieee3_prep_real():
-    """真实测试ieee3_prep"""
-    print("\n" + "=" * 70)
-    print("[6/10] ieee3_prep - IEEE3模型准备")
-    print("=" * 70)
-
-    config = """skill: ieee3_prep
-auth:
-  token_file: .cloudpss_token
-model:
-  rid: model/holdme/IEEE3
-  source: cloud
-modifications:
-  fault:
-    enable: true
-    time: 1.0
-    duration: 0.1
-  output_channels:
-    add_bus_voltage: true
-    add_load_current: true
-    add_generator_power: true
-output:
-  format: yaml
-  path: ./results/
-  filename: ieee3_prepared
-"""
-    config_path = "/tmp/ieee3_prep_real.yaml"
-    Path(config_path).write_text(config)
-
-    print("  6.1 验证配置...")
-    rc, out, err = run_shell_command(
-        f"python -m cloudpss_skills validate --config {config_path}"
-    )
-    if "[OK]" not in out:
-        return False, "配置验证失败"
-    print("    ✓ 配置验证通过")
-
-    print("  6.2 IEEE3模型准备配置已就绪")
-    return True, "配置验证通过"
-
-
-@pytest.mark.integration
 def test_waveform_export_real(job_id):
     """真实测试waveform_export"""
     print("\n" + "=" * 70)
@@ -563,10 +521,6 @@ def main():
     # 5. batch_powerflow
     ok, msg = test_batch_powerflow_real()
     results["batch_powerflow"] = ok
-
-    # 6. ieee3_prep
-    ok, msg = test_ieee3_prep_real()
-    results["ieee3_prep"] = ok
 
     # 测试4个"需要参数"技能
     print("\n" + "=" * 70)

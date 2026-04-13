@@ -13,7 +13,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from cloudpss_skills.builtin import (
     EmtSimulationSkill,
-    IEEE3PrepSkill,
     PowerFlowSkill,
     WaveformExportSkill,
     N1SecuritySkill,
@@ -78,21 +77,6 @@ class TestPowerFlowSkill(unittest.TestCase):
         self.assertEqual(defaults["algorithm"]["type"], "newton_raphson")
 
 
-class TestIEEE3PrepSkill(unittest.TestCase):
-    """测试IEEE3准备技能"""
-
-    def setUp(self):
-        self.skill = IEEE3PrepSkill()
-
-    def test_name(self):
-        self.assertEqual(self.skill.name, "ieee3_prep")
-
-    def test_fault_config(self):
-        defaults = self.skill.get_default_config()
-        self.assertEqual(defaults["fault"]["start_time"], 2.5)
-        self.assertEqual(defaults["fault"]["end_time"], 2.7)
-
-
 class TestWaveformExportSkill(unittest.TestCase):
     """测试波形导出技能"""
 
@@ -118,7 +102,7 @@ class TestSkillRegistry(unittest.TestCase):
         auto_discover()
         skill_names = [s.name for s in list_skills()]
         expected = [
-            "emt_simulation", "power_flow", "ieee3_prep", "waveform_export",
+            "emt_simulation", "power_flow", "waveform_export",
             "n1_security", "param_scan", "result_compare", "visualize",
             "topology_check", "batch_powerflow",
         ]

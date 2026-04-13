@@ -420,8 +420,6 @@ S_sc = √3 × V_base × I_steady
 ## 与其他技能的关联
 
 ```
-ieee3_prep
-    ↓ (准备EMT模型)
 short_circuit
     ↓ (短路电流结果)
 n1_security / contingency_analysis
@@ -431,7 +429,7 @@ protection_coordination
 
 ### 依赖关系
 
-- **前置依赖**: `ieee3_prep`（准备EMT拓扑）
+- **前置依赖**: 模型需已配置EMT拓扑和故障元件
 - **相关技能**:
   - `emt_simulation`: 基础EMT仿真
   - `emt_fault_study`: 故障研究分析
@@ -454,8 +452,8 @@ protection_coordination
 
 **解决**:
 ```bash
-# 先准备模型
-python -m cloudpss_skills run --config config/ieee3_prep.yaml
+# 确保模型已配置EMT拓扑和故障元件
+# 可通过 emt_simulation 的 fault 配置调整故障参数
 ```
 
 ### 问题2: 电流通道无数据

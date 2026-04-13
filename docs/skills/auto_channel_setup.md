@@ -365,8 +365,7 @@ measurements:
 
 ## 相关技能
 
-- **ieee3_prep**: IEEE3模型准备，包含基础量测配置
-- **emt_simulation**: EMT仿真执行，使用配置好的量测通道
+- **emt_simulation**: EMT仿真执行，支持故障参数和采样频率配置
 - **waveform_export**: 波形导出，处理仿真后的量测数据
 - **hdf5_export**: HDF5格式导出，适合大量测数据的存储
 

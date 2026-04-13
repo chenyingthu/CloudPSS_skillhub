@@ -1,6 +1,6 @@
 # CloudPSS 技能系统文档
 
-配置驱动的电力系统仿真工具包，包含47个专业仿真技能。
+配置驱动的电力系统仿真工具包，包含46个专业仿真技能。
 
 ## 技能文档索引
 
@@ -45,7 +45,6 @@
 | `param_scan` | 参数扫描分析 | [查看文档](param_scan.md) |
 | `fault_clearing_scan` | 故障清除时间扫描 | [查看文档](fault_clearing_scan.md) |
 | `fault_severity_scan` | 故障严重度扫描 | [查看文档](fault_severity_scan.md) |
-| `ieee3_prep` | IEEE3模型准备 | [查看文档](ieee3_prep.md) |
 | `batch_task_manager` | 批处理任务管理 | [查看文档](batch_task_manager.md) |
 | `config_batch_runner` | 多配置批量运行 | [查看文档](config_batch_runner.md) |
 | `study_pipeline` | 研究流水线编排 | [查看文档](study_pipeline.md) |
@@ -179,7 +178,7 @@ n1_security → contingency_analysis → result_compare
 ### 工作流4: 故障分析
 
 ```
-ieee3_prep → emt_fault_study → disturbance_severity → visualize
+emt_fault_study → disturbance_severity → visualize
 ```
 
 ### 工作流5: 批量仿真

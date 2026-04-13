@@ -258,7 +258,7 @@ if result.status.value == "FAILED":
     elif "模型不存在" in error_msg:
         print("错误: 请检查模型RID是否正确，如model/holdme/IEEE3")
     elif "EMT拓扑检查失败" in error_msg:
-        print("错误: 模型未配置EMT拓扑，请先运行ieee3_prep技能准备模型")
+        print("错误: 模型未配置EMT拓扑，请确认模型包含EMT仿真所需的元件和任务配置")
     elif "仿真超时" in error_msg:
         print("错误: 仿真超时，请增加timeout配置或减少duration")
     elif "仿真失败" in error_msg:
@@ -337,9 +337,7 @@ dx/dt = f(x, t)
 ## 与其他技能的关联
 
 ```
-ieee3_prep
-    ↓ (准备EMT模型)
-emt_simulation
+emt_simulation (可通过 fault/sampling_freq 调整参数)
     ↓ (波形数据)
 visualize → waveform_export → disturbance_severity
     ↓
@@ -349,7 +347,9 @@ emt_fault_study / fault_clearing_scan / fault_severity_scan
 ### 依赖关系
 
 - **必需依赖**: CloudPSS SDK (`cloudpss`)
-- **前置依赖**: `ieee3_prep`（准备EMT拓扑）
+- **前置依赖**: 无（可直接运行）
+- 可通过 `fault.start_time` / `fault.end_time` 调整故障参数
+- 可通过 `simulation.sampling_freq` 调整采样频率
 - **后续技能**:
   - `visualize`: 可视化波形
   - `waveform_export`: 导出特定格式波形
@@ -372,11 +372,8 @@ emt_fault_study / fault_clearing_scan / fault_severity_scan
 
 **解决**:
 ```bash
-# 先运行ieee3_prep准备模型
-python -m cloudpss_skills run --config config/ieee3_prep.yaml
-# 或
-python -m cloudpss_skills init ieee3_prep --output prep.yaml
-python -m cloudpss_skills run --config prep.yaml
+# 通过配置直接调整故障参数
+# 在config中添加 fault 段即可，无需单独准备模型
 ```
 
 ### 问题2: 仿真超时
