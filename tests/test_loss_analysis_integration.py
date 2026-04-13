@@ -39,8 +39,7 @@ class TestLossAnalysisSkill:
     @pytest.fixture
     def valid_config(self):
         return {
-            "model": {"rid": "model/chenying/IEEE39"},
-            "auth": {"server": "internal"},
+            "model": {"rid": "model/holdme/IEEE39"},
             "analysis": {
                 "loss_calculation": {
                     "enabled": True,
@@ -90,7 +89,9 @@ class TestLossAnalysisSkill:
         result = skill.run(valid_config)
 
         print(f"   状态: {result.status.value}")
-        assert result.status in [SkillStatus.SUCCESS, SkillStatus.FAILED], f"执行失败: {result.error}"
+        assert result.status in [SkillStatus.SUCCESS, SkillStatus.FAILED], (
+            f"执行失败: {result.error}"
+        )
 
         # 验证返回数据
         assert result.data is not None
