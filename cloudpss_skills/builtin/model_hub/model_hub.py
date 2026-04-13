@@ -732,6 +732,9 @@ class ModelHubSkill(SkillBase):
             local_path = model_registry.save_local(name, model)
 
             if source_server != target_server:
+                from cloudpss.model.revision import ModelRevision
+                from cloudpss.utils.graphqlUtil import graphql_request
+
                 target_server_info = hub_config.get_server(target_server)
                 target_token = target_server_info.get("token")
                 if not target_token:
@@ -766,24 +769,60 @@ class ModelHubSkill(SkillBase):
                     os.environ["CLOUDPSS_API_URL"] = target_base_url
 
                 model_name = name or rid.split("/")[-1]
-                safe_key = model_name.replace("/", "_").replace(" ", "_")
-                saved_model = model.save(key=safe_key)
-                new_rid = saved_model.get("data", {}).get("createModel", {}).get(
-                    "rid"
-                ) or saved_model.get("data", {}).get("updateModel", {}).get("rid")
-                if not new_rid:
-                    raise ValueError(f"克隆保存失败，无法获取新 RID: {saved_model}")
+                import time
+
+                timestamp = int(time.time())
+                new_key = (
+                    f"{model_name.replace('/', '_').replace(' ', '_')}_{timestamp}"
+                )
+                new_rid = f"model/{target_username}/{new_key}"
+
+                rev_result = ModelRevision.create(model.revision)
+                new_hash = rev_result.get("hash")
+                if not new_hash:
+                    raise ValueError(f"创建 revision 失败: {rev_result}")
+
+                mutation = """
+                mutation CreateModel($input: CreateModelInput!) {
+                  createModel(input: $input) {
+                    rid
+                  }
+                }
+                """
+
+                model_input = {
+                    "rid": new_rid,
+                    "revision": new_hash,
+                    "context": model.context,
+                    "configs": model.configs,
+                    "jobs": model.jobs,
+                    "name": model.name,
+                    "description": model.description or "",
+                    "tags": getattr(model, "tags", []) or [],
+                    "permissions": {"moderator": 98367, "member": 65551, "everyone": 0},
+                }
+
+                result = graphql_request(mutation, {"input": model_input})
+                log("INFO", f"GraphQL result: {result}")
+                if result is None:
+                    raise ValueError("GraphQL 请求返回 None")
+                if result.get("errors"):
+                    error_msg = result["errors"][0].get("message", "Unknown error")
+                    raise ValueError(f"GraphQL 错误: {error_msg}")
+                created_rid = result.get("data", {}).get("createModel", {}).get("rid")
+                if not created_rid:
+                    raise ValueError(f"克隆失败: {result}")
                 owner = rid.split("/")[1] if rid and "/" in rid else None
                 model_registry.register_model(
                     name, rid, source_server, {"source": "cloned"}, owner=owner
                 )
-                model_registry.update_rid(name, target_server, new_rid)
-                log("INFO", f"克隆成功! 新 RID: {new_rid}")
+                model_registry.update_rid(name, target_server, created_rid)
+                log("INFO", f"克隆成功! 新 RID: {created_rid}")
                 return {
                     "status": "cloned",
                     "name": name,
                     "source_rid": rid,
-                    "target_rid": new_rid,
+                    "target_rid": created_rid,
                 }
             else:
                 owner = rid.split("/")[1] if rid and "/" in rid else None
@@ -798,7 +837,10 @@ class ModelHubSkill(SkillBase):
                     "local_path": str(local_path),
                 }
         except Exception as e:
+            import traceback
+
             log("ERROR", f"克隆失败: {e}")
+            log("ERROR", f"详细错误: {traceback.format_exc()}")
             raise
 
     def _register_model(
