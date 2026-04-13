@@ -541,6 +541,8 @@ class ModelHubSkill(SkillBase):
         try:
             from cloudpss import Model
             from cloudpss_skills.core.auth_utils import setToken
+            from cloudpss.utils.graphqlUtil import graphql_request
+            from cloudpss.model.revision import ModelRevision
 
             server_info = hub_config.get_server(target_server)
             token = server_info.get("token")
@@ -555,21 +557,66 @@ class ModelHubSkill(SkillBase):
             if not token:
                 raise ValueError(f"未找到服务器 {target_server} 的 token")
 
+            target_username = server_info.get("username")
+            if not target_username:
+                import base64
+                import json as json_lib
+
+                try:
+                    payload = token.split(".")[1]
+                    payload += "=" * (4 - len(payload) % 4)
+                    user_info = json_lib.loads(base64.urlsafe_b64decode(payload))
+                    target_username = user_info.get("username")
+                except Exception:
+                    pass
+
+            if not target_username:
+                raise ValueError(f"无法从 token 解析用户名")
+
             setToken(token)
 
             model = Model.load(str(local_path))
-            saved_model = model.save()
-            new_rid = saved_model.get("data", {}).get("updateModel", {}).get("rid")
-            if not new_rid:
-                raise ValueError(f"保存失败，无法获取新 RID: {saved_model}")
 
-            model_registry.update_rid(name, target_server, new_rid)
-            log("INFO", f"上传成功! RID: {new_rid}")
+            new_key = f"{name.replace('/', '_').replace(' ', '_')}"
+            new_rid = f"model/{target_username}/{new_key}"
+
+            rev_result = ModelRevision.create(model.revision)
+            new_hash = rev_result.get("hash")
+            if not new_hash:
+                raise ValueError(f"创建 revision 失败: {rev_result}")
+
+            mutation = """
+            mutation CreateModel($input: CreateModelInput!) {
+              createModel(input: $input) {
+                rid
+              }
+            }
+            """
+
+            model_input = {
+                "rid": new_rid,
+                "revision": new_hash,
+                "context": model.context,
+                "configs": model.configs,
+                "jobs": model.jobs,
+                "name": model.name,
+                "description": model.description or "",
+                "tags": getattr(model, "tags", []) or [],
+                "permissions": {"moderator": 98367, "member": 65551, "everyone": 0},
+            }
+
+            result = graphql_request(mutation, {"input": model_input})
+            created_rid = result.get("data", {}).get("createModel", {}).get("rid")
+            if not created_rid:
+                raise ValueError(f"创建模型失败: {result}")
+
+            model_registry.update_rid(name, target_server, created_rid)
+            log("INFO", f"上传成功! RID: {created_rid}")
 
             return {
                 "status": "uploaded",
                 "name": name,
-                "rid": new_rid,
+                "rid": created_rid,
                 "server": target_server,
             }
         except Exception as e:
