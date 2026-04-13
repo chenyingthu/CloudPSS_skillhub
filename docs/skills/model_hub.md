@@ -14,13 +14,13 @@
 
 ### 1. 服务器管理
 - 添加/移除 CloudPSS 服务器
-- 多服务器 Token 管理
+- 多服务器 Token 管理（自动从 Token 解析用户名）
 - 快速切换当前服务器
 - 服务器优先级配置
 
 ### 2. 算例注册表
 - 算例名称到 RID 的映射
-- 跨服务器 RID 记录
+- 跨服务器 RID 记录（含 owner）
 - 算例元数据（描述、标签）
 - 版本历史追踪
 
@@ -31,10 +31,17 @@
 - 导入/导出功能
 
 ### 4. 跨服务器同步
-- `push`: 本地算例上传到服务器
+- `push`: 本地算例上传到服务器（用 GraphQL）
 - `pull`: 服务器算例下载到本地
-- `clone`: 跨服务器复制算例
-- `sync`: 批量同步算例
+- `clone`: 跨服务器复制算例（用 GraphQL 绕过 SDK 限制）
+- `sync`: 单算例同步
+- `sync_all`: 扫描并同步所有服务器算例
+
+### 5. 算例扫描
+- `scan`: 扫描服务器算例并注册到本地
+- 自动规范化算例名称
+- 支持标签和名称过滤
+- 跳过已注册的算例
 
 ## 快速开始
 
@@ -98,7 +105,7 @@ action: status
 skill: model_hub                    # 技能名称 (必需)
 action: init | status | list_servers | add_server | remove_server | use_server | 
        list_models | list_local | list_remote | push | pull | clone | sync |
-       register | unregister | info | export | import
+       sync_all | scan | register | unregister | info | export | import
 
 # 服务器配置 (add_server, remove_server, use_server)
 server:
@@ -116,8 +123,11 @@ model:
   source_server: string             # 源服务器
   target_server: string             # 目标服务器
   description: string               # 描述
-  tags: [string]                   # 标签
+  tags: [string]                    # 标签
   force: boolean                    # 强制覆盖 (默认: false)
+  filters:                          # 扫描过滤 (scan 操作)
+    tags: [string]                  # 按标签过滤
+    name_pattern: string            # 按名称过滤
 
 # 输出配置
 output:
@@ -142,15 +152,13 @@ server:
   url: https://cloudpss.net
   token_file: .cloudpss_token
 
-# 3. 注册测试算例
+# 3. 扫描并注册服务器上的算例
 skill: model_hub
-action: register
+action: scan
 model:
-  name: IEEE39
-  rid: model/holdme/IEEE39
   source_server: test_server
-  description: IEEE 39节点标准测试系统
-  tags: [ieee, standard, 39-bus]
+  filters:
+    name_pattern: IEEE
 ```
 
 ### 场景 2: 下载服务器算例到本地
@@ -187,7 +195,16 @@ model:
   target_server: internal_cloud
 ```
 
-### 场景 5: 查看算例信息
+### 场景 5: 扫描并同步所有算例
+
+```yaml
+skill: model_hub
+action: sync_all
+model:
+  source_server: public_cloud
+```
+
+### 场景 6: 查看算例信息
 
 ```yaml
 skill: model_hub
@@ -204,6 +221,7 @@ model:
     "public_cloud": "model/holdme/IEEE39",
     "internal_cloud": "model/chenying/IEEE39"
   },
+  "owner": "holdme",
   "metadata": {
     "description": "IEEE 39节点标准测试系统",
     "tags": ["ieee", "standard"]
@@ -223,6 +241,7 @@ model:
   "current_server": {
     "name": "public_cloud",
     "url": "https://cloudpss.net",
+    "username": "holdme",
     "token": "***",
     "priority": 1
   },
@@ -232,14 +251,25 @@ model:
 }
 ```
 
-### push/pull 操作
+### push 操作
 
 ```json
 {
   "status": "uploaded",
   "name": "IEEE39",
+  "rid": "model/chenying/IEEE39",
+  "server": "internal_cloud"
+}
+```
+
+### pull 操作
+
+```json
+{
+  "status": "downloaded",
+  "name": "IEEE39",
   "rid": "model/holdme/IEEE39",
-  "server": "public_cloud"
+  "local_path": "~/.cloudpss-hub/models/IEEE39"
 }
 ```
 
@@ -248,9 +278,44 @@ model:
 ```json
 {
   "status": "cloned",
-  "name": "IEEE39_backup",
+  "name": "IEEE39",
   "source_rid": "model/holdme/IEEE39",
-  "target_rid": "model/chenying/IEEE39"
+  "target_rid": "model/chenying/IEEE39_1705123456"
+}
+```
+
+### scan 操作
+
+```json
+{
+  "status": "scanned",
+  "server": "public_cloud",
+  "total_found": 100,
+  "registered_count": 15,
+  "skipped_count": 85,
+  "registered": [
+    {"name": "IEEE39", "rid": "model/holdme/IEEE39", "tags": ["ieee", "standard"]},
+    {"name": "IEEE3", "rid": "model/holdme/IEEE3", "tags": ["ieee", "emt"]}
+  ]
+}
+```
+
+### sync_all 操作
+
+```json
+{
+  "status": "synced",
+  "server": "public_cloud",
+  "total_models": 15,
+  "synced_count": 12,
+  "failed_count": 3,
+  "synced": [
+    {"name": "IEEE39", "status": "success"},
+    {"name": "IEEE3", "status": "already_exists"}
+  ],
+  "failed": [
+    {"name": "LargeModel", "error": "Timeout error"}
+  ]
 }
 ```
 
@@ -274,7 +339,8 @@ model:
 
 - **本地操作**: 注册表读写、列表查询 < 100ms
 - **网络操作**: push/pull/clone 取决于网络和算例大小
-- **批量同步**: sync 操作支持多算例并行同步
+- **批量同步**: sync/sync_all 支持多算例顺序同步
+- **并行下载**: sync_all 可选并行下载（未来版本）
 
 ## 常见问题
 
@@ -289,6 +355,12 @@ A: 直接备份 `~/.cloudpss-hub/` 目录即可。
 
 ### Q: 能否在多个设备间同步算例库？
 A: 可以将 `~/.cloudpss-hub/` 目录放入 Git 进行版本控制。
+
+### Q: 跨服务器克隆时 RID 冲突怎么办？
+A: 系统会自动在名称后添加时间戳生成唯一 RID，例如 `IEEE39_1705123456`。
+
+### Q: 如何获取特定用户的所有算例？
+A: 使用 `list_remote` 操作，服务器会返回该用户可见的所有算例。
 
 ## 完整示例
 
@@ -314,22 +386,21 @@ server:
   url: http://166.111.60.76:50001
   token_file: .cloudpss_token_internal
 
-# Step 3: 下载标准算例到本地
+# Step 3: 扫描并注册服务器上的算例
 skill: model_hub
-action: pull
+action: scan
 model:
-  name: IEEE39
-  rid: model/holdme/IEEE39
+  source_server: public
+  filters:
+    name_pattern: IEEE
+
+# Step 4: 同步所有算例到本地
+skill: model_hub
+action: sync_all
+model:
   source_server: public
 
-skill: model_hub
-action: pull
-model:
-  name: IEEE3
-  rid: model/holdme/IEEE3
-  source_server: public
-
-# Step 4: 修改本地算例后上传
+# Step 5: 修改本地算例后上传到内部服务器
 skill: model_hub
 action: push
 model:
@@ -337,7 +408,15 @@ model:
   target_server: internal
   force: true
 
-# Step 5: 查看同步结果
+# Step 6: 跨服务器克隆算例
+skill: model_hub
+action: clone
+model:
+  rid: model/holdme/IEEE3
+  source_server: public
+  target_server: internal
+
+# Step 7: 查看同步结果
 skill: model_hub
 action: info
 model:
@@ -353,10 +432,12 @@ model:
 │   │   ├── public:
 │   │   │   ├── url: https://cloudpss.net
 │   │   │   ├── token: ***
+│   │   │   ├── username: holdme
 │   │   │   └── priority: 1
 │   │   └── internal:
 │   │       ├── url: http://166.111.60.76:50001
 │   │       ├── token_file: .cloudpss_token_internal
+│   │       ├── username: chenyings
 │   │       └── priority: 2
 │   └── current_server: public
 │
@@ -364,18 +445,38 @@ model:
 │   ├── IEEE39:
 │   │   ├── rids:
 │   │   │   ├── public: model/holdme/IEEE39
-│   │   │   └── internal: model/chenying/IEEE39
+│   │   │   └── internal: model/chenying/IEEE39_1705123456
+│   │   ├── owner: holdme
 │   │   └── metadata:
 │   │       ├── description: IEEE 39节点标准测试系统
 │   │       └── tags: [ieee, standard]
 │   └── IEEE3:
-│       └── ...
+│       ├── rids:
+│       │   └── public: model/holdme/IEEE3
+│       ├── owner: holdme
+│       └── metadata:
+│           └── tags: [ieee, emt]
 │
-└── models/             # 本地算例库
+└── models/              # 本地算例库
     ├── IEEE39/
-    │   ├── model.yaml  # 算例数据
-    │   └── meta.yaml   # 元数据
+    │   ├── model.yaml    # 算例数据
+    │   └── meta.yaml    # 元数据
     └── IEEE3/
         ├── model.yaml
         └── meta.yaml
 ```
+
+## 技术实现细节
+
+### Token 用户名解析
+系统自动从 JWT Token 中解析用户名（第二段 payload），用于生成 RID。
+
+### GraphQL 跨服务器上传
+由于 CloudPSS SDK 限制（`Model.save()` 会验证 owner），跨服务器上传使用 GraphQL API 直接操作：
+1. 用源服务器 Token 获取算例
+2. 切换到目标服务器 Token
+3. 创建新 revision
+4. 用 `createModel` mutation 创建新模型
+
+### RID 冲突解决
+跨服务器克隆时，如果 RID 已存在，自动在名称后添加时间戳生成唯一标识。
