@@ -641,9 +641,18 @@ class ModelHubSkill(SkillBase):
             local_path = model_registry.save_local(name, model)
 
             if source_server != target_server:
-                setToken(hub_config.get_server(target_server).get("token", ""))
+                target_server_info = hub_config.get_server(target_server)
+                target_token = target_server_info.get("token")
+                if not target_token:
+                    token_file = target_server_info.get("token_file")
+                    if token_file and Path(token_file).exists():
+                        target_token = Path(token_file).read_text().strip()
+                if target_token:
+                    setToken(target_token)
                 saved_model = model.save()
-                new_rid = saved_model.rid
+                new_rid = saved_model.get("data", {}).get("updateModel", {}).get("rid")
+                if not new_rid:
+                    raise ValueError(f"克隆保存失败，无法获取新 RID: {saved_model}")
                 model_registry.register_model(
                     name, rid, source_server, {"source": "cloned"}
                 )
@@ -802,6 +811,7 @@ class ModelHubSkill(SkillBase):
         log,
     ) -> Dict:
         model_config = config.get("model", {})
+        name = model_config.get("name")
         source_server = (
             model_config.get("source_server") or hub_config.get_current_server_name()
         )
@@ -817,33 +827,47 @@ class ModelHubSkill(SkillBase):
         if not target_server:
             return {"error": "需要指定目标服务器"}
 
-        log("INFO", f"同步算例从 {source_server} 到 {target_server}...")
+        if name:
+            log("INFO", f"同步算例 {name} 从 {source_server} 到 {target_server}...")
+            rid = model_registry.get_rid(name, source_server)
+            if not rid:
+                return {"error": f"未找到算例 {name} 在 {source_server} 上的 RID"}
+            config_copy = config.copy()
+            config_copy["model"] = {
+                "name": name,
+                "rid": rid,
+                "source_server": source_server,
+                "target_server": target_server,
+            }
+            result = self._clone_model(model_registry, hub_config, config_copy, log)
+            return result
+        else:
+            log("INFO", f"同步所有算例从 {source_server} 到 {target_server}...")
+            models = model_registry.list_models()
+            synced = []
+            failed = []
 
-        models = model_registry.list_models()
-        synced = []
-        failed = []
+            for model in models:
+                name = model["name"]
+                rid = model.get("rids", {}).get(source_server)
+                if rid:
+                    try:
+                        config_copy = config.copy()
+                        config_copy["model"] = {
+                            "name": name,
+                            "rid": rid,
+                            "source_server": source_server,
+                            "target_server": target_server,
+                        }
+                        result = self._clone_model(
+                            model_registry, hub_config, config_copy, log
+                        )
+                        synced.append(name)
+                    except Exception as e:
+                        log("WARNING", f"同步 {name} 失败: {e}")
+                        failed.append({"name": name, "error": str(e)})
 
-        for model in models:
-            name = model["name"]
-            rid = model.get("rids", {}).get(source_server)
-            if rid:
-                try:
-                    config_copy = config.copy()
-                    config_copy["model"] = {
-                        "name": name,
-                        "rid": rid,
-                        "source_server": source_server,
-                        "target_server": target_server,
-                    }
-                    result = self._clone_model(
-                        model_registry, hub_config, config_copy, log
-                    )
-                    synced.append(name)
-                except Exception as e:
-                    log("WARNING", f"同步 {name} 失败: {e}")
-                    failed.append({"name": name, "error": str(e)})
-
-        log("INFO", f"同步完成: {len(synced)} 成功, {len(failed)} 失败")
+            log("INFO", f"同步完成: {len(synced)} 成功, {len(failed)} 失败")
 
         return {
             "synced": synced,
