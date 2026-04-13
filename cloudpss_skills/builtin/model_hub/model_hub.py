@@ -73,6 +73,8 @@ class ModelHubSkill(SkillBase):
                         "pull",
                         "clone",
                         "sync",
+                        "sync_all",
+                        "scan",
                         "register",
                         "unregister",
                         "info",
@@ -233,6 +235,12 @@ class ModelHubSkill(SkillBase):
                 )
             elif action == "sync":
                 result_data = self._sync_models(model_registry, hub_config, config, log)
+            elif action == "scan":
+                result_data = self._scan_and_register(
+                    model_registry, hub_config, config, log
+                )
+            elif action == "sync_all":
+                result_data = self._sync_all(model_registry, hub_config, config, log)
             else:
                 raise ValueError(f"未知操作: {action}")
 
@@ -418,7 +426,7 @@ class ModelHubSkill(SkillBase):
 
         try:
             from cloudpss import Model
-            from cloudpss_skills.core.auth_utils import setToken
+            from cloudpss_skills.core.auth_utils import setToken, get_cloudpss_kwargs
 
             token = current.get("token")
             if not token:
@@ -429,13 +437,33 @@ class ModelHubSkill(SkillBase):
             if token:
                 setToken(token)
 
-            models = []
-            log("INFO", f"已获取服务器 {current['name']} 上的算例列表")
-            return {
-                "remote_models": models,
-                "count": len(models),
-                "server": current["name"],
-            }
+            log("INFO", f"正在获取服务器 {current['name']} 上的算例列表...")
+            try:
+                models = Model.fetchMany(
+                    pageSize=200, owner="*", **get_cloudpss_kwargs(config)
+                )
+                log("INFO", f"已获取 {len(models)} 个算例")
+
+                model_list = []
+                for m in models:
+                    model_list.append(
+                        {
+                            "rid": m.get("rid", ""),
+                            "name": m.get("name", ""),
+                            "description": m.get("description", ""),
+                            "tags": m.get("tags", []),
+                            "owner": m.get("owner", ""),
+                        }
+                    )
+
+                return {
+                    "remote_models": model_list,
+                    "count": len(model_list),
+                    "server": current["name"],
+                }
+            except Exception as e:
+                log("WARNING", f"获取远程算例失败: {e}")
+                return {"error": str(e), "server": current.get("name")}
         except Exception as e:
             log("WARNING", f"获取远程算例失败: {e}")
             return {"error": str(e), "server": current.get("name")}
@@ -470,13 +498,33 @@ class ModelHubSkill(SkillBase):
         if not local_path.exists():
             raise ValueError(f"本地算例文件不存在: {local_path}")
 
+        if local_path.is_dir():
+            model_yaml = local_path / "model.yaml"
+            if model_yaml.exists():
+                local_path = model_yaml
+            else:
+                raise ValueError(f"本地算例目录中没有找到 model.yaml: {local_path}")
+
         log("INFO", f"上传算例 {name} 到 {target_server}...")
         try:
             from cloudpss import Model
+            from cloudpss_skills.core.auth_utils import setToken
+
+            server_info = hub_config.get_server(target_server)
+            token = server_info.get("token")
+            if not token:
+                token_file = server_info.get("token_file")
+                if token_file and Path(token_file).exists():
+                    token = Path(token_file).read_text().strip()
+
+            if token:
+                setToken(token)
 
             model = Model.load(str(local_path))
             saved_model = model.save()
-            new_rid = saved_model.rid
+            new_rid = saved_model.get("data", {}).get("updateModel", {}).get("rid")
+            if not new_rid:
+                raise ValueError(f"保存失败，无法获取新 RID: {saved_model}")
 
             model_registry.update_rid(name, target_server, new_rid)
             log("INFO", f"上传成功! RID: {new_rid}")
@@ -803,6 +851,173 @@ class ModelHubSkill(SkillBase):
             "source": source_server,
             "target": target_server,
         }
+
+    def _scan_and_register(
+        self,
+        model_registry: "ModelRegistry",
+        hub_config: "HubConfig",
+        config: Dict,
+        log,
+    ) -> Dict:
+        """扫描服务器上的算例并注册到本地"""
+        from cloudpss import Model
+        from cloudpss_skills.core.auth_utils import setToken, get_cloudpss_kwargs
+
+        model_config = config.get("model", {})
+        server_name = (
+            model_config.get("source_server") or hub_config.get_current_server_name()
+        )
+        filters = model_config.get("filters", {})
+
+        tags_filter = filters.get("tags", [])
+        name_pattern = filters.get("name_pattern", "")
+
+        server = hub_config.get_current_server()
+        if not server:
+            return {"error": "未配置当前服务器"}
+
+        token = server.get("token")
+        if not token:
+            token_file = server.get("token_file")
+            if token_file and Path(token_file).exists():
+                token = Path(token_file).read_text().strip()
+
+        if not token:
+            return {"error": "未找到有效 token"}
+
+        setToken(token)
+        log("INFO", f"正在扫描服务器 {server_name} 上的算例...")
+
+        try:
+            models = Model.fetchMany(
+                pageSize=200, owner="*", **get_cloudpss_kwargs(config)
+            )
+            log("INFO", f"获取到 {len(models)} 个算例")
+
+            registered = []
+            skipped = []
+
+            for m in models:
+                rid = m.get("rid", "")
+                name = m.get("name", "")
+                description = m.get("description", "") or ""
+                tags = m.get("tags", []) or []
+
+                # 生成规范化的名称
+                normalized_name = self._normalize_model_name(name, rid)
+
+                # 检查过滤条件
+                if tags_filter and not any(tag in tags for tag in tags_filter):
+                    continue
+
+                if name_pattern and name_pattern.lower() not in name.lower():
+                    continue
+
+                # 检查是否已注册
+                existing = model_registry.get_model(normalized_name)
+                if existing and existing.get("rids", {}).get(server_name):
+                    skipped.append({"name": normalized_name, "rid": rid})
+                    continue
+
+                # 注册算例
+                metadata = {"description": description, "tags": tags}
+                model_registry.register_model(
+                    normalized_name, rid, server_name, metadata
+                )
+                registered.append({"name": normalized_name, "rid": rid, "tags": tags})
+                log("INFO", f"  注册: {normalized_name} -> {rid}")
+
+            log(
+                "INFO",
+                f"扫描完成: 新注册 {len(registered)} 个, 跳过 {len(skipped)} 个已存在的算例",
+            )
+
+            return {
+                "status": "scanned",
+                "server": server_name,
+                "total_found": len(models),
+                "registered": registered,
+                "skipped": skipped,
+                "registered_count": len(registered),
+                "skipped_count": len(skipped),
+            }
+        except Exception as e:
+            log("ERROR", f"扫描失败: {e}")
+            return {"error": str(e), "server": server_name}
+
+    def _sync_all(
+        self,
+        model_registry: "ModelRegistry",
+        hub_config: "HubConfig",
+        config: Dict,
+        log,
+    ) -> Dict:
+        """扫描服务器算例并全部拉取到本地"""
+        # 先扫描注册
+        scan_result = self._scan_and_register(model_registry, hub_config, config, log)
+        if "error" in scan_result:
+            return scan_result
+
+        # 获取要同步的算例列表
+        models = model_registry.list_models()
+        server_name = scan_result.get("server")
+
+        synced = []
+        failed = []
+        pull_failed = []
+
+        log("INFO", f"开始同步 {len(models)} 个算例到本地...")
+
+        for model in models:
+            name = model["name"]
+            rid = model.get("rids", {}).get(server_name)
+
+            if not rid:
+                continue
+
+            # 检查本地是否已存在
+            local_path = model_registry.get_local_path(name)
+            if local_path.exists():
+                synced.append({"name": name, "status": "already_exists"})
+                continue
+
+            try:
+                config_copy = config.copy()
+                config_copy["model"] = {
+                    "name": name,
+                    "rid": rid,
+                    "source_server": server_name,
+                }
+                result = self._pull_model(model_registry, hub_config, config_copy, log)
+                synced.append({"name": name, "status": "success"})
+            except Exception as e:
+                failed.append({"name": name, "error": str(e)})
+                pull_failed.append(name)
+
+        log("INFO", f"同步完成: 成功 {len(synced)}, 失败 {len(failed)}")
+
+        return {
+            "status": "synced",
+            "server": server_name,
+            "total_models": len(models),
+            "synced": synced,
+            "failed": failed,
+            "synced_count": len(synced),
+            "failed_count": len(failed),
+        }
+
+    def _normalize_model_name(self, name: str, rid: str) -> str:
+        """规范化算例名称"""
+        import re
+
+        # 移除空白和特殊字符
+        name = re.sub(r"[^\w\u4e00-\u9fff-]", "_", name)
+        # 移除连续的下滑线
+        name = re.sub(r"_+", "_", name)
+        # 限制长度
+        if len(name) > 50:
+            name = name[:47] + "..."
+        return name or rid.split("/")[-1]
 
 
 class HubConfig:
