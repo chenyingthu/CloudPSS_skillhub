@@ -697,12 +697,33 @@ class ModelHubSkill(SkillBase):
                             target_token = token_file_path.read_text().strip()
                 if not target_token:
                     raise ValueError(f"未找到服务器 {target_server} 的 token")
-                setToken(target_token)
+
                 target_base_url = target_server_info.get("url")
+                target_username = (
+                    target_server_info.get("username") or target_token.split(".")[1]
+                )
+                if len(target_token.split(".")) >= 2:
+                    import base64
+                    import json as json_lib
+
+                    try:
+                        payload = target_token.split(".")[1]
+                        payload += "=" * (4 - len(payload) % 4)
+                        user_info = json_lib.loads(base64.urlsafe_b64decode(payload))
+                        target_username = user_info.get("username", target_username)
+                    except Exception:
+                        pass
+
+                setToken(target_token)
                 if target_base_url:
                     os.environ["CLOUDPSS_API_URL"] = target_base_url
-                saved_model = model.save()
-                new_rid = saved_model.get("data", {}).get("updateModel", {}).get("rid")
+
+                model_name = name or rid.split("/")[-1]
+                safe_key = model_name.replace("/", "_").replace(" ", "_")
+                saved_model = model.save(key=safe_key)
+                new_rid = saved_model.get("data", {}).get("createModel", {}).get(
+                    "rid"
+                ) or saved_model.get("data", {}).get("updateModel", {}).get("rid")
                 if not new_rid:
                     raise ValueError(f"克隆保存失败，无法获取新 RID: {saved_model}")
                 owner = rid.split("/")[1] if rid and "/" in rid else None
