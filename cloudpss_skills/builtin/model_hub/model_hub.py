@@ -542,7 +542,7 @@ class ModelHubSkill(SkillBase):
             from cloudpss import Model
             from cloudpss_skills.core.auth_utils import setToken
 
-            server_info = hub_config.get_server(source_server)
+            server_info = hub_config.get_server(target_server)
             token = server_info.get("token")
             if not token:
                 token_file = server_info.get("token_file")
@@ -553,7 +553,7 @@ class ModelHubSkill(SkillBase):
                     if token_file_path.exists():
                         token = token_file_path.read_text().strip()
             if not token:
-                raise ValueError(f"未找到服务器 {source_server} 的 token")
+                raise ValueError(f"未找到服务器 {target_server} 的 token")
 
             setToken(token)
 
@@ -669,13 +669,19 @@ class ModelHubSkill(SkillBase):
             token = server_info.get("token")
             if not token:
                 token_file = server_info.get("token_file")
-                if token_file and Path(token_file).exists():
-                    token = Path(token_file).read_text().strip()
+                if token_file:
+                    token_file_path = Path(token_file)
+                    if not token_file_path.is_absolute():
+                        token_file_path = Path.cwd() / token_file_path
+                    if token_file_path.exists():
+                        token = token_file_path.read_text().strip()
+            if not token:
+                raise ValueError(f"未找到服务器 {source_server} 的 token")
 
-            if token:
-                setToken(token)
+            setToken(token)
+            base_url = server_info.get("url")
 
-            model = Model.fetch(rid)
+            model = Model.fetch(rid, baseUrl=base_url)
             local_path = model_registry.save_local(name, model)
 
             if source_server != target_server:
@@ -692,6 +698,9 @@ class ModelHubSkill(SkillBase):
                 if not target_token:
                     raise ValueError(f"未找到服务器 {target_server} 的 token")
                 setToken(target_token)
+                target_base_url = target_server_info.get("url")
+                if target_base_url:
+                    os.environ["CLOUDPSS_API_URL"] = target_base_url
                 saved_model = model.save()
                 new_rid = saved_model.get("data", {}).get("updateModel", {}).get("rid")
                 if not new_rid:
