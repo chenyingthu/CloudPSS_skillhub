@@ -964,15 +964,25 @@ class ModelRegistry:
     def get_local_path(self, name: str) -> Path:
         return self.models_dir / name
 
-    def save_local(self, name: str, source: Path) -> Path:
+    def save_local(self, name: str, source) -> Path:
         dest = self.models_dir / name
-        if source.is_file():
+
+        # 处理 Model 对象
+        from cloudpss import Model
+
+        if isinstance(source, Model):
             dest.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, dest / "model.yaml")
-        elif source.is_dir():
-            shutil.copytree(source, dest, dirs_exist_ok=True)
+            Model.dump(source, str(dest / "model.yaml"), format="yaml", compress=None)
+        elif isinstance(source, Path):
+            if source.is_file():
+                dest.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, dest / "model.yaml")
+            elif source.is_dir():
+                shutil.copytree(source, dest, dirs_exist_ok=True)
+            else:
+                raise ValueError(f"无效的源路径: {source}")
         else:
-            raise ValueError(f"无效的源路径: {source}")
+            raise ValueError(f"source 必须是 Path 或 Model 对象: {type(source)}")
 
         meta = dest / "meta.yaml"
         if not meta.exists():
