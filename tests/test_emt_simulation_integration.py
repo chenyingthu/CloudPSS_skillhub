@@ -74,8 +74,8 @@ class TestEmtSimulationSkillIntegration:
         """Test IEEE3 model EMT simulation"""
         config = {
             "skill": "emt_simulation",
-            "auth": {"token": auth_token, "server": "internal"},
-            "model": {"rid": "model/chenying/IEEE3"},
+            "auth": {"token": auth_token, },
+            "model": {"rid": "model/holdme/IEEE3"},
             "simulation": {
                 "duration": 0.1,
             },
@@ -90,8 +90,8 @@ class TestEmtSimulationSkillIntegration:
         """Test result has expected plot data"""
         config = {
             "skill": "emt_simulation",
-            "auth": {"token": auth_token, "server": "internal"},
-            "model": {"rid": "model/chenying/IEEE3"},
+            "auth": {"token": auth_token, },
+            "model": {"rid": "model/holdme/IEEE3"},
             "simulation": {
                 "duration": 0.1,
             },
@@ -109,8 +109,8 @@ class TestEmtSimulationSkillIntegration:
         """Test longer EMT simulation"""
         config = {
             "skill": "emt_simulation",
-            "auth": {"token": auth_token, "server": "internal"},
-            "model": {"rid": "model/chenying/IEEE3"},
+            "auth": {"token": auth_token, },
+            "model": {"rid": "model/holdme/IEEE3"},
             "simulation": {
                 "duration": 1.0,
             },

@@ -68,8 +68,8 @@ class TestShortCircuitSkillIntegration:
         """Test running short circuit analysis on IEEE3 model"""
         config = {
             "skill": "short_circuit",
-            "auth": {"token": auth_token, "server": "internal"},
-            "model": {"rid": "model/chenying/IEEE3"},
+            "auth": {"token": auth_token, },
+            "model": {"rid": "model/holdme/IEEE3"},
             "fault": {"location": "Bus1", "type": "three_phase"},
         }
         result = self.skill.run(config)

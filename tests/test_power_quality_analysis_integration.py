@@ -68,8 +68,8 @@ class TestPowerQualityAnalysisSkillIntegration:
         """Test running power quality analysis on IEEE3 model"""
         config = {
             "skill": "power_quality_analysis",
-            "auth": {"token": auth_token, "server": "internal"},
-            "model": {"rid": "model/chenying/IEEE3"},
+            "auth": {"token": auth_token, },
+            "model": {"rid": "model/holdme/IEEE3"},
         }
         result = self.skill.run(config)
         assert result.status in [SkillStatus.SUCCESS, SkillStatus.FAILED]

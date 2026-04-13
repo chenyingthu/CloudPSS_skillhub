@@ -414,7 +414,7 @@ class TestModelBuilderSkill:
         renewable_result = renewable_skill.run(
             {
                 "model": {"rid": rid},
-                "auth": {"server": "internal"},
+                "auth": {},
                 "renewable_unit_rating_mva": 50.0,
                 "analysis": {
                     "scr": {"enabled": False},

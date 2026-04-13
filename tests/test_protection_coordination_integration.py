@@ -44,8 +44,8 @@ class TestProtectionCoordinationSkill:
     def valid_config(self):
         """有效配置"""
         return {
-            "model": {"rid": "model/chenying/substation_110"},
-            "auth": {"server": "internal"},
+            "model": {"rid": "model/holdme/IEEE3"},
+            "auth": {},
             "analysis": {
                 "distance_protection": {"enabled": True, "check_zones": [1, 2, 3]},
                 "overcurrent_protection": {

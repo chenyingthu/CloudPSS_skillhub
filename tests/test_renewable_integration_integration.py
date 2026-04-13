@@ -69,8 +69,8 @@ class TestRenewableIntegrationSkillIntegration:
         """Test renewable integration analysis on IEEE3 model"""
         config = {
             "skill": "renewable_integration",
-            "auth": {"token": auth_token, "server": "internal"},
-            "model": {"rid": "model/chenying/IEEE3"},
+            "auth": {"token": auth_token, },
+            "model": {"rid": "model/holdme/IEEE3"},
         }
 
         result = self.skill.run(config)

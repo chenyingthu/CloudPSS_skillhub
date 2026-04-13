@@ -59,7 +59,7 @@ class TestSmallSignalStabilitySkillIntegration:
         """Test validation fails when model.rid is missing"""
         config = {
             "skill": "small_signal_stability",
-            "auth": {"token": auth_token, "server": "internal"},
+            "auth": {"token": auth_token, },
         }
         result = self.skill.validate(config)
         # Should fail or have warnings about missing rid
@@ -69,12 +69,12 @@ class TestSmallSignalStabilitySkillIntegration:
         """Test small signal stability on IEEE39 model"""
         import os
 
-        server: "internal"
+        
 
         config = {
             "skill": "small_signal_stability",
-            "auth": {"token": auth_token, "server": "internal"},
-            "model": {"rid": "model/chenying/IEEE39"},
+            "auth": {"token": auth_token, },
+            "model": {"rid": "model/holdme/IEEE39"},
             "analysis": {
                 "damping_threshold": 0.05,
                 "freq_range": [0.1, 2.0],

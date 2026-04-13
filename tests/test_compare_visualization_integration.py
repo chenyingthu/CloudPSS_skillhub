@@ -69,7 +69,7 @@ class TestCompareVisualizationSkillIntegration:
         """Test skill validation works - compare_visualization doesn't require model"""
         config = {
             "skill": "compare_visualization",
-            "auth": {"token": auth_token, "server": "internal"},
+            "auth": {"token": auth_token, },
             "sources": [
                 {"name": "baseline", "data": {"x": [1, 2, 3], "y": [1, 2, 3]}},
                 {"name": "scenario1", "data": {"x": [1, 2, 3], "y": [1.1, 2.1, 3.1]}},

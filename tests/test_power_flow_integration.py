@@ -73,7 +73,7 @@ class TestPowerFlowSkillIntegration:
         config = {
             "skill": "power_flow",
             "auth": {"token": auth_token},
-            "model": {"rid": "model/chenying/IEEE39"},
+            "model": {"rid": "model/holdme/IEEE39"},
             "algorithm": {
                 "type": "newton_raphson",
                 "tolerance": 1e-6,
@@ -91,7 +91,7 @@ class TestPowerFlowSkillIntegration:
         config = {
             "skill": "power_flow",
             "auth": {"token": auth_token},
-            "model": {"rid": "model/chenying/IEEE3"},
+            "model": {"rid": "model/holdme/IEEE3"},
             "algorithm": {
                 "type": "newton_raphson",
                 "tolerance": 1e-6,
@@ -124,7 +124,7 @@ class TestPowerFlowSkillIntegration:
         config = {
             "skill": "power_flow",
             "auth": {"token": auth_token},
-            "model": {"rid": "model/chenying/IEEE39"},
+            "model": {"rid": "model/holdme/IEEE39"},
             "algorithm": {
                 "type": "fast_decoupled",
                 "tolerance": 1e-5,

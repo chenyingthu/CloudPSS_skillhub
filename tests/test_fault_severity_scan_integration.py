@@ -59,7 +59,7 @@ class TestFaultSeverityScanSkillIntegration:
         """Test validation fails when model.rid is missing"""
         config = {
             "skill": "fault_severity_scan",
-            "auth": {"token": auth_token, "server": "internal"},
+            "auth": {"token": auth_token, },
         }
         result = self.skill.validate(config)
         # Should fail or have warnings about missing rid
@@ -69,12 +69,12 @@ class TestFaultSeverityScanSkillIntegration:
         """Test fault severity scan on IEEE3 model"""
         import os
 
-        server: "internal"
+        
 
         config = {
             "skill": "fault_severity_scan",
-            "auth": {"token": auth_token, "server": "internal"},
-            "model": {"rid": "model/chenying/IEEE3"},
+            "auth": {"token": auth_token, },
+            "model": {"rid": "model/holdme/IEEE3"},
             "scan": {
                 "fs": 2.5,
                 "fe": 2.7,

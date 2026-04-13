@@ -59,18 +59,18 @@ class TestComponentCatalogSkillIntegration:
         """Test validation fails when model.rid is missing"""
         config = {
             "skill": "component_catalog",
-            "auth": {"token": auth_token, "server": "internal"},
+            "auth": {"token": auth_token, },
         }
         result = self.skill.validate(config)
 
     @pytest.mark.integration
     def test_integration_list_components(self, auth_token):
         """Test listing components from IEEE3 model"""
-        server: "internal"
+        
         config = {
             "skill": "component_catalog",
-            "auth": {"token": auth_token, "server": "internal"},
-            "model": {"rid": "model/chenying/IEEE3"},
+            "auth": {"token": auth_token, },
+            "model": {"rid": "model/holdme/IEEE3"},
         }
         result = self.skill.run(config)
         assert result.status in [SkillStatus.SUCCESS, SkillStatus.FAILED]

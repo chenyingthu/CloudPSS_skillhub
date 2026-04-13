@@ -59,18 +59,18 @@ class TestFrequencyResponseSkillIntegration:
         """Test validation fails when model.rid is missing"""
         config = {
             "skill": "frequency_response",
-            "auth": {"token": auth_token, "server": "internal"},
+            "auth": {"token": auth_token, },
         }
         result = self.skill.validate(config)
 
     @pytest.mark.integration
     def test_integration_run_frequency_response(self, auth_token):
         """Test running frequency response analysis on IEEE3 model"""
-        server: "internal"
+        
         config = {
             "skill": "frequency_response",
-            "auth": {"token": auth_token, "server": "internal"},
-            "model": {"rid": "model/chenying/IEEE3"},
+            "auth": {"token": auth_token, },
+            "model": {"rid": "model/holdme/IEEE3"},
         }
         result = self.skill.run(config)
         assert result.status in [SkillStatus.SUCCESS, SkillStatus.FAILED]

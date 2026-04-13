@@ -73,7 +73,7 @@ class TestTransientStabilityMarginSkillIntegration:
         """Test validation handles missing model.rid"""
         config = {
             "skill": "transient_stability_margin",
-            "auth": {"token": auth_token, "server": "internal"},
+            "auth": {"token": auth_token, },
         }
         result = self.skill.validate(config)
         assert result.valid or len(result.warnings) > 0 or len(result.errors) > 0
@@ -90,9 +90,8 @@ class TestTransientStabilityMarginSkillIntegration:
             "skill": "transient_stability_margin",
             "auth": {
                 "token": auth_token,
-                "server": "internal",
-            },
-            "model": {"rid": "model/chenying/IEEE3"},
+                },
+            "model": {"rid": "model/holdme/IEEE3"},
             "fault_scenarios": [
                 {"location": "BUS_1", "type": "three_phase", "duration": 0.1}
             ],
@@ -120,7 +119,7 @@ class TestTransientStabilityMarginSkillIntegration:
         """
         # First check available channels
         setToken(auth_token)
-        model = Model.fetch("model/chenying/IEEE3")
+        model = Model.fetch("model/holdme/IEEE3")
 
         # Try to run EMT and get available channels
         try:
@@ -144,9 +143,8 @@ class TestTransientStabilityMarginSkillIntegration:
             "skill": "transient_stability_margin",
             "auth": {
                 "token": auth_token,
-                "server": "internal",
-            },
-            "model": {"rid": "model/chenying/IEEE3"},
+                },
+            "model": {"rid": "model/holdme/IEEE3"},
             "fault_scenarios": [{"location": "BUS_1", "type": "three_phase"}],
             "analysis": {
                 "compute_cct": True,
@@ -172,9 +170,8 @@ class TestTransientStabilityMarginSkillIntegration:
             "skill": "transient_stability_margin",
             "auth": {
                 "token": auth_token,
-                "server": "internal",
-            },
-            "model": {"rid": "model/chenying/IEEE3"},
+                },
+            "model": {"rid": "model/holdme/IEEE3"},
             "fault_scenarios": [{"location": "BUS_1", "type": "three_phase"}],
         }
 

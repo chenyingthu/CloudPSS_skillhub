@@ -59,17 +59,17 @@ class TestVisualizeSkillIntegration:
         """Test validation fails when model.rid is missing"""
         config = {
             "skill": "visualize",
-            "auth": {"token": auth_token, "server": "internal"},
+            "auth": {"token": auth_token, },
         }
         result = self.skill.validate(config)
 
     @pytest.mark.integration
     def test_integration_validation_with_job_id(self, auth_token):
         """Test visualize validation with job_id"""
-        server: "internal"
+        
         config = {
             "skill": "visualize",
-            "auth": {"token": auth_token, "server": "internal"},
+            "auth": {"token": auth_token, },
             "source": {"job_id": ""},
         }
         result = self.skill.validate(config)

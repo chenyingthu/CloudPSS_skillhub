@@ -71,8 +71,8 @@ class TestParamScanSkillIntegration:
         """Test parameter scan with power flow on IEEE3"""
         config = {
             "skill": "param_scan",
-            "auth": {"token": auth_token, "server": "internal"},
-            "model": {"rid": "model/chenying/IEEE3"},
+            "auth": {"token": auth_token, },
+            "model": {"rid": "model/holdme/IEEE3"},
             "scan": {
                 "simulation_type": "power_flow",
                 "values": [1.0, 1.1, 1.2],  # Simple load scaling
@@ -89,8 +89,8 @@ class TestParamScanSkillIntegration:
         """Test result has expected data structure"""
         config = {
             "skill": "param_scan",
-            "auth": {"token": auth_token, "server": "internal"},
-            "model": {"rid": "model/chenying/IEEE3"},
+            "auth": {"token": auth_token, },
+            "model": {"rid": "model/holdme/IEEE3"},
             "scan": {
                 "simulation_type": "power_flow",
                 "values": [1.0, 1.2],

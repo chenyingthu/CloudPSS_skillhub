@@ -59,7 +59,7 @@ class TestEmtFaultStudySkillIntegration:
         """Test validation fails when model.rid is missing"""
         config = {
             "skill": "emt_fault_study",
-            "auth": {"token": auth_token, "server": "internal"},
+            "auth": {"token": auth_token, },
         }
         result = self.skill.validate(config)
         # Should fail or have warnings about missing rid
@@ -69,12 +69,12 @@ class TestEmtFaultStudySkillIntegration:
         """Test EMT fault study on IEEE3 model"""
         import os
 
-        server: "internal"
+        
 
         config = {
             "skill": "emt_fault_study",
-            "auth": {"token": auth_token, "server": "internal"},
-            "model": {"rid": "model/chenying/IEEE3"},
+            "auth": {"token": auth_token, },
+            "model": {"rid": "model/holdme/IEEE3"},
             "output": {"format": "json", "path": "/tmp", "prefix": "fault_study_test"},
         }
 

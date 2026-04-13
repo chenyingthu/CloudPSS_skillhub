@@ -61,8 +61,8 @@ class TestVoltageStabilitySkillIntegration:
         """Test voltage stability on IEEE39 model"""
         config = {
             "skill": "voltage_stability",
-            "auth": {"token": auth_token, "server": "internal"},
-            "model": {"rid": "model/chenying/IEEE39"},
+            "auth": {"token": auth_token, },
+            "model": {"rid": "model/holdme/IEEE39"},
             "scan": {
                 "load_scaling": [1.0, 1.2],
             },

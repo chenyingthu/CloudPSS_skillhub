@@ -59,17 +59,17 @@ class TestWaveformExportSkillIntegration:
         """Test validation fails when model.rid is missing"""
         config = {
             "skill": "waveform_export",
-            "auth": {"token": auth_token, "server": "internal"},
+            "auth": {"token": auth_token, },
         }
         result = self.skill.validate(config)
 
     @pytest.mark.integration
     def test_integration_validation_with_job_id(self, auth_token):
         """Test waveform_export validation with job_id"""
-        server: "internal"
+        
         config = {
             "skill": "waveform_export",
-            "auth": {"token": auth_token, "server": "internal"},
+            "auth": {"token": auth_token, },
             "source": {"job_id": ""},
         }
         result = self.skill.validate(config)

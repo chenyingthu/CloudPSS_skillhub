@@ -59,17 +59,17 @@ class TestResultCompareSkillIntegration:
         """Test validation fails when model.rid is missing"""
         config = {
             "skill": "result_compare",
-            "auth": {"token": auth_token, "server": "internal"},
+            "auth": {"token": auth_token, },
         }
         result = self.skill.validate(config)
 
     @pytest.mark.integration
     def test_integration_validation_no_job_id(self, auth_token):
         """Test result_compare validation without job_ids"""
-        server: "internal"
+        
         config = {
             "skill": "result_compare",
-            "auth": {"token": auth_token, "server": "internal"},
+            "auth": {"token": auth_token, },
             "source": {"job_ids": []},
         }
         result = self.skill.validate(config)

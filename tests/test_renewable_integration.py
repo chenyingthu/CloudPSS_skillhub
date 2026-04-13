@@ -25,8 +25,8 @@ class TestRenewableIntegrationSkill:
         """基础配置"""
         return {
             "skill": "renewable_integration",
-            "auth": {"server": "internal"},
-            "model": {"rid": "model/chenying/IEEE39", "source": "cloud"},
+            "auth": {},
+            "model": {"rid": "model/holdme/IEEE39", "source": "cloud"},
             "renewable": {"type": "pv", "bus": "BUS_10", "capacity": 100},
             "analysis": {
                 "scr": {"enabled": True, "threshold": 3.0},
@@ -237,9 +237,9 @@ class TestRenewableIntegrationSkill:
         """测试基于专用风机LVRT算例的真实低电压穿越验证"""
         config = {
             "skill": "renewable_integration",
-            "auth": {"server": "internal"},
+            "auth": {},
             "model": {
-                "rid": "model/chenying/codex_test_open_cloudpss_lvrt_workflow_e2e",
+                "rid": "model/holdme/IEEE3",
                 "source": "cloud",
             },
             "renewable": {"type": "wind", "bus": "PCC", "capacity": 50},
