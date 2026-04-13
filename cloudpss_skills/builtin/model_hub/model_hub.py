@@ -3,12 +3,14 @@ Model Hub Skill
 
 算例中心 - 多服务器算例管理工具
 支持：
-- 多服务器/多Token管理
+- 多服务器/多Token管理（与用户绑定）
 - 本地算例库存储
-- RID映射表管理
+- RID映射表管理（含算例所有者）
 - 跨服务器算例同步(push/pull/clone)
 """
 
+import base64
+import json
 import logging
 import os
 import shutil
@@ -27,6 +29,36 @@ from cloudpss_skills.core import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def parse_token_username(token: str) -> Optional[str]:
+    """从 JWT token 解析用户名"""
+    try:
+        parts = token.split(".")
+        if len(parts) >= 2:
+            payload = parts[1]
+            payload += "=" * (4 - len(payload) % 4) if len(payload) % 4 else ""
+            decoded = base64.urlsafe_b64decode(payload)
+            info = json.loads(decoded)
+            return info.get("username")
+    except Exception:
+        pass
+    return None
+
+
+def parse_token_userid(token: str) -> Optional[int]:
+    """从 JWT token 解析用户 ID"""
+    try:
+        parts = token.split(".")
+        if len(parts) >= 2:
+            payload = parts[1]
+            payload += "=" * (4 - len(payload) % 4) if len(payload) % 4 else ""
+            decoded = base64.urlsafe_b64decode(payload)
+            info = json.loads(decoded)
+            return info.get("id")
+    except Exception:
+        pass
+    return None
 
 
 @register
@@ -510,15 +542,20 @@ class ModelHubSkill(SkillBase):
             from cloudpss import Model
             from cloudpss_skills.core.auth_utils import setToken
 
-            server_info = hub_config.get_server(target_server)
+            server_info = hub_config.get_server(source_server)
             token = server_info.get("token")
             if not token:
                 token_file = server_info.get("token_file")
-                if token_file and Path(token_file).exists():
-                    token = Path(token_file).read_text().strip()
+                if token_file:
+                    token_file_path = Path(token_file)
+                    if not token_file_path.is_absolute():
+                        token_file_path = Path.cwd() / token_file_path
+                    if token_file_path.exists():
+                        token = token_file_path.read_text().strip()
+            if not token:
+                raise ValueError(f"未找到服务器 {source_server} 的 token")
 
-            if token:
-                setToken(token)
+            setToken(token)
 
             model = Model.load(str(local_path))
             saved_model = model.save()
@@ -582,8 +619,9 @@ class ModelHubSkill(SkillBase):
 
             model = Model.fetch(rid)
             local_path = model_registry.save_local(name, model)
+            owner = rid.split("/")[1] if rid and "/" in rid else None
             model_registry.register_model(
-                name, rid, source_server, {"source": "pulled"}
+                name, rid, source_server, {"source": "pulled"}, owner=owner
             )
 
             log("INFO", f"下载成功! 保存到: {local_path}")
@@ -645,16 +683,22 @@ class ModelHubSkill(SkillBase):
                 target_token = target_server_info.get("token")
                 if not target_token:
                     token_file = target_server_info.get("token_file")
-                    if token_file and Path(token_file).exists():
-                        target_token = Path(token_file).read_text().strip()
-                if target_token:
-                    setToken(target_token)
+                    if token_file:
+                        token_file_path = Path(token_file)
+                        if not token_file_path.is_absolute():
+                            token_file_path = Path.cwd() / token_file_path
+                        if token_file_path.exists():
+                            target_token = token_file_path.read_text().strip()
+                if not target_token:
+                    raise ValueError(f"未找到服务器 {target_server} 的 token")
+                setToken(target_token)
                 saved_model = model.save()
                 new_rid = saved_model.get("data", {}).get("updateModel", {}).get("rid")
                 if not new_rid:
                     raise ValueError(f"克隆保存失败，无法获取新 RID: {saved_model}")
+                owner = rid.split("/")[1] if rid and "/" in rid else None
                 model_registry.register_model(
-                    name, rid, source_server, {"source": "cloned"}
+                    name, rid, source_server, {"source": "cloned"}, owner=owner
                 )
                 model_registry.update_rid(name, target_server, new_rid)
                 log("INFO", f"克隆成功! 新 RID: {new_rid}")
@@ -665,8 +709,9 @@ class ModelHubSkill(SkillBase):
                     "target_rid": new_rid,
                 }
             else:
+                owner = rid.split("/")[1] if rid and "/" in rid else None
                 model_registry.register_model(
-                    name, rid, source_server, {"source": "cloned"}
+                    name, rid, source_server, {"source": "cloned"}, owner=owner
                 )
                 log("INFO", f"克隆成功! 本地保存: {local_path}")
                 return {
@@ -692,8 +737,14 @@ class ModelHubSkill(SkillBase):
         if not name:
             raise ValueError("需要指定算例名称")
 
+        owner = None
+        if rid:
+            parts = rid.split("/")
+            if len(parts) >= 2:
+                owner = parts[1]
+
         metadata = {"description": description, "tags": tags}
-        model_registry.register_model(name, rid, server, metadata)
+        model_registry.register_model(name, rid, server, metadata, owner=owner)
 
         log("INFO", f"已注册算例: {name} -> {rid}")
 
@@ -797,7 +848,10 @@ class ModelHubSkill(SkillBase):
             name = source_path.name
 
         saved_path = model_registry.save_local(name, source_path)
-        model_registry.register_model(name, rid, server, {"source": "imported"})
+        owner = rid.split("/")[1] if rid and "/" in rid else None
+        model_registry.register_model(
+            name, rid, server, {"source": "imported"}, owner=owner
+        )
 
         log("INFO", f"已导入算例: {name} -> {saved_path}")
 
@@ -945,8 +999,9 @@ class ModelHubSkill(SkillBase):
 
                 # 注册算例
                 metadata = {"description": description, "tags": tags}
+                owner = m.get("owner") or (rid.split("/")[1] if "/" in rid else None)
                 model_registry.register_model(
-                    normalized_name, rid, server_name, metadata
+                    normalized_name, rid, server_name, metadata, owner=owner
                 )
                 registered.append({"name": normalized_name, "rid": rid, "tags": tags})
                 log("INFO", f"  注册: {normalized_name} -> {rid}")
@@ -1082,6 +1137,7 @@ class HubConfig:
                 "url": info.get("url"),
                 "token": "***" if info.get("token") else None,
                 "token_file": info.get("token_file"),
+                "username": info.get("username"),
                 "priority": info.get("priority", 10),
             }
             for name, info in servers.items()
@@ -1098,13 +1154,23 @@ class HubConfig:
         token: Optional[str],
         token_file: Optional[str],
         priority: int = 10,
+        username: Optional[str] = None,
     ):
+        if not username and token:
+            username = parse_token_username(token)
+        if not username and token_file:
+            token_path = Path(token_file)
+            if token_path.exists():
+                token_content = token_path.read_text().strip()
+                username = parse_token_username(token_content)
+
         servers = self._config.setdefault("servers", {})
         servers[name] = {
             "url": url,
             "token": token,
             "token_file": token_file,
             "priority": priority,
+            "username": username,
         }
         if not self._config.get("current_server"):
             self._config["current_server"] = name
@@ -1174,14 +1240,23 @@ class ModelRegistry:
         return None
 
     def register_model(
-        self, name: str, rid: Optional[str], server: str, metadata: Dict
+        self,
+        name: str,
+        rid: Optional[str],
+        server: str,
+        metadata: Dict,
+        owner: Optional[str] = None,
     ):
         if name not in self._registry:
-            self._registry[name] = {"rids": {}, "metadata": {}}
+            self._registry[name] = {"rids": {}, "metadata": {}, "owner": None}
 
         if rid:
             rids = self._registry[name].setdefault("rids", {})
             rids[server] = rid
+            if owner:
+                self._registry[name]["owner"] = owner
+            elif not self._registry[name].get("owner"):
+                self._registry[name]["owner"] = owner
 
         meta = self._registry[name].get("metadata", {})
         meta.update(metadata)
