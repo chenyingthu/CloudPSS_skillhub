@@ -25,11 +25,11 @@ class TestPowerFlowSkillIntegration:
 
     @pytest.fixture(scope="class")
     def auth_token(self):
-        """Load auth token from file"""
-        token_path = Path(".cloudpss_token_internal")
+        """Load auth token from file (prefer public cloud token)"""
+        token_path = Path(".cloudpss_token")
         if token_path.exists():
             return token_path.read_text().strip()
-        token_path = Path(".cloudpss_token")
+        token_path = Path(".cloudpss_token_internal")
         if token_path.exists():
             return token_path.read_text().strip()
         pytest.skip("No CloudPSS token found")
@@ -72,7 +72,7 @@ class TestPowerFlowSkillIntegration:
         """Test IEEE39 model converges"""
         config = {
             "skill": "power_flow",
-            "auth": {"token": auth_token, "server": "internal"},
+            "auth": {"token": auth_token},
             "model": {"rid": "model/chenying/IEEE39"},
             "algorithm": {
                 "type": "newton_raphson",
@@ -90,7 +90,7 @@ class TestPowerFlowSkillIntegration:
         """Test IEEE3 model converges"""
         config = {
             "skill": "power_flow",
-            "auth": {"token": auth_token, "server": "internal"},
+            "auth": {"token": auth_token},
             "model": {"rid": "model/chenying/IEEE3"},
             "algorithm": {
                 "type": "newton_raphson",
@@ -106,8 +106,8 @@ class TestPowerFlowSkillIntegration:
         """Test result has expected data structure"""
         config = {
             "skill": "power_flow",
-            "auth": {"token": auth_token, "server": "internal"},
-            "model": {"rid": "model/chenying/IEEE39"},
+            "auth": {"token": auth_token},
+            "model": {"rid": "model/holdme/IEEE39"},
             "output": {"format": "json"},
         }
 
@@ -123,7 +123,7 @@ class TestPowerFlowSkillIntegration:
         """Test fast_decoupled algorithm"""
         config = {
             "skill": "power_flow",
-            "auth": {"token": auth_token, "server": "internal"},
+            "auth": {"token": auth_token},
             "model": {"rid": "model/chenying/IEEE39"},
             "algorithm": {
                 "type": "fast_decoupled",
@@ -140,7 +140,7 @@ class TestPowerFlowSkillIntegration:
         """Test handling of nonexistent model"""
         config = {
             "skill": "power_flow",
-            "auth": {"token": auth_token, "server": "internal"},
+            "auth": {"token": auth_token},
             "model": {"rid": "model/nonexistent/model"},
             "output": {"path": "/tmp"},
         }

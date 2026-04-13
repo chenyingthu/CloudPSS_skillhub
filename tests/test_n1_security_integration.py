@@ -24,11 +24,11 @@ class TestN1SecuritySkillIntegration:
 
     @pytest.fixture(scope="class")
     def auth_token(self):
-        """Load auth token from file"""
-        token_path = Path(".cloudpss_token_internal")
+        """Load auth token from file (prefer public cloud token)"""
+        token_path = Path(".cloudpss_token")
         if token_path.exists():
             return token_path.read_text().strip()
-        token_path = Path(".cloudpss_token")
+        token_path = Path(".cloudpss_token_internal")
         if token_path.exists():
             return token_path.read_text().strip()
         pytest.skip("No CloudPSS token found")
@@ -76,8 +76,8 @@ class TestN1SecuritySkillIntegration:
 
         config = {
             "skill": "n1_security",
-            "auth": {"token": auth_token, "server": "internal"},
-            "model": {"rid": "model/chenying/IEEE3"},
+            "auth": {"token": auth_token},
+            "model": {"rid": "model/holdme/IEEE3"},
             "analysis": {
                 "branch_types": ["TransmissionLine", "_newTransformer_3p2w"],
                 "max_outages": 3,
@@ -99,8 +99,8 @@ class TestN1SecuritySkillIntegration:
 
         config = {
             "skill": "n1_security",
-            "auth": {"token": auth_token, "server": "internal"},
-            "model": {"rid": "model/chenying/IEEE3"},
+            "auth": {"token": auth_token},
+            "model": {"rid": "model/holdme/IEEE3"},
             "analysis": {
                 "max_outages": 2,
             },
@@ -120,8 +120,8 @@ class TestN1SecuritySkillIntegration:
 
         config = {
             "skill": "n1_security",
-            "auth": {"token": auth_token, "server": "internal"},
-            "model": {"rid": "model/chenying/IEEE3"},
+            "auth": {"token": auth_token},
+            "model": {"rid": "model/holdme/IEEE3"},
             "analysis": {
                 "max_outages": 1,
             },
