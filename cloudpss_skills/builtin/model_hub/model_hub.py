@@ -14,9 +14,14 @@ import json
 import logging
 import os
 import shutil
+import time
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from dataclasses import dataclass, field
+from enum import Enum
 
 from cloudpss_skills.core import (
     Artifact,
@@ -29,6 +34,54 @@ from cloudpss_skills.core import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class SyncStatus(Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+@dataclass
+class SyncProgress:
+    total: int = 0
+    synced: int = 0
+    failed: int = 0
+    skipped: int = 0
+    current: str = ""
+    lock: threading.Lock = field(default_factory=threading.Lock)
+    start_time: float = field(default_factory=time.time)
+
+    def update(self, status: SyncStatus, name: str = "", error: str = ""):
+        with self.lock:
+            if status == SyncStatus.SUCCESS:
+                self.synced += 1
+            elif status == SyncStatus.FAILED:
+                self.failed += 1
+            elif status == SyncStatus.SKIPPED:
+                self.skipped += 1
+            self.current = name
+
+    def get_stats(self) -> Dict[str, Any]:
+        elapsed = time.time() - self.start_time
+        return {
+            "total": self.total,
+            "synced": self.synced,
+            "failed": self.failed,
+            "skipped": self.skipped,
+            "elapsed": round(elapsed, 1),
+            "rate": round(self.synced / elapsed, 2) if elapsed > 0 else 0,
+        }
+
+    def format_bar(self, width: int = 30) -> str:
+        if self.total == 0:
+            return "[" + " " * width + "] 0%"
+        done = int(width * (self.synced + self.failed + self.skipped) / self.total)
+        bar = "=" * done + " " * (width - done)
+        pct = int(100 * (self.synced + self.failed + self.skipped) / self.total)
+        return f"[{bar}] {pct}%"
 
 
 def parse_token_username(token: str) -> Optional[str]:
@@ -153,6 +206,31 @@ class ModelHubSkill(SkillBase):
                             "type": "boolean",
                             "default": False,
                             "description": "强制覆盖",
+                        },
+                        "filters": {
+                            "type": "object",
+                            "description": "扫描过滤条件",
+                            "properties": {
+                                "tags": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                    "description": "按标签过滤",
+                                },
+                                "name_pattern": {
+                                    "type": "string",
+                                    "description": "按名称过滤",
+                                },
+                            },
+                        },
+                        "parallel": {
+                            "type": "boolean",
+                            "default": True,
+                            "description": "sync_all 是否并行下载",
+                        },
+                        "max_workers": {
+                            "type": "integer",
+                            "default": 4,
+                            "description": "并行下载的最大线程数",
                         },
                     },
                 },
@@ -1150,58 +1228,103 @@ class ModelHubSkill(SkillBase):
         config: Dict,
         log,
     ) -> Dict:
-        """扫描服务器算例并全部拉取到本地"""
-        # 先扫描注册
+        """扫描服务器算例并全部拉取到本地（支持并行下载）"""
+        model_config = config.get("model", {})
+        parallel = model_config.get("parallel", True)
+        max_workers = model_config.get("max_workers", 4)
+
         scan_result = self._scan_and_register(model_registry, hub_config, config, log)
         if "error" in scan_result:
             return scan_result
 
-        # 获取要同步的算例列表
         models = model_registry.list_models()
         server_name = scan_result.get("server")
 
-        synced = []
-        failed = []
-        pull_failed = []
-
-        log("INFO", f"开始同步 {len(models)} 个算例到本地...")
-
+        to_sync = []
         for model in models:
             name = model["name"]
             rid = model.get("rids", {}).get(server_name)
-
             if not rid:
                 continue
-
-            # 检查本地是否已存在
             local_path = model_registry.get_local_path(name)
             if local_path.exists():
-                synced.append({"name": name, "status": "already_exists"})
                 continue
+            to_sync.append({"name": name, "rid": rid, "server": server_name})
 
+        if not to_sync:
+            log("INFO", "没有需要同步的算例")
+            return {
+                "status": "synced",
+                "server": server_name,
+                "total_models": len(models),
+                "synced": [],
+                "failed": [],
+                "synced_count": 0,
+                "failed_count": 0,
+                "message": "没有需要同步的算例",
+            }
+
+        progress = SyncProgress(total=len(to_sync))
+        log("INFO", f"开始同步 {len(to_sync)} 个算例到本地... (parallel={parallel})")
+
+        synced = []
+        failed = []
+
+        def pull_single(item: Dict) -> Dict:
+            name = item["name"]
+            rid = item["rid"]
+            srv = item["server"]
             try:
-                config_copy = config.copy()
-                config_copy["model"] = {
+                cfg = config.copy()
+                cfg["model"] = {
                     "name": name,
                     "rid": rid,
-                    "source_server": server_name,
+                    "source_server": srv,
                 }
-                result = self._pull_model(model_registry, hub_config, config_copy, log)
-                synced.append({"name": name, "status": "success"})
+                self._pull_model(model_registry, hub_config, cfg, log)
+                progress.update(SyncStatus.SUCCESS, name)
+                log("INFO", f"  [{progress.format_bar()}] 下载成功: {name}")
+                return {"name": name, "status": "success"}
             except Exception as e:
-                failed.append({"name": name, "error": str(e)})
-                pull_failed.append(name)
+                progress.update(SyncStatus.FAILED, name)
+                log("ERROR", f"  [{progress.format_bar()}] 下载失败: {name} - {e}")
+                return {"name": name, "status": "failed", "error": str(e)}
 
-        log("INFO", f"同步完成: 成功 {len(synced)}, 失败 {len(failed)}")
+        if parallel and len(to_sync) > 1:
+            with ThreadPoolExecutor(
+                max_workers=min(max_workers, len(to_sync))
+            ) as executor:
+                futures = {executor.submit(pull_single, item): item for item in to_sync}
+                for future in as_completed(futures):
+                    result = future.result()
+                    if result["status"] == "success":
+                        synced.append(result)
+                    else:
+                        failed.append(result)
+        else:
+            for item in to_sync:
+                result = pull_single(item)
+                if result["status"] == "success":
+                    synced.append(result)
+                else:
+                    failed.append(result)
+
+        stats = progress.get_stats()
+        log(
+            "INFO",
+            f"同步完成: 成功 {stats['synced']}, 失败 {stats['failed']}, 耗时 {stats['elapsed']}s",
+        )
 
         return {
             "status": "synced",
             "server": server_name,
             "total_models": len(models),
+            "to_sync_count": len(to_sync),
             "synced": synced,
             "failed": failed,
-            "synced_count": len(synced),
-            "failed_count": len(failed),
+            "synced_count": stats["synced"],
+            "failed_count": stats["failed"],
+            "elapsed_seconds": stats["elapsed"],
         }
 
     def _normalize_model_name(self, name: str, rid: str) -> str:
