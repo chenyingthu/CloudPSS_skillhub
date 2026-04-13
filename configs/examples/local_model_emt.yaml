@@ -7,7 +7,7 @@ auth:
   token_file: .cloudpss_token
 
 model:
-  rid: ./models/ieee3_prepared.yaml
+  rid: ./models/ieee3_emt.yaml
   source: local
 
 simulation:

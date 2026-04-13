@@ -114,37 +114,43 @@ output:
 
 ---
 
-### ieee3_prep
+### emt_simulation - fault 字段
+
+EMT仿真技能支持直接调整故障参数和采样频率，无需单独准备模型。
 
 #### fault 字段
 
 | 字段 | 类型 | 默认 | 说明 |
 |-----|------|-----|------|
-| `start_time` | number | 2.5 | 故障起始时间（秒） |
-| `end_time` | number | 2.7 | 故障结束时间（秒） |
+| `start_time` | number | - | 故障开始时间（秒），修改 `_newFaultResistor_3p` 元件的 `fs` 参数 |
+| `end_time` | number | - | 故障结束时间（秒），修改 `_newFaultResistor_3p` 元件的 `fe` 参数 |
 
-#### output 字段
+#### simulation.sampling_freq 字段
 
 | 字段 | 类型 | 默认 | 说明 |
 |-----|------|-----|------|
-| `sampling_freq` | integer | 2000 | 采样频率（Hz） |
-| `filename` | string | ieee3_prepared.yaml | 输出文件名 |
+| `sampling_freq` | integer | 2000 | 采样频率（Hz），自动应用到所有 `_newChannel` 通道 |
 
 **完整示例**:
 
 ```yaml
-skill: ieee3_prep
+skill: emt_simulation
 auth:
   token_file: .cloudpss_token
 model:
   rid: model/holdme/IEEE3
+  source: cloud
+simulation:
+  duration: 10.0
+  timeout: 300
+  sampling_freq: 2000
 fault:
   start_time: 2.5
   end_time: 2.7
 output:
-  sampling_freq: 2000
-  path: ./
-  filename: ieee3_prepared.yaml
+  format: csv
+  path: ./results/
+  prefix: emt_output
 ```
 
 ---

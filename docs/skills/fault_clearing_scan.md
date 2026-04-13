@@ -377,7 +377,7 @@ transient_stability (暂态稳定分析)
 ```
 
 **依赖关系**：
-- **输入依赖**：`ieee3_prep` 或类似的模型准备技能（确保模型有故障元件）
+- **输入依赖**：模型需包含故障元件
 - **输出被依赖**：
   - `visualize`: 绘制清除时间-电压恢复曲线
   - `result_compare`: 对比不同故障位置的扫描结果
@@ -416,20 +416,19 @@ scan:
 
 **解决**：
 ```python
-# 使用ieee3_prep技能准备模型
+# 使用 emt_simulation 的 fault 配置直接调整故障参数
 from cloudpss_skills import get_skill
 
-prep_skill = get_skill("ieee3_prep")
-prep_config = {
+emt = get_skill("emt_simulation")
+emt_config = {
     "model": {"rid": "model/holdme/IEEE3"},
     "fault": {"start_time": 2.5, "end_time": 2.7},
-    "output": {"filename": "ieee3_with_fault.yaml"}
 }
-result = prep_skill.run(prep_config)
+result = emt.run(emt_config)
 
-# 然后使用准备好的模型进行扫描
+# 然后进行扫描
 scan_config = {
-    "model": {"rid": "./ieee3_with_fault.yaml", "source": "local"},
+    "model": {"rid": "model/holdme/IEEE3"},
     "scan": {"fe_values": [2.6, 2.65, 2.7]}
 }
 ```

@@ -286,7 +286,7 @@ if result.status.value == "FAILED":
     elif "模型不存在" in error_msg:
         print("错误: 请检查模型RID是否正确")
     elif "EMT仿真失败" in error_msg:
-        print("错误: 模型未配置EMT参数，先运行ieee3_prep")
+        print("错误: 模型未配置EMT参数，请确保模型包含EMT拓扑和故障元件")
     else:
         print(f"未知错误: {error_msg}")
 ```
@@ -407,8 +407,8 @@ if result.status.value == "FAILED":
 ```
 power_flow
     ↓ (基础潮流)
-ieee3_prep
-    ↓ (EMT模型准备)
+emt_simulation (配置fault参数)
+    ↓ (EMT仿真)
 transient_stability
     ↓ (稳定性分析)
 emt_n1_screening
@@ -431,10 +431,9 @@ emt_n1_screening
 **原因**: 模型未配置EMT拓扑
 
 **解决**:
-
 ```bash
-# 先运行ieee3_prep准备模型
-python -m cloudpss_skills run --config config/ieee3_prep.yaml
+# 确保模型已配置EMT拓扑
+# 可通过 emt_simulation 的 fault 配置调整故障参数
 ```
 
 ### 问题2: 转速信号提取失败
