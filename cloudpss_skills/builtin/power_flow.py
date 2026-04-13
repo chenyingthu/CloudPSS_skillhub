@@ -190,6 +190,7 @@ class PowerFlowSkill(SkillBase):
             FileNotFoundError,
             ValueError,
             TypeError,
+            Exception,
         ) as e:
             log("ERROR", str(e))
             return SkillResult(
