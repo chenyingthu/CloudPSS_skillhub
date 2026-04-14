@@ -3,15 +3,15 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cloudpss-toolkit"
-version = "0.2.0"
-description = "CloudPSS API 增强工具包 - 电力系统仿真研究的高级封装"
+name = "cloudpss-skillhub"
+version = "1.0.0"
+description = "CloudPSS SkillHub - 电力系统仿真技能中心，48 个专业仿真技能"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "CloudPSS Research Team"}
+    {name = "Chen Ying", email = "chenyingthu@example.com"}
 ]
-keywords = ["cloudpss", "power system", "simulation", "emt", "power flow"]
+keywords = ["cloudpss", "power system", "simulation", "emt", "power flow", "skillhub"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
@@ -48,10 +48,10 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-org/cloudpss-toolkit"
-Documentation = "https://cloudpss-toolkit.readthedocs.io"
-Repository = "https://github.com/your-org/cloudpss-toolkit"
-Issues = "https://github.com/your-org/cloudpss-toolkit/issues"
+Homepage = "https://github.com/chenyingthu/CloudPSS_skillhub"
+Documentation = "https://github.com/chenyingthu/CloudPSS_skillhub/tree/main/docs"
+Repository = "https://github.com/chenyingthu/CloudPSS_skillhub"
+Issues = "https://github.com/chenyingthu/CloudPSS_skillhub/issues"
 
 [project.scripts]
 cloudpss-run = "cloudpss_skills.__main__:main"
