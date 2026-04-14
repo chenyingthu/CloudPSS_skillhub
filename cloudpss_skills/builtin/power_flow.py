@@ -161,8 +161,6 @@ class PowerFlowSkill(SkillBase):
                 "bus_count": len(bus_rows),
                 "branch_count": len(branch_rows),
                 "timestamp": datetime.now().isoformat(),
-                "buses": bus_rows,
-                "branches": branch_rows,
             }
 
             export_result = save_json(
