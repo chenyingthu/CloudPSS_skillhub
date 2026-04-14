@@ -1,16 +1,17 @@
 # CloudPSS 技能系统文档
 
-配置驱动的电力系统仿真工具包，包含46个专业仿真技能。
+配置驱动的电力系统仿真工具包，包含48个专业仿真技能。
 
 ## 技能文档索引
 
-### 模型管理类（新增）
+### 模型管理类
 
 | 技能 | 描述 | 文档 |
 |------|------|------|
 | `component_catalog` | 组件目录发现 | [查看文档](component_catalog.md) |
 | `model_builder` | 模型构建器 | [查看文档](model_builder.md) |
 | `model_validator` | 模型验证器 | [查看文档](model_validator.md) |
+| `model_hub` | 算例中心 - 多服务器统一管理 | [查看文档](model_hub.md) |
 
 ### 仿真执行类
 
