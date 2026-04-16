@@ -228,7 +228,11 @@ class TheveninEquivalentSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "thevenin_equivalent",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),

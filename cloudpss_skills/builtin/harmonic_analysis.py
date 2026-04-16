@@ -259,6 +259,7 @@ class HarmonicAnalysisSkill(SkillBase):
             # 汇总结果
             result_data = {
                 "model": base_model.name,
+                "model_rid": base_model.rid,
                 "fundamental_freq": fundamental,
                 "max_harmonic": max_harmonic,
                 "thd_limit": thd_limit,
@@ -357,7 +358,11 @@ class HarmonicAnalysisSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "harmonic_analysis",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),

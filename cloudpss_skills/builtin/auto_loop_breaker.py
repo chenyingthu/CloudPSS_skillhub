@@ -6,6 +6,7 @@ Auto Loop Breaker Skill
 
 import json
 import logging
+import random
 import re
 import time
 import uuid
@@ -405,7 +406,11 @@ class AutoLoopBreakerSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "auto_loop_breaker",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),

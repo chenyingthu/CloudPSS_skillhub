@@ -333,6 +333,7 @@ class EmtN1ScreeningSkill(SkillBase):
                         "delta_post_vs_baseline": r[
                             "delta_worst_postfault_gap_vs_baseline"
                         ],
+                        "monitored_buses": r.get("monitored_buses", {}),
                     }
                     for r in ranked_results
                 ],
@@ -422,7 +423,11 @@ class EmtN1ScreeningSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "emt_n1_screening",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),

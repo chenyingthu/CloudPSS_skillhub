@@ -36,6 +36,7 @@ from cloudpss_skills.core import (
     register,
 )
 from cloudpss_skills.core.auth_utils import load_or_fetch_model, setup_auth
+from cloudpss_skills.core.utils import parse_cloudpss_table
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ class OrthogonalRun:
     parameter_values: Dict[str, float]
     status: str = "pending"
     result: Optional[float] = None
+    pf_result: Optional[Dict] = None
     error: Optional[str] = None
 
 
@@ -431,7 +433,7 @@ class OrthogonalSensitivitySkill(SkillBase):
                 if not job and model.jobs:
                     job = model.jobs[0]
 
-            log("INFO", f"使用job: {job.get('name', 'default')}")
+            log("INFO", f"使用job: {job.get('name', 'default') if job else 'default'}")
 
             # 7. 执行正交运行
             log("INFO", "开始执行正交运行...")
@@ -491,12 +493,27 @@ class OrthogonalSensitivitySkill(SkillBase):
                         time.sleep(2)
 
                     if runner.status():
-                        # 获取结果指标
-                        metric_value = self._extract_metric(
-                            runner.result, target, model
-                        )
+                        pf_result = runner.result
+                        metric_value = self._extract_metric(pf_result, target, model)
                         run.result = metric_value
                         run.status = "success"
+
+                        if hasattr(pf_result, "getBuses") and pf_result.getBuses():
+                            bus_rows = parse_cloudpss_table(pf_result.getBuses())
+                            branch_rows = (
+                                parse_cloudpss_table(pf_result.getBranches())
+                                if pf_result.getBranches
+                                else None
+                            )
+                            run.pf_result = {
+                                "bus_count": len(bus_rows),
+                                "branch_count": len(branch_rows) if branch_rows else 0,
+                                "buses": bus_rows,
+                                "branches": branch_rows if branch_rows else [],
+                            }
+                        else:
+                            run.pf_result = {"status": "no_powerflow_result"}
+
                         log("INFO", f"     结果: {metric_value}")
                     else:
                         run.status = "timeout"
@@ -613,7 +630,11 @@ class OrthogonalSensitivitySkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "orthogonal_sensitivity",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),
@@ -778,6 +799,7 @@ class OrthogonalSensitivitySkill(SkillBase):
                     "parameter_values": r.parameter_values,
                     "status": r.status,
                     "result": r.result,
+                    "pf_result": r.pf_result,
                     "error": r.error,
                 }
                 for r in runs

@@ -202,11 +202,15 @@ class VoltageStabilitySkill(SkillBase):
 
                     if not job_result.success:
                         log("WARNING", f"  潮流计算失败")
+                        fallback_voltages = {}
+                        if converged_cases:
+                            fallback_voltages = converged_cases[-1].get("voltages", {})
                         results.append(
                             {
                                 "scale": scale,
                                 "converged": False,
-                                "voltages": {},
+                                "voltages": fallback_voltages,
+                                "note": "潮流计算失败，使用上一个收敛水平的电压值作为参考",
                             }
                         )
                         continue
@@ -217,10 +221,11 @@ class VoltageStabilitySkill(SkillBase):
                         raise RuntimeError("未从潮流结果中提取到任何目标母线电压")
                     min_voltage = min(voltages.values()) if voltages else 1.0
 
+                    job_id = getattr(getattr(job_result, "job", None), "id", None)
                     case_result = {
                         "scale": scale,
                         "converged": True,
-                        "job_id": job.id,
+                        "job_id": job_id,
                         "voltages": voltages,
                         "min_voltage": min_voltage,
                     }
@@ -239,18 +244,20 @@ class VoltageStabilitySkill(SkillBase):
                     AttributeError,
                     ConnectionError,
                     RuntimeError,
-                    FileNotFoundError,
                     ValueError,
                 ) as e:
                     log("ERROR", f"  计算失败: {e}")
+                    fallback_voltages = {}
+                    if converged_cases:
+                        fallback_voltages = converged_cases[-1].get("voltages", {})
                     results.append(
                         {
                             "scale": scale,
                             "converged": False,
+                            "voltages": fallback_voltages,
                             "error": str(e),
                         }
                     )
-                    # 记录失败但继续下一个负荷水平，不中断扫描
                     continue
 
             # 计算最大负荷能力
@@ -269,11 +276,13 @@ class VoltageStabilitySkill(SkillBase):
 
             result_data = {
                 "model": base_model.name,
+                "model_rid": base_model.rid,
                 "collapse_threshold": collapse_threshold,
                 "collapse_point": collapse_point,
                 "max_loadability": max_loadability,
                 "total_cases": len(results),
                 "converged_cases": len(converged_cases),
+                "monitored_buses": target_buses,
                 "results": results,
                 "pv_curve": pv_curve_data,
             }
@@ -359,7 +368,11 @@ class VoltageStabilitySkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "voltage_stability",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),

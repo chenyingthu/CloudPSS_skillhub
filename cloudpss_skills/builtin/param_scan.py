@@ -27,6 +27,7 @@ from cloudpss_skills.core import (
     OutputConfig,
     save_json,
 )
+from cloudpss_skills.core.utils import parse_cloudpss_table
 
 logger = logging.getLogger(__name__)
 
@@ -216,21 +217,49 @@ class ParamScanSkill(SkillBase):
                         job_result = run_powerflow_and_wait(model, config, log_func=log)
 
                     if job_result.success:
-                        results.append(
-                            {
-                                "value": value,
-                                "status": "success",
-                                "job_id": job_result.job.id if job_result.job else "",
-                                "converged": True,
-                            }
-                        )
+                        job_id = getattr(getattr(job_result, "job", None), "id", None)
+                        scan_result = {
+                            "value": value,
+                            "status": "success",
+                            "job_id": job_id,
+                            "converged": True,
+                        }
+
+                        if sim_type != "emt" and hasattr(job_result, "result"):
+                            pf_result = job_result.result
+                            if pf_result:
+                                bus_rows = (
+                                    parse_cloudpss_table(pf_result.getBuses())
+                                    if pf_result.getBuses
+                                    else None
+                                )
+                                branch_rows = (
+                                    parse_cloudpss_table(pf_result.getBranches())
+                                    if pf_result.getBranches
+                                    else None
+                                )
+                                scan_result["bus_count"] = (
+                                    len(bus_rows) if bus_rows else 0
+                                )
+                                scan_result["branch_count"] = (
+                                    len(branch_rows) if branch_rows else 0
+                                )
+                                scan_result["buses"] = bus_rows if bus_rows else []
+                                scan_result["branches"] = (
+                                    branch_rows if branch_rows else []
+                                )
+
+                        results.append(scan_result)
                         log("INFO", f"  -> 仿真成功 ({job_result.waited_seconds:.1f}s)")
                     else:
+                        failed_job_id = getattr(
+                            getattr(job_result, "job", None), "id", None
+                        )
                         results.append(
                             {
                                 "value": value,
                                 "status": "failed",
-                                "job_id": job_result.job.id if job_result.job else "",
+                                "job_id": failed_job_id,
                                 "converged": False,
                             }
                         )
@@ -316,7 +345,11 @@ class ParamScanSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "param_scan",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),

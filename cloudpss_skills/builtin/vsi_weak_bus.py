@@ -247,7 +247,11 @@ class VSIWeakBusSkill(SkillBase):
                     status=SkillStatus.FAILED,
                     start_time=start_time,
                     end_time=datetime.now(),
-                    data={},
+                    data={
+                        "success": False,
+                        "error": "未找到符合条件的测试母线",
+                        "stage": "vsi_weak_bus",
+                    },
                     artifacts=artifacts,
                     logs=logs
                     + [
@@ -343,7 +347,11 @@ class VSIWeakBusSkill(SkillBase):
                         status=SkillStatus.FAILED,
                         start_time=start_time,
                         end_time=datetime.now(),
-                        data={},
+                        data={
+                            "success": False,
+                            "error": "EMT仿真失败或未在时间内完成",
+                            "stage": "vsi_weak_bus",
+                        },
                         artifacts=artifacts,
                         logs=logs
                         + [
@@ -375,7 +383,11 @@ class VSIWeakBusSkill(SkillBase):
                     status=SkillStatus.FAILED,
                     start_time=start_time,
                     end_time=datetime.now(),
-                    data={},
+                    data={
+                        "success": False,
+                        "error": str(e),
+                        "stage": "vsi_weak_bus",
+                    },
                     artifacts=artifacts,
                     logs=logs
                     + [
@@ -538,7 +550,11 @@ class VSIWeakBusSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "vsi_weak_bus",
+                },
                 artifacts=artifacts,
                 logs=logs
                 + [

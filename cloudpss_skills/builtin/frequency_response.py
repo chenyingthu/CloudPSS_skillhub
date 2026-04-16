@@ -294,6 +294,7 @@ class FrequencyResponseSkill(SkillBase):
             # 汇总结果
             result_data = {
                 "model": base_model.name,
+                "model_rid": base_model.rid,
                 "disturbance_type": disturbance_type,
                 "disturbance_time": disturbance_time,
                 "base_frequency": base_freq,
@@ -385,7 +386,11 @@ class FrequencyResponseSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "frequency_response",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),

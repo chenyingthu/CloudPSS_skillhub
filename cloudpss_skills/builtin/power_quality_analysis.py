@@ -385,6 +385,7 @@ class PowerQualityAnalysisSkill(SkillBase):
             # 准备输出数据
             result_data = {
                 "model": base_model.name,
+                "model_rid": base_model.rid,
                 "fundamental_freq": fundamental,
                 "indicators": indicators,
                 "limits": limits,
@@ -466,7 +467,11 @@ class PowerQualityAnalysisSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "power_quality_analysis",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),

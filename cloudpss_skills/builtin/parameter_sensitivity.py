@@ -284,6 +284,7 @@ class ParameterSensitivitySkill(SkillBase):
 
             result_data = {
                 "model": base_model.name,
+                "model_rid": base_model.rid,
                 "target_parameter": target,
                 "reference_value": reference,
                 "simulation_type": sim_type,
@@ -382,7 +383,11 @@ class ParameterSensitivitySkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "parameter_sensitivity",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),

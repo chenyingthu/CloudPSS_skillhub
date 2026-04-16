@@ -91,6 +91,11 @@ from .model_utils import (
 
 from .cli import main
 
+from .output_validator import (
+    SkillOutputValidator,
+    validate_skill_output,
+)
+
 __all__ = [
     # Base classes
     "SkillBase",
@@ -165,4 +170,7 @@ __all__ = [
     "count_components_by_definition",
     # CLI
     "main",
+    # Output Validator
+    "SkillOutputValidator",
+    "validate_skill_output",
 ]

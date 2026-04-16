@@ -6,7 +6,7 @@ Power Flow Skill
 
 import logging
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from cloudpss_skills.core import (
     Artifact,
@@ -28,6 +28,15 @@ from cloudpss_skills.core import (
 from cloudpss_skills.core.utils import parse_cloudpss_table
 
 logger = logging.getLogger(__name__)
+
+
+def _as_float(value, default=0.0):
+    try:
+        if value is None or value == "":
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 @register
@@ -153,14 +162,22 @@ class PowerFlowSkill(SkillBase):
                 timestamp=output_config.get("timestamp", True),
             )
 
+            # Safe access to job.id (job may be None even if success is True)
+            job_id = getattr(getattr(job_result, "job", None), "id", None)
+
             result_data = {
                 "model": model.name,
                 "model_rid": model.rid,
-                "job_id": job_result.job.id,
+                "job_id": job_id,
                 "converged": True,
                 "bus_count": len(bus_rows),
                 "branch_count": len(branch_rows),
                 "timestamp": datetime.now().isoformat(),
+                # Complete power flow results
+                "buses": bus_rows,
+                "branches": branch_rows,
+                # Summary statistics
+                "summary": self._generate_summary(bus_rows, branch_rows),
             }
 
             export_result = save_json(
@@ -183,10 +200,6 @@ class PowerFlowSkill(SkillBase):
             )
 
         except (
-            KeyError,
-            AttributeError,
-            ZeroDivisionError,
-            RuntimeError,
             FileNotFoundError,
             ValueError,
             TypeError,
@@ -198,8 +211,59 @@ class PowerFlowSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "power_flow",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),
             )
+
+    def _generate_summary(self, bus_rows: List[Dict], branch_rows: List[Dict]) -> Dict:
+        total_p_gen = 0.0
+        total_q_gen = 0.0
+        total_p_load = 0.0
+        total_q_load = 0.0
+        total_loss = 0.0
+        min_voltage = 999.0
+        max_voltage = 0.0
+
+        for bus in bus_rows:
+            p_gen = _as_float(bus.get("Pg") or bus.get("<i>P</i><sub>g</sub> / MW"))
+            q_gen = _as_float(bus.get("Qg") or bus.get("<i>Q</i><sub>g</sub> / Mvar"))
+            p_load = _as_float(bus.get("Pl") or bus.get("<i>P</i><sub>l</sub> / MW"))
+            q_load = _as_float(bus.get("Ql") or bus.get("<i>Q</i><sub>l</sub> / Mvar"))
+            vm = _as_float(bus.get("Vm") or bus.get("<i>V</i><sub>m</sub> / pu"), 1.0)
+
+            total_p_gen += p_gen
+            total_q_gen += q_gen
+            total_p_load += p_load
+            total_q_load += q_load
+            if 0 < vm < min_voltage:
+                min_voltage = vm
+            if vm > max_voltage:
+                max_voltage = vm
+
+        for branch in branch_rows:
+            p_loss = _as_float(
+                branch.get("Ploss") or branch.get("P_loss") or branch.get("P_Loss")
+            )
+            total_loss += p_loss
+
+        return {
+            "total_generation": {
+                "p_mw": round(total_p_gen, 2),
+                "q_mvar": round(total_q_gen, 2),
+            },
+            "total_load": {
+                "p_mw": round(total_p_load, 2),
+                "q_mvar": round(total_q_load, 2),
+            },
+            "total_loss_mw": round(total_loss, 4),
+            "voltage_range": {
+                "min_pu": round(min_voltage, 4),
+                "max_pu": round(max_voltage, 4),
+            },
+        }

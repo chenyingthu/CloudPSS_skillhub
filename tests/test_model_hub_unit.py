@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from cloudpss_skills.builtin.model_hub.model_hub import (
+from cloudpss_skills.builtin.model_hub import (
     ModelHubSkill,
     HubConfig,
     ModelRegistry,

@@ -312,7 +312,11 @@ class ReactiveCompensationDesignSkill(SkillBase):
                     status=SkillStatus.FAILED,
                     start_time=start_time,
                     end_time=datetime.now(),
-                    data={},
+                    data={
+                        "success": False,
+                        "error": "未找到补偿目标母线",
+                        "stage": "reactive_compensation_design",
+                    },
                     artifacts=artifacts,
                     logs=logs
                     + [
@@ -599,7 +603,11 @@ class ReactiveCompensationDesignSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "reactive_compensation_design",
+                },
                 artifacts=artifacts,
                 logs=logs
                 + [

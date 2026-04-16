@@ -226,8 +226,15 @@ class DisturbanceSeveritySkill(SkillBase):
             emt_result = self._get_emt_result(model, config)
             if emt_result is None:
                 return SkillResult(
+                    skill_name=self.name,
                     status=SkillStatus.FAILED,
-                    data={},
+                    start_time=start_time,
+                    end_time=datetime.now(),
+                    data={
+                        "success": False,
+                        "error": "获取EMT结果失败",
+                        "stage": "disturbance_severity",
+                    },
                     artifacts=artifacts,
                     logs=logs
                     + [
@@ -248,8 +255,15 @@ class DisturbanceSeveritySkill(SkillBase):
 
             if not voltage_channels:
                 return SkillResult(
+                    skill_name=self.name,
                     status=SkillStatus.FAILED,
-                    data={},
+                    start_time=start_time,
+                    end_time=datetime.now(),
+                    data={
+                        "success": False,
+                        "error": "未能从结果中提取电压数据",
+                        "stage": "disturbance_severity",
+                    },
                     artifacts=artifacts,
                     logs=logs
                     + [
@@ -284,6 +298,7 @@ class DisturbanceSeveritySkill(SkillBase):
 
             result_data = {
                 "model_rid": model_rid,
+                "model_name": getattr(model, "name", None) if model else None,
                 "disturbance_time": disturbance_time,
                 "channel_count": len(voltage_channels),
                 "channel_results": results,
@@ -362,7 +377,11 @@ class DisturbanceSeveritySkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "disturbance_severity",
+                },
                 artifacts=artifacts,
                 logs=logs
                 + [

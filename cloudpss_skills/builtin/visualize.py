@@ -99,6 +99,11 @@ class VisualizeSkill(SkillBase):
                         "dpi": {"type": "integer", "default": 150},
                         "width": {"type": "number", "default": 12},
                         "height": {"type": "number", "default": 6},
+                        "include_raw_data": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": "是否在结果中包含原始波形数据",
+                        },
                     },
                 },
             },
@@ -322,17 +327,22 @@ class VisualizeSkill(SkillBase):
 
             log("INFO", f"图表已保存: {filepath}")
 
+            result_data = {
+                "channels": len(plotted_channels),
+                "plotted_channels": plotted_channels,
+                "data_points": len(time_data),
+                "output": str(filepath),
+            }
+
+            if output_config.get("include_raw_data", False):
+                result_data["raw_data"] = data
+
             return SkillResult(
                 skill_name=self.name,
                 status=SkillStatus.SUCCESS,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={
-                    "channels": len(plotted_channels),
-                    "plotted_channels": plotted_channels,
-                    "data_points": len(time_data),
-                    "output": str(filepath),
-                },
+                data=result_data,
                 artifacts=artifacts,
                 logs=logs,
             )
@@ -351,7 +361,11 @@ class VisualizeSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "visualize",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),

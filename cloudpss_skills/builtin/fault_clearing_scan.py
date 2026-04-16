@@ -213,6 +213,7 @@ class FaultClearingScanSkill(SkillBase):
 
             result_data = {
                 "model": base_model.name,
+                "model_rid": base_model.rid,
                 "study_time": study_time,
                 "monotonic_degradation": is_monotonic,
                 "results": results,
@@ -303,7 +304,11 @@ class FaultClearingScanSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "fault_clearing_scan",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),

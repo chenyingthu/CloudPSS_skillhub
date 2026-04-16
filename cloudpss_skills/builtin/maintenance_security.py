@@ -245,6 +245,7 @@ class MaintenanceSecuritySkill(SkillBase):
 
             result_data = {
                 "model": base_model.name,
+                "model_rid": base_model.rid,
                 "maintenance": maintenance_case,
                 "residual_n1_count": len(n1_results),
                 "critical_count": critical_count,
@@ -316,7 +317,11 @@ class MaintenanceSecuritySkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "maintenance_security",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),

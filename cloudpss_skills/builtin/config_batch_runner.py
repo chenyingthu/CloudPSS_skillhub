@@ -391,6 +391,20 @@ class ConfigBatchRunnerSkill(SkillBase):
                             if hasattr(runner.result, "getPlots"):
                                 plots = runner.result.getPlots()
                                 result_summary["plots_count"] = len(plots)
+
+                            # 获取潮流结果数据（如果存在）
+                            if hasattr(runner.result, "getBuses"):
+                                buses = runner.result.getBuses()
+                                result_summary["buses_count"] = (
+                                    len(buses) if buses else 0
+                                )
+
+                            if hasattr(runner.result, "getBranches"):
+                                branches = runner.result.getBranches()
+                                result_summary["branches_count"] = (
+                                    len(branches) if branches else 0
+                                )
+
                         except (KeyError, AttributeError) as e:
                             log("DEBUG", f"  -> 获取结果摘要失败: {e}")
 
@@ -445,6 +459,19 @@ class ConfigBatchRunnerSkill(SkillBase):
             output_path = Path(output_config.get("path", "./results/"))
             output_path.mkdir(parents=True, exist_ok=True)
             prefix = output_config.get("prefix", "config_batch")
+
+            # 导出详细仿真结果（当 export_results=True 时）
+            if export_results and success_results:
+                log("INFO", "导出详细仿真结果...")
+                try:
+                    detailed_results = self._export_detailed_results(
+                        results, model, output_path, prefix, log
+                    )
+                    if detailed_results:
+                        artifacts.extend(detailed_results)
+                        log("INFO", f"已导出 {len(detailed_results)} 个详细结果文件")
+                except Exception as e:
+                    log("WARN", f"导出详细结果失败: {e}")
 
             # 保存JSON报告
             report_file = output_path / f"{prefix}_report.json"
@@ -542,7 +569,11 @@ class ConfigBatchRunnerSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "config_batch_runner",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),
@@ -588,3 +619,92 @@ class ConfigBatchRunnerSkill(SkillBase):
             "error_message": result.error_message,
             "result_summary": result.result_summary,
         }
+
+    def _export_detailed_results(
+        self,
+        results: List[ConfigRunResult],
+        model: Any,
+        output_path: Path,
+        prefix: str,
+        log_func,
+    ) -> List[Artifact]:
+        """导出每个成功运行的详细仿真结果"""
+        from cloudpss_skills.core.utils import parse_cloudpss_table
+
+        artifacts = []
+        success_results = [r for r in results if r.status == "success"]
+
+        for i, result in enumerate(success_results, 1):
+            try:
+                model_copy = model.clone()
+                cfg = model_copy.configs[result.config_index]
+
+                if hasattr(model_copy, "jobs") and model_copy.jobs:
+                    job = model_copy.jobs[0]
+                    runner = model_copy.run(job, cfg)
+
+                    elapsed = 0
+                    while not runner.status() and elapsed < 60:
+                        import time
+
+                        time.sleep(1)
+                        elapsed += 1
+                        if elapsed >= 60:
+                            break
+
+                    if runner.status() and hasattr(runner, "result"):
+                        pf_result = runner.result
+                        detailed_data = {
+                            "config_index": result.config_index,
+                            "config_name": result.config_name,
+                            "model_rid": model.rid,
+                            "model_name": model.name,
+                        }
+
+                        if hasattr(pf_result, "getBuses"):
+                            buses = pf_result.getBuses()
+                            if buses:
+                                detailed_data["buses"] = parse_cloudpss_table(buses)
+
+                        if hasattr(pf_result, "getBranches"):
+                            branches = pf_result.getBranches()
+                            if branches:
+                                detailed_data["branches"] = parse_cloudpss_table(
+                                    branches
+                                )
+
+                        if hasattr(pf_result, "getPlots"):
+                            plots = pf_result.getPlots()
+                            if plots:
+                                detailed_data["plots"] = [
+                                    {"name": p.get("name", f"plot_{j}")}
+                                    for j, p in enumerate(plots)
+                                ]
+
+                        result_file = (
+                            output_path
+                            / f"{prefix}_config_{result.config_index}_result.json"
+                        )
+                        result_file.write_text(
+                            json.dumps(detailed_data, indent=2, ensure_ascii=False),
+                            encoding="utf-8",
+                        )
+                        artifacts.append(
+                            Artifact(
+                                type="json",
+                                path=str(result_file),
+                                size=result_file.stat().st_size,
+                                description=f"配置 {result.config_index} ({result.config_name}) 详细结果",
+                            )
+                        )
+                        log_func(
+                            "DEBUG", f"  -> 已导出配置 {result.config_index} 详细结果"
+                        )
+
+            except Exception as e:
+                log_func(
+                    "WARN", f"  -> 导出配置 {result.config_index} 详细结果失败: {e}"
+                )
+                continue
+
+        return artifacts

@@ -659,6 +659,8 @@ class ModelValidatorSkill(SkillBase):
 
             result["details"]["bus_count"] = len(bus_rows)
             result["details"]["branch_count"] = len(branch_rows)
+            result["details"]["buses"] = bus_rows
+            result["details"]["branches"] = branch_rows
 
             # 检查电压范围
             vm_values = [self._coerce_number(row.get(VM_COLUMN)) for row in bus_rows]
@@ -673,6 +675,11 @@ class ModelValidatorSkill(SkillBase):
                 vm_min, vm_max = min(vm_values), max(vm_values)
                 result["details"]["voltage_min"] = vm_min
                 result["details"]["voltage_max"] = vm_max
+                result["details"]["per_bus_voltages"] = {
+                    row.get(BUS_COLUMN): self._coerce_number(row.get(VM_COLUMN))
+                    for row in bus_rows
+                    if row.get(VM_COLUMN) is not None
+                }
                 logger.info(f"  电压范围: {vm_min:.4f} ~ {vm_max:.4f} pu")
 
                 if vm_min < DEFAULT_VOLTAGE_MIN or vm_max > DEFAULT_VOLTAGE_MAX:
@@ -817,6 +824,7 @@ class ModelValidatorSkill(SkillBase):
                 raise RuntimeError("EMT结果缺少 plot 输出")
 
             valid_trace = None
+            raw_x, raw_y = [], []
             for plot_index, _plot in enumerate(plots):
                 channel_names = emt_result.getPlotChannelNames(plot_index) or []
                 if not channel_names:
@@ -855,7 +863,13 @@ class ModelValidatorSkill(SkillBase):
                         "point_count": len(x_values),
                         "y_min": y_min,
                         "y_max": y_max,
+                        "waveform_sample": {
+                            "x": x_values[:100],
+                            "y": y_values[:100],
+                            "total_points": len(x_values),
+                        },
                     }
+                    raw_x, raw_y = x_values, y_values
                     break
 
                 if valid_trace:

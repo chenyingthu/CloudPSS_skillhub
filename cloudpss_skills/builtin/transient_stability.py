@@ -249,7 +249,7 @@ class TransientStabilitySkill(SkillBase):
 
                 case_result = {
                     "fe": fe,
-                    "job_id": job.id,
+                    "job_id": emt_result.job.id,
                     "stability": stability_metrics,
                 }
                 results.append(case_result)
@@ -273,6 +273,7 @@ class TransientStabilitySkill(SkillBase):
 
             result_data = {
                 "model": base_model.name,
+                "model_rid": base_model.rid,
                 "fault_location": fault_location,
                 "stability_trend": stability_trend,
                 "results": results,
@@ -364,7 +365,11 @@ class TransientStabilitySkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "transient_stability",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),

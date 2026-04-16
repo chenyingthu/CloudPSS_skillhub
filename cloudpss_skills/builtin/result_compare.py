@@ -220,23 +220,35 @@ class ResultCompareSkill(SkillBase):
 
                                     channels_data[channel] = channel_metrics
                     else:
-                        # 对于潮流等其他结果类型，记录日志
-                        log(
-                            "WARNING",
-                            f"  -> 结果类型 {result_type} 暂不支持通道数据提取",
-                        )
-                        # 尝试获取基本数据
+                        # 对于潮流等其他结果类型，尝试提取基本数据
+                        log("INFO", f"  -> 尝试提取 {result_type} 结果数据")
+
                         try:
-                            data_attrs = [
-                                attr
-                                for attr in dir(result)
-                                if not attr.startswith("_")
-                                and not callable(getattr(result, attr))
-                            ]
-                            log("INFO", f"  -> 可用属性: {data_attrs[:5]}")
+                            # 尝试获取潮流结果数据
+                            if hasattr(result, "getBuses"):
+                                buses = result.getBuses()
+                                if buses:
+                                    channels_data["_buses"] = {"count": len(buses)}
+                                    log("INFO", f"  -> 获取 {len(buses)} 个母线")
+
+                            if hasattr(result, "getBranches"):
+                                branches = result.getBranches()
+                                if branches:
+                                    channels_data["_branches"] = {
+                                        "count": len(branches)
+                                    }
+                                    log("INFO", f"  -> 获取 {len(branches)} 个支路")
+
+                            # 尝试获取基本属性
+                            if hasattr(result, "success"):
+                                channels_data["_success"] = result.success
+                            if hasattr(result, "error"):
+                                channels_data["_error"] = (
+                                    str(result.error) if result.error else None
+                                )
+
                         except Exception as e:
-                            # 异常已捕获，无需额外处理
-                            logger.debug(f"忽略预期异常: {e}")
+                            log("DEBUG", f"  -> 提取非EMT数据失败: {e}")
 
                     all_results.append(
                         {
@@ -356,7 +368,11 @@ class ResultCompareSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "result_compare",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),

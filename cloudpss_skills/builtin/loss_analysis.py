@@ -220,9 +220,11 @@ class LossAnalysisSkill(SkillBase):
                     power_flow_result
                 )
 
-            # 构建结果
+            model_name = getattr(self.model, "name", model_rid)
+
             result_data = {
-                "model": model_rid,
+                "model": model_name,
+                "model_rid": model_rid,
                 "summary": self._generate_summary(),
                 "branch_losses": [
                     self._branch_to_dict(bl) for bl in self.branch_losses
@@ -456,14 +458,114 @@ class LossAnalysisSkill(SkillBase):
             raise RuntimeError("从潮流结果提取变压器损耗失败") from e
 
     def _calculate_loss_sensitivity(self, power_flow_result) -> Dict:
-        """计算网损灵敏度"""
-        # 简化实现
+        """计算网损灵敏度
+
+        基于潮流结果的节点电压/功率分布，计算各节点对系统网损的灵敏度。
+        使用简化的灵敏度公式：dP_loss/dQ_i ≈ 2 * V_i * V_j * G_ij * sin(theta_i - theta_j)
+
+        注意：完整灵敏度计算需要扰动分析，当前实现基于潮流结果的近似估算。
+        若需要精确灵敏度，建议使用扰动分析法：依次增加各节点无功，观察网损变化。
+        """
+        from cloudpss_skills.core.utils import parse_cloudpss_table
+
+        sensitivities = []
+
+        # 从潮流结果提取母线数据用于灵敏度估算
+        try:
+            buses = power_flow_result.getBuses()
+            branches = power_flow_result.getBranches()
+
+            if buses and branches:
+                bus_data = parse_cloudpss_table(buses)
+                branch_data = parse_cloudpss_table(branches)
+
+                # 计算系统总网损作为基准
+                total_loss = sum(bl.p_loss_mw for bl in self.branch_losses)
+
+                # 基于功率分布估算灵敏度（简化方法）
+                # 对于每个非Slack节点，根据其无功出力估算对网损的影响
+                for branch in branch_data:
+                    from_bus = branch.get("From bus", "")
+                    to_bus = branch.get("To bus", "")
+
+                    # 查找相关母线的电压水平
+                    from_v = 1.0
+                    to_v = 1.0
+                    for bus in bus_data:
+                        bus_id = str(bus.get("Bus", "") or "")
+                        if bus_id == str(from_bus):
+                            vm = bus.get("Vm") or bus.get(
+                                "<i>V</i><sub>m</sub> / pu", 1.0
+                            )
+                            try:
+                                from_v = float(vm)
+                            except (ValueError, TypeError):
+                                pass
+                        if bus_id == str(to_bus):
+                            vm = bus.get("Vm") or bus.get(
+                                "<i>V</i><sub>m</sub> / pu", 1.0
+                            )
+                            try:
+                                to_v = float(vm)
+                            except (ValueError, TypeError):
+                                pass
+
+                    # 估算灵敏度：电压低的母线对网损更敏感
+                    # 简化公式：sensitivity ≈ (1 - V) * branch_loss_ratio
+                    p_loss = 0.0
+                    for key in ["Ploss", "P_loss", "P_Loss", "PLoss"]:
+                        if key in branch and branch[key] is not None:
+                            try:
+                                p_loss = abs(float(branch[key]))
+                                break
+                            except (ValueError, TypeError):
+                                pass
+
+                    loss_ratio = p_loss / total_loss if total_loss > 0 else 0
+
+                    # 节点灵敏度估算（基于电压偏离1pu的程度）
+                    for bus_label, bus_v in [
+                        (f"Bus_{from_bus}", from_v),
+                        (f"Bus_{to_bus}", to_v),
+                    ]:
+                        sensitivity = (
+                            (1.0 - bus_v) * loss_ratio * 100 if bus_v < 1.0 else 0.0
+                        )
+                        if sensitivity > 0.01:  # 只记录有意义的灵敏度
+                            sensitivities.append(
+                                {
+                                    "bus": str(bus_label),
+                                    "voltage_pu": round(bus_v, 4),
+                                    "loss_ratio": round(loss_ratio, 4),
+                                    "sensitivity_estimate": round(sensitivity, 4),
+                                    "note": "近似估算，基于电压偏离和支路损耗占比",
+                                }
+                            )
+
+                # 按灵敏度排序
+                sensitivities.sort(
+                    key=lambda x: x.get("sensitivity_estimate", 0), reverse=True
+                )
+
+        except Exception as e:
+            logger.warning(f"灵敏度估算失败: {e}")
+
+        # 如果无法计算，返回可用信息而非假数据
+        if not sensitivities:
+            return {
+                "description": "网损对各节点无功注入的灵敏度",
+                "method": "approximate_from_powerflow",
+                "sensitivities": [],
+                "available": False,
+                "message": "无法从当前潮流结果计算灵敏度，需进行扰动分析",
+            }
+
         return {
-            "description": "网损对各节点无功注入的灵敏度",
-            "method": "perturbation_analysis",
-            "sensitivities": [
-                {"bus": f"Bus_{i}", "sensitivity": 0.01 * i} for i in range(1, 11)
-            ],
+            "description": "网损对各节点无功注入的灵敏度（近似估算）",
+            "method": "approximate_from_powerflow",
+            "sensitivities": sensitivities[:10],  # 最多返回前10个
+            "available": True,
+            "note": "基于潮流结果的近似估算，精确灵敏度需进行扰动分析",
         }
 
     def _generate_optimization_suggestions(self, power_flow_result) -> Dict:

@@ -253,6 +253,7 @@ class FaultSeverityScanSkill(SkillBase):
 
             result_data = {
                 "model": base_model.name,
+                "model_rid": base_model.rid,
                 "fault_trend": fault_trend,
                 "gap_trend": gap_trend,
                 "results": results_sorted,
@@ -361,7 +362,11 @@ class FaultSeverityScanSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "fault_severity_scan",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),

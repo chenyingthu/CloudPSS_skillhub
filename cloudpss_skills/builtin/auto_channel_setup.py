@@ -384,7 +384,15 @@ class AutoChannelSetupSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "auto_channel_setup",
+                    "model_rid": rid if "rid" in dir() else None,
+                    "model_name": getattr(model, "name", None)
+                    if "model" in dir() and model
+                    else None,
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),

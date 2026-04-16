@@ -185,7 +185,11 @@ class N2SecuritySkill(SkillBase):
             logger.info(f"开始N-2安全校核: {model_rid}")
 
             # 获取模型
-            model = load_or_fetch_model(model_config, config)
+            model = reload_model(
+                model_config["rid"],
+                model_config.get("source", "cloud"),
+                config,
+            )
 
             logger.info(f"模型: {model.name}")
 

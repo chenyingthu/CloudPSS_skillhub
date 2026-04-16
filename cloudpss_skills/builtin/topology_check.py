@@ -364,7 +364,11 @@ class TopologyCheckSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "topology_check",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),

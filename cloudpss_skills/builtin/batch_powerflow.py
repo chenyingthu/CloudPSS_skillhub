@@ -24,6 +24,7 @@ from cloudpss_skills.core import (
     OutputConfig,
     save_json,
 )
+from cloudpss_skills.core.utils import parse_cloudpss_table
 
 logger = logging.getLogger(__name__)
 
@@ -189,16 +190,27 @@ class BatchPowerFlowSkill(SkillBase):
                         if not result.getBuses() or not result.getBranches():
                             raise RuntimeError("潮流结果为空或缺少母线/支路表")
                         converged_count += 1
+                        job_id = getattr(getattr(job_result, "job", None), "id", None)
+
+                        # Extract complete power flow results
+                        bus_rows = parse_cloudpss_table(result.getBuses())
+                        branch_rows = parse_cloudpss_table(result.getBranches())
+
                         result_data = {
                             "model_rid": model_rid,
                             "model_name": model.name,
                             "status": "converged",
-                            "job_id": job_result.job.id,
+                            "job_id": job_id,
                             "converged": True,
+                            "bus_count": len(bus_rows) if bus_rows else 0,
+                            "branch_count": len(branch_rows) if branch_rows else 0,
+                            # Complete power flow results
+                            "buses": bus_rows if bus_rows else [],
+                            "branches": branch_rows if branch_rows else [],
                         }
                         log(
                             "INFO",
-                            f"  -> 潮流收敛 ✓ ({job_result.waited_seconds:.1f}s)",
+                            f"  -> 潮流收敛 ✓ ({job_result.waited_seconds:.1f}s, {len(bus_rows)} buses, {len(branch_rows)} branches)",
                         )
                     else:
                         failed_count += 1
@@ -343,7 +355,11 @@ class BatchPowerFlowSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "batch_powerflow",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),

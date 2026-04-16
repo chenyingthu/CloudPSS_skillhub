@@ -309,6 +309,7 @@ class ProtectionCoordinationSkill(SkillBase):
             # 构建结果
             result_data = {
                 "model": model_rid,
+                "model_rid": model_rid,
                 "protection_devices_found": len(self.protection_devices),
                 "distance_relays": len(
                     [

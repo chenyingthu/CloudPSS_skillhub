@@ -270,8 +270,8 @@ class ContingencyAnalysisSkill(SkillBase):
                     log("INFO", f"[{i}/{len(contingencies)}] {contingency['name']}")
 
                     result = self._evaluate_contingency(
-                        model_rid,
-                        model_source,
+                        model_config["rid"],
+                        model_config.get("source", "cloud"),
                         contingency,
                         analysis_config,
                         voltage_limit,
@@ -338,16 +338,18 @@ class ContingencyAnalysisSkill(SkillBase):
             )
             log("INFO", f"严重故障: {summary['severe_cases']} 个")
 
-            # 准备输出数据
             result_data = {
                 "model": base_model.name,
+                "model_rid": base_model.rid,
                 "contingency_level": level,
                 "summary": summary,
                 "weak_points": weak_points,
                 "top_severe_cases": valid_results[:top_n],
-                "all_results": results
-                if output_config.get("export_all_cases", False)
-                else None,
+                "all_results": results,
+                "base_case": {
+                    "bus_count": len(base_buses),
+                    "branch_count": len(base_branches),
+                },
             }
 
             # 导出结果
@@ -428,7 +430,11 @@ class ContingencyAnalysisSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "contingency_analysis",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),
@@ -666,6 +672,15 @@ class ContingencyAnalysisSkill(SkillBase):
                 result["violations"].extend(
                     [{"type": "VOLTAGE", "details": v} for v in voltage_violations[:5]]
                 )
+
+            result["bus_voltages"] = {
+                bus.get("Bus", bus.get("name", f"bus_{i}")): round(
+                    abs(bus.get(voltage_col, 1.0)), 4
+                )
+                if voltage_col
+                else 1.0
+                for i, bus in enumerate(buses)
+            }
 
         # 热稳定检查
         thermal_violations = []

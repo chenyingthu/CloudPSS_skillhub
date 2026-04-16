@@ -248,6 +248,7 @@ class StudyPipelineSkill(SkillBase):
                         "status": data["status"].value,
                         "has_data": bool(data.get("data")),
                         "artifacts_count": len(data.get("artifacts", [])),
+                        "data": data.get("data"),
                     }
                     for name, data in context["steps"].items()
                 },
@@ -298,7 +299,11 @@ class StudyPipelineSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "study_pipeline",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),
@@ -462,6 +467,7 @@ class StudyPipelineSkill(SkillBase):
                     "duration": (result.end_time - result.start_time).total_seconds()
                     if result.end_time and result.start_time
                     else 0,
+                    "data": result.data,
                 }
             else:
                 log("WARNING", f"✗ {step_name}: 失败 - {result.error}")
@@ -470,6 +476,7 @@ class StudyPipelineSkill(SkillBase):
                     "skill": skill_name,
                     "status": "failed",
                     "error": result.error,
+                    "data": result.data,
                 }
 
         except Exception as e:

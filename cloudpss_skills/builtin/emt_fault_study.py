@@ -316,7 +316,8 @@ class EmtFaultStudySkill(SkillBase):
                 job = run_emt_and_wait(
                     working_model, timeout=300, log_func=log, config=config
                 )
-                log("INFO", f"  Job ID: {job.id}")
+                job_id = getattr(job, "id", None)
+                log("INFO", f"  Job ID: {job_id}")
 
                 # 提取结果
                 result = job.result
@@ -328,7 +329,7 @@ class EmtFaultStudySkill(SkillBase):
                         "description": scenario["description"],
                         "fault_end_time": scenario["fe"],
                         "fault_chg": scenario["chg"],
-                        "job_id": job.id,
+                        "job_id": job_id,
                         "metrics": metrics,
                     }
                 )
@@ -463,7 +464,11 @@ class EmtFaultStudySkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "emt_fault_study",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),

@@ -308,7 +308,11 @@ class DUDVCurveSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "dudv_curve",
+                },
                 artifacts=artifacts,
                 logs=logs
                 + [

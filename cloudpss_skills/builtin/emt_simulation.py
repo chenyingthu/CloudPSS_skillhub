@@ -258,10 +258,11 @@ class EmtSimulationSkill(SkillBase):
                     )
                     log("INFO", f"导出: {filepath}")
 
+            job_id = getattr(getattr(job_result, "job", None), "id", None)
             result_data = {
                 "model_name": model.name,
                 "model_rid": model.rid,
-                "job_id": job_result.job.id,
+                "job_id": job_id,
                 "plot_count": len(plots),
                 "plots": [],
             }
@@ -301,7 +302,11 @@ class EmtSimulationSkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "emt_simulation",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),
@@ -312,7 +317,10 @@ class EmtSimulationSkill(SkillBase):
         FAULT_DEFINITION = "model/CloudPSS/_newFaultResistor_3p"
         components = get_components_by_definition(model, FAULT_DEFINITION)
         if not components:
-            log_func("WARN", "未找到故障元件 model/CloudPSS/_newFaultResistor_3p，跳过故障参数调整")
+            log_func(
+                "WARN",
+                "未找到故障元件 model/CloudPSS/_newFaultResistor_3p，跳过故障参数调整",
+            )
             return model
 
         fault = components[0]

@@ -244,6 +244,11 @@ class ModelBuilderSkill(SkillBase):
                     "name": {"type": "string"},
                     "description": {"type": "string"},
                     "tags": {"type": "array", "items": {"type": "string"}},
+                    "include_components": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "是否在结果中包含模型组件数据",
+                    },
                 },
             },
         },
@@ -348,14 +353,17 @@ class ModelBuilderSkill(SkillBase):
                     generated_models.append(model_info)
 
             # 构建结果
+            output_config = config.get("output", {})
             result_data = {
                 "base_model": base_rid,
+                "model_rid": base_rid,
                 "modifications_count": len(modifications),
                 "modifications_applied": self.modifications_applied,
                 "workflow": config.get("workflow", {}).get("name"),
                 "generated_models": [
                     {
                         "name": m.name,
+                        "model_rid": m.rid,
                         "rid": m.rid,
                         "description": m.description,
                         "modifications": m.modifications_applied,
@@ -363,6 +371,21 @@ class ModelBuilderSkill(SkillBase):
                     for m in generated_models
                 ],
             }
+
+            if output_config.get("include_components", False) and self.model:
+                components = self.model.getAllComponents()
+                result_data["components"] = {
+                    "total_count": len(components),
+                    "items": [
+                        {
+                            "key": key,
+                            "label": getattr(comp, "label", None),
+                            "type": getattr(comp, "definition", None),
+                            "args": getattr(comp, "args", None),
+                        }
+                        for key, comp in components.items()
+                    ],
+                }
 
             logger.info(f"模型构建完成，生成了 {len(generated_models)} 个模型")
             return SkillResult(

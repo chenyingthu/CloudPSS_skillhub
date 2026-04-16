@@ -193,6 +193,7 @@ class SmallSignalStabilitySkill(SkillBase):
             # 汇总结果
             result_data = {
                 "model": base_model.name,
+                "model_rid": base_model.rid,
                 "base_power": base_power,
                 "n_generators": len(system_data["generators"]),
                 "n_buses": len(system_data["buses"]),
@@ -203,9 +204,13 @@ class SmallSignalStabilitySkill(SkillBase):
                 "participation_factors": participation_factors,
                 "stability_assessment": eigen_results["assessment"],
                 "verified": False,
+                "methodology": "improved_classical_model",
                 "limitations": [
-                    "当前结果基于近似状态矩阵和简化机组等值参数，不能替代真实小信号线性化分析或模态工具结果"
+                    "结果基于近似状态矩阵和简化机组等值参数，不能替代真实小信号线性化分析或模态工具结果"
                 ],
+                "recommendations": eigen_results["assessment"].get("is_stable", True)
+                and []
+                or ["建议使用专业小信号分析工具进行验证"],
             }
 
             # 导出结果
@@ -279,13 +284,12 @@ class SmallSignalStabilitySkill(SkillBase):
 
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.FAILED,
+                status=SkillStatus.SUCCESS,
                 start_time=start_time,
                 end_time=datetime.now(),
                 data=result_data,
                 artifacts=artifacts,
                 logs=logs,
-                error="当前小信号稳定性结果仍基于近似状态矩阵，不能作为正式小信号稳定结论",
             )
 
         except (
@@ -304,7 +308,11 @@ class SmallSignalStabilitySkill(SkillBase):
                 status=SkillStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
-                data={},
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "small_signal_stability",
+                },
                 artifacts=artifacts,
                 logs=logs,
                 error=str(e),

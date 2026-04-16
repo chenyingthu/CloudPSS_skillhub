@@ -283,6 +283,8 @@ class BatchTaskManagerSkill(SkillBase):
             prefix = output_config.get("prefix", "batch_tasks")
 
             result_data = {
+                "model_rid": model_rid,
+                "model_name": getattr(model, "name", None) if model else None,
                 "total_tasks": result.total_tasks,
                 "completed_tasks": result.completed_tasks,
                 "failed_tasks": result.failed_tasks,
@@ -384,8 +386,15 @@ class BatchTaskManagerSkill(SkillBase):
         ) as e:
             logger.error(f"批量任务管理失败: {e}", exc_info=True)
             return SkillResult(
+                skill_name=self.name,
                 status=SkillStatus.FAILED,
-                data={},
+                start_time=start_time,
+                end_time=datetime.now(),
+                data={
+                    "success": False,
+                    "error": str(e),
+                    "stage": "batch_task_manager",
+                },
                 artifacts=artifacts,
                 logs=logs + [LogEntry(level="ERROR", message=f"管理失败: {str(e)}")],
                 metrics={"duration": (datetime.now() - start_time).total_seconds()},
@@ -517,12 +526,15 @@ class BatchTaskManagerSkill(SkillBase):
 
                 if job.status() == 1:  # 完成
                     task.status = TaskStatus.COMPLETED
-                    task.result = {"job_id": job.id, "status": "completed"}
+                    task.result = {
+                        "job_id": getattr(job, "id", None),
+                        "status": "completed",
+                    }
                     task.completed_at = datetime.now()
                     logger.info(f"任务 {task.name} 完成")
                     return
                 elif job.status() == 2:  # 失败
-                    raise RuntimeError(f"仿真失败: {job.id}")
+                    raise RuntimeError(f"仿真失败: {getattr(job, 'id', 'unknown')}")
                 else:  # 超时
                     raise TimeoutError(f"任务超时: {timeout}s")
 
