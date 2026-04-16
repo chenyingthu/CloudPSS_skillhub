@@ -103,6 +103,73 @@ def config_schema(self) -> Dict[str, Any]:
 
 **注意**：这些技能仍必须包含 `"skill"` 在 required 中。
 
+#### 2.1.4 例外：多模型/多母线操作类技能
+
+以下技能使用**替代主输入字段**（数组类型），而不是单一的 `model` 字段：
+
+| 技能 | 主输入字段 | 说明 |
+|------|-----------|------|
+| `dudv_curve` | `buses` (array) | DUDV 曲线可视化，需要指定多个待分析的母线 |
+| `model_validator` | `models` (array) | 模型验证技能，可批量验证多个测试算例 |
+
+```python
+# dudv_curve: 多母线分析
+"required": ["skill", "buses"]
+"properties": {
+    "buses": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "要分析的母线列表"
+    }
+}
+
+# model_validator: 多模型验证
+"required": ["skill", "models"]
+"properties": {
+    "models": {
+        "type": "array",
+        "items": {"type": "object", "required": ["rid"]}
+    }
+}
+```
+
+**设计理由**：
+- 这些技能的操作对象是**多个目标**（多母线或多模型），而非单一模型
+- 使用数组字段作为主输入更符合业务场景
+- 与后处理技能类似，属于合理的例外情况
+
+#### 2.1.5 例外：流程编排类技能
+
+以下技能使用**流程定义**作为主输入字段，而不是单一的 `model` 字段：
+
+| 技能 | 主输入字段 | 说明 |
+|------|-----------|------|
+| `study_pipeline` | `pipeline` (array) | 多技能流程编排，定义执行步骤列表 |
+
+```python
+# study_pipeline: 流程编排
+"required": ["skill", "pipeline"]
+"properties": {
+    "pipeline": {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "required": ["skill"],
+            "properties": {
+                "name": {"type": "string"},
+                "skill": {"type": "string"},
+                "config": {"type": "object"}
+            }
+        }
+    }
+}
+```
+
+**设计理由**：
+- 流程编排技能的核心是**执行步骤序列**，而非单一模型
+- 每个步骤可以有自己的模型配置
+- 属于合理的例外情况
+
 ### 2.2 数据类型规范
 
 #### 2.2.1 数值类型
