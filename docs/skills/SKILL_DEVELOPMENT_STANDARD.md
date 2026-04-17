@@ -650,10 +650,141 @@ CloudPSS API 内部期望数值类型：
 
 ---
 
-## 7. 更新历史
+## 7. AWT/Swing 架构模式 (cloudpss_skills_v2)
+
+### 7.1 架构概述
+
+`cloudpss_skills_v2` 采用 Java AWT/Swing 分层架构，将仿真引擎适配与业务逻辑解耦：
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│                      Skill Layer (技能层)                      │
+│     user_skill_1 | user_skill_2 | research_skill | ...        │
+└──────────────────────────────▲────────────────────────────────┘
+                               │
+┌──────────────────────────────┴────────────────────────────────┐
+│                  Swing Layer (抽象API层)                       │
+│    PowerFlowAPI | ShortCircuitAPI | TransientAPI | OPFAPI      │
+│    ↑ 引擎无关，轻量级，统一接口                                  │
+└──────────────────────────────▲────────────────────────────────┘
+                               │
+┌──────────────────────────────┴────────────────────────────────┐
+│                  AWT Layer (Peered 适配层)                     │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐            │
+│  │  CloudPSS   │  │ pandapower │  │    PSSE     │  ...       │
+│  │  Adapter    │  │  Adapter   │  │  Adapter    │            │
+│  └─────────────┘  └─────────────┘  └─────────────┘            │
+└───────────────────────────────────────────────────────────────┘
+```
+
+### 7.2 核心组件
+
+#### AWT Layer (Heavyweight)
+
+```python
+from cloudpss_skills_v2.awt import (
+    EngineAdapter,           # 抽象基类
+    EngineConfig,            # 配置
+    SimulationResult,        # 结果
+    ValidationResult,        # 验证结果
+)
+
+# 引擎适配器必须实现
+class MyEngineAdapter(EngineAdapter):
+    @property
+    def engine_name(self) -> str:
+        return "myengine"
+
+    def _do_connect(self) -> None: ...
+    def _do_disconnect(self) -> None: ...
+    def _do_load_model(self, model_id: str) -> bool: ...
+    def _do_run_simulation(self, config: dict) -> SimulationResult: ...
+    def _do_get_result(self, job_id: str) -> SimulationResult: ...
+    def _do_validate_config(self, config: dict) -> ValidationResult: ...
+```
+
+#### Swing Layer (Lightweight)
+
+```python
+from cloudpss_skills_v2.swing import (
+    SimulationAPI,           # API 基类
+    PowerFlowAPI,            # 潮流 API
+    APIFactory,              # 工厂
+)
+
+# 创建 API（引擎无关）
+api = APIFactory.create_powerflow_api(engine="cloudpss")
+
+# 使用 API
+with api:
+    result = api.run_power_flow(model_id="model/holdme/IEEE39")
+    buses = api.get_bus_voltages(result)
+```
+
+### 7.3 技能开发模板
+
+```python
+from typing import Any
+from cloudpss_skills_v2.swing import PowerFlowAPI, APIFactory
+
+class PowerFlowAnalysisSkill:
+    """技能使用 Swing API 层实现引擎无关的业务逻辑"""
+
+    name = "power_flow_analysis"
+    description = "Perform power flow analysis"
+
+    config_schema = {
+        "type": "object",
+        "properties": {
+            "model_id": {"type": "string"},
+            "solver": {"type": "string", "enum": ["acpf", "dcpf"]},
+        },
+        "required": ["model_id"]
+    }
+
+    def __init__(self, engine: str = "cloudpss"):
+        self._api = APIFactory.create_powerflow_api(engine=engine)
+
+    def run(self, config: dict[str, Any]):
+        with self._api:
+            result = self._api.run_power_flow(
+                model_id=config["model_id"],
+                solver=config.get("solver", "acpf"),
+            )
+            return {
+                "job_id": result.job_id,
+                "buses": self._api.get_bus_voltages(result),
+            }
+```
+
+### 7.4 添加新引擎适配器
+
+```python
+from cloudpss_skills_v2.awt import EngineAdapter, EngineConfig
+from cloudpss_skills_v2.swing.apis import APIFactory
+
+# 1. 实现 AWT 适配器
+class PandapowerPowerFlowAdapter(EngineAdapter):
+    @property
+    def engine_name(self) -> str:
+        return "pandapower"
+
+    # 实现抽象方法...
+
+# 2. 注册到工厂
+APIFactory.register_adapter("power_flow", "pandapower", PandapowerPowerFlowAdapter)
+
+# 3. 使用
+api = APIFactory.create_powerflow_api(engine="pandapower")
+```
+
+---
+
+## 8. 更新历史
 
 | 版本 | 日期 | 修改内容 |
 |------|------|----------|
+| 1.1.0 | 2026-04-17 | 新增 AWT/Swing 架构模式 (cloudpss_skills_v2) |
 | 1.0.0 | 2026-04-16 | 初始版本，基于 48 个技能审查结果制定 |
 
 ---
