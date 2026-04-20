@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg/
+*.egg
+
+# Recovery scripts (temp)
+_recover_*.py
+_fix_*.py
+
+# PyTest
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.venv
+env/
+venv/
+
+# CloudPSS
+.cloudpss_token
+.cloudpss_token_internal
+*.token
+
+# Results
+results/
+*.log
+test_results/
+validation_results/
+test_models_*.json
+dual_model_tests/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test reports
+test_*_report.json
+
+# OMX internal
+.omx/
+
+# Build outputs
+output/
+outputs/
