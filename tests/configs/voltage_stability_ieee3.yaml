@@ -1,0 +1,27 @@
+# Voltage Stability Test for IEEE3
+skill: voltage_stability
+
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/IEEE3
+  source: cloud
+
+scan:
+  load_scaling: [1.0, 1.2, 1.4, 1.6, 1.8, 2.0]
+  load_target: null
+  scale_generation: true
+
+monitoring:
+  buses:
+    - "canvas_0_1091"  # Bus with lowest voltage
+    - "canvas_0_1088"
+  collapse_threshold: 0.7
+
+output:
+  format: json
+  path: ./results/
+  prefix: voltage_stability_ieee3
+  generate_report: true
+  export_pv_curve: true

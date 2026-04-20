@@ -1,0 +1,24 @@
+# Fault Clearing Scan Test for IEEE39
+skill: fault_clearing_scan
+
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/IEEE39
+  source: cloud
+
+scan:
+  fs: 2.5
+  fe_values: [2.60, 2.65, 2.70, 2.75]
+  chg: 0.01
+
+assessment:
+  trace_name: "#Gen31.VT:0"
+  study_time: 3.0
+
+output:
+  format: json
+  path: ./results/
+  prefix: fault_clearing_scan_ieee39
+  generate_report: true

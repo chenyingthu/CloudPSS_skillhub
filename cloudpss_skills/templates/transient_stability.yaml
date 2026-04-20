@@ -1,0 +1,49 @@
+# Transient Stability Analysis - 暂态稳定性分析
+# 基于EMT仿真的故障后发电机稳定性评估
+
+skill: transient_stability
+
+# 认证配置
+auth:
+  token_file: .cloudpss_token
+
+# 模型配置
+model:
+  rid: model/holdme/IEEE3
+  source: cloud
+
+# 故障配置
+fault:
+  location: "Bus7"              # 故障位置母线ID
+  fs: 2.5                       # 故障开始时间 (s)
+  fe_values: [2.7, 2.8, 2.9]    # 故障切除时间扫描值
+  chg: 0.01                     # 故障电阻
+
+# 发电机监测配置
+generators:
+  monitored:                    # 监测的发电机名称
+    - "Gen1"
+    - "Gen2"
+    - "Gen3"
+  speed_channels:               # 转速信号通道
+    - "#wr1:0"
+    - "#wr2:0"
+    - "#wr3:0"
+  power_channels:               # 有功功率信号通道
+    - "#P1:0"
+    - "#P2:0"
+    - "#P3:0"
+
+# 评估配置
+assessment:
+  stable_criterion: "damped"    # 稳定性判据: damped(阻尼)/bounded(有界)
+  max_speed_deviation: 0.5      # 最大转速偏差阈值 (pu)
+  analysis_window: [3.0, 8.0]   # 分析时间窗口 [start, end] (s)
+  settling_time_threshold: 0.02 # 稳定时间阈值
+
+# 输出配置
+output:
+  format: json
+  path: ./results/
+  prefix: transient_stability
+  generate_report: true

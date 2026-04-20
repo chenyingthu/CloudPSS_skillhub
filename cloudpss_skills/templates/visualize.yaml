@@ -1,0 +1,22 @@
+skill: visualize
+auth:
+  token_file: .cloudpss_token
+source:
+  job_id: ""          # CloudPSS任务ID，或指定 data_file: ./results/data.csv
+  format: csv
+plot:
+  type: time_series   # time_series, bar, scatter, comparison
+  channels: []        # 要绘制的通道
+  title: Waveform
+  xlabel: Time (s)
+  ylabel: Value
+  time_range:
+    start: 0.0
+    end: 10.0
+output:
+  format: png         # png, pdf, svg
+  path: ./results/
+  filename: waveform
+  dpi: 150
+  width: 12
+  height: 6

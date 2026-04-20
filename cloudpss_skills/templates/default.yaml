@@ -1,0 +1,21 @@
+# 默认配置模板
+# 适用于所有技能的基础配置
+
+# 技能名称（将被覆盖）
+skill: "your_skill_name"
+
+# 认证设置
+auth:
+  token_file: ".cloudpss_token"
+
+# 模型设置
+model:
+  rid: "model/holdme/IEEE3"
+  source: "cloud"
+
+# 输出设置
+output:
+  format: "csv"
+  path: "./results/"
+  prefix: "output"
+  timestamp: true

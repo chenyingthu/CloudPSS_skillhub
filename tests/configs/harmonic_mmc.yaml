@@ -1,0 +1,34 @@
+# Harmonic Analysis Test for MMC Test Case
+skill: harmonic_analysis
+
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/mmc-test-case
+  source: cloud
+
+simulation:
+  duration: 0.5
+  step: 1e-5
+
+analysis:
+  fundamental_freq: 50.0
+  max_harmonic: 50
+  thd_limit: 5.0
+  analysis_window: [0.4, 0.5]
+
+channels:
+  voltage:
+    - "#V1:0"
+    - "#V2:0"
+  current:
+    - "#I1:0"
+    - "#I2:0"
+
+output:
+  format: json
+  path: ./results/
+  prefix: harmonic_mmc
+  generate_report: true
+  export_spectrum: true

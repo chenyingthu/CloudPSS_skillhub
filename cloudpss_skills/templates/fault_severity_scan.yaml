@@ -1,0 +1,34 @@
+# Fault Severity Scan - 故障严重度扫描
+# 扫描故障电阻对电压跌落的影响
+
+skill: fault_severity_scan
+
+# 认证配置
+auth:
+  token_file: .cloudpss_token
+
+# 模型配置
+model:
+  rid: model/holdme/IEEE3
+  source: cloud
+
+# 扫描配置
+scan:
+  fs: 2.5                        # 故障开始时间 (s)
+  fe: 2.7                        # 故障结束时间 (s)
+  chg_values: [0.01, 1.0, 10.0, 50.0, 100.0]  # 故障电阻扫描值 (Ω)
+
+# 评估配置
+assessment:
+  trace_name: "vac:0"            # 监测的电压通道
+  time_windows:                  # RMS计算时间窗口
+    prefault: [2.42, 2.44]
+    fault: [2.56, 2.58]
+    postfault: [2.92, 2.94]
+
+# 输出配置
+output:
+  format: json
+  path: ./results/
+  prefix: fault_severity_scan
+  generate_report: true

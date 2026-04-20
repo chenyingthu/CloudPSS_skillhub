@@ -1,0 +1,55 @@
+# EMT仿真配置模板
+# 用于运行暂态仿真并导出波形数据
+
+skill: emt_simulation
+
+# 认证设置
+auth:
+  # 方式1: 直接指定token（不推荐，可能泄露）
+  # token: "your_token_here"
+
+  # 方式2: 从文件读取token（推荐）
+  token_file: ".cloudpss_token"
+
+  # 方式3: 使用环境变量
+  # token: "${CLOUDPSS_TOKEN}"
+
+# 模型设置
+model:
+  # 模型RID
+  rid: "model/holdme/IEEE3"
+
+  # 模型来源: cloud | local
+  source: "cloud"
+
+# 仿真设置（可选）
+simulation:
+  # 仿真时长（秒），0或不设置则使用模型默认
+  duration: 10.0
+
+  # 仿真步长（秒），0或不设置则自动
+  step_size: 0.0001
+
+  # 超时时间（秒）
+  timeout: 300
+
+# 输出设置
+output:
+  # 输出格式: csv | json | yaml
+  format: "csv"
+
+  # 输出目录
+  path: "./results/"
+
+  # 文件名前缀
+  prefix: "emt_output"
+
+  # 是否添加时间戳到文件名
+  timestamp: true
+
+  # 要导出的通道（空数组表示全部）
+  channels: []
+  # channels:
+  #   - "Bus1_Va"
+  #   - "Bus1_Vb"
+  #   - "Bus1_Vc"

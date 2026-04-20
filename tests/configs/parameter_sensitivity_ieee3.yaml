@@ -1,0 +1,28 @@
+# Parameter Sensitivity Test for IEEE3
+skill: parameter_sensitivity
+
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/IEEE3
+  source: cloud
+
+scan:
+  target: "SyncGen-2.pf_P"
+  values: [80, 90, 100]
+  reference: 90
+  simulation_type: "power_flow"
+
+metrics:
+  voltage_buses:
+    - "Bus7"
+    - "Bus8"
+  power_branches:
+    - "line-7-8"
+
+output:
+  format: json
+  path: ./results/
+  prefix: parameter_sensitivity_ieee3
+  generate_report: true

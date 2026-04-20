@@ -1,0 +1,35 @@
+# Frequency Response Test for IEEE3
+skill: frequency_response
+
+auth:
+  token_file: .cloudpss_token
+
+model:
+  rid: model/holdme/IEEE3
+  source: cloud
+
+disturbance:
+  type: "step_load_change"
+  time: 2.0
+  load_change_percent: 10.0
+
+monitoring:
+  frequency_channels:
+    - "#wr1:0"
+  power_channels:
+    - "#P1:0"
+
+analysis:
+  base_frequency: 60.0
+  analysis_window: [2.0, 10.0]
+  frequency_deadband: 0.05
+  settling_threshold: 0.1
+
+emt:
+  duration: 10.0
+
+output:
+  format: json
+  path: ./results/
+  prefix: frequency_response_ieee3
+  generate_report: true

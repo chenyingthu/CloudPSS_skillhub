@@ -1,0 +1,35 @@
+# Parameter Sensitivity Analysis - 参数灵敏度分析
+# 识别关键参数对系统指标的影响程度
+
+skill: parameter_sensitivity
+
+# 认证配置
+auth:
+  token_file: .cloudpss_token
+
+# 模型配置
+model:
+  rid: model/holdme/IEEE39
+  source: cloud
+
+# 扫描配置
+scan:
+  target: "Gen38.pf_P"          # 目标参数 (格式: Component.arg)
+  values: [800, 850, 900]       # 参数扫描值列表
+  reference: 850                # 参考值 (可选，默认取中间值)
+  simulation_type: "power_flow" # 仿真类型: power_flow/emt
+
+# 指标配置
+metrics:
+  voltage_buses:                # 监测电压的母线
+    - "Bus30"
+    - "Bus38"
+  power_branches:               # 监测功率的支路
+    - "line-30-2"
+
+# 输出配置
+output:
+  format: json
+  path: ./results/
+  prefix: parameter_sensitivity
+  generate_report: true

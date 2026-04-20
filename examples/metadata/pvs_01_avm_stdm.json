@@ -1,0 +1,89 @@
+{
+  "component_id": "model/open-cloudpss/PVS_01-avm-stdm-v1b5",
+  "name": "光伏发电01型-标准封装模型",
+  "description": "公开可访问且支持潮流计算的光伏封装模型，适用于新能源接入算例。",
+  "version": "1.0.0",
+  "category": "renewable",
+  "source": {
+    "documentation_url": "https://kb.cloudpss.net/cases/emtlab/typical-cases/photovoltaic-power-system/pvs_f/pvs_01-avm-stdm-v1",
+    "version": "2026.01"
+  },
+  "parameters": {
+    "groups": [
+      {
+        "group_id": "powerflow",
+        "name": "潮流参数",
+        "description": "控制公开光伏封装模型潮流注入行为的关键参数",
+        "parameters": [
+          {
+            "key": "Vbase",
+            "display_name": "基准电压",
+            "type": "real",
+            "unit": "kV",
+            "required": false,
+            "default": 0.69
+          },
+          {
+            "key": "P_cmd",
+            "display_name": "有功指令",
+            "type": "real",
+            "unit": "MW",
+            "required": true,
+            "default": 50.0
+          },
+          {
+            "key": "pf_P",
+            "display_name": "潮流有功",
+            "type": "real",
+            "unit": "MW",
+            "required": true,
+            "default": 50.0
+          },
+          {
+            "key": "pf_Q",
+            "display_name": "潮流无功",
+            "type": "real",
+            "unit": "MVar",
+            "required": false,
+            "default": 0.0
+          },
+          {
+            "key": "Q_cmd",
+            "display_name": "无功指令",
+            "type": "real",
+            "unit": "MVar",
+            "required": false,
+            "default": 0.0
+          },
+          {
+            "key": "Pctrl_mode",
+            "display_name": "控制模式",
+            "type": "choice",
+            "required": false,
+            "default": "0",
+            "choices": ["0", "1", "2"]
+          }
+        ]
+      }
+    ]
+  },
+  "pins": {
+    "electrical": [
+      {
+        "key": "0",
+        "name": "电网连接端口",
+        "type": "electrical",
+        "dimension": "3×1",
+        "description": "三相并网端口",
+        "required": true
+      }
+    ]
+  },
+  "validation_rules": {
+    "require_at_least_one_pin": true
+  },
+  "simulation_support": {
+    "emt": true,
+    "powerflow": true
+  }
+}

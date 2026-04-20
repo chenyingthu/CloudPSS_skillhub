@@ -1,0 +1,41 @@
+# Harmonic Analysis - 谐波分析
+# 基于EMT仿真结果进行FFT谐波分析
+# 计算THD（总谐波畸变率）和各次谐波含量
+
+skill: harmonic_analysis
+
+# 认证配置
+auth:
+  token_file: .cloudpss_token
+
+# 模型配置
+model:
+  rid: model/holdme/IEEE39
+  source: cloud
+
+# 仿真配置
+simulation:
+  duration: 0.5           # 仿真时长(s)
+  step: 1e-5              # 仿真步长(s)
+
+# 分析参数配置
+analysis:
+  fundamental_freq: 60.0  # 基波频率(Hz)
+  max_harmonic: 50        # 最高谐波次数
+  thd_limit: 5.0          # THD限值(%)
+  analysis_window: [0.4, 0.5]  # 分析时间窗口[s]
+
+# 监测通道配置
+channels:
+  voltage:                # 电压通道列表
+    - "#Gen39.VT:0"
+  current:                # 电流通道列表
+    - "#Gen39.IT:0"
+
+# 输出配置
+output:
+  format: json
+  path: ./results/
+  prefix: harmonic
+  generate_report: true
+  export_spectrum: true

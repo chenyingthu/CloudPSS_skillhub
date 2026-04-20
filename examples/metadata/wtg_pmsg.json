@@ -1,0 +1,381 @@
+{
+  "component_id": "model/open-cloudpss/WTG_PMSG_01-avm-stdm-v2b5",
+  "name": "永磁同步风机模型 (PMSG)",
+  "description": "永磁同步风力发电机网侧变流器模型，支持潮流计算和电磁暂态仿真。该模型可在 CloudPSS EMTLab 中正确参与潮流计算，支持功率控制和电压控制模式。",
+  "version": "2.1.0",
+  "category": "renewable",
+  "source": {
+    "documentation_url": "https://kb.cloudpss.net/documents/software/emtlab/component-library/renewable-energy-modules/",
+    "version": "2024.12"
+  },
+  "parameters": {
+    "groups": [
+      {
+        "group_id": "basic",
+        "name": "基础参数",
+        "description": "风机基本电气参数",
+        "parameters": [
+          {
+            "key": "Sbase",
+            "display_name": "基准容量",
+            "type": "real",
+            "unit": "MVA",
+            "description": "单台风机基准容量，用于潮流计算和标幺值计算",
+            "required": true,
+            "default": 2.5
+          },
+          {
+            "key": "Vbase",
+            "display_name": "基准电压",
+            "type": "real",
+            "unit": "kV",
+            "description": "单台风机基准电压（线电压有效值）",
+            "required": true,
+            "default": 0.69
+          },
+          {
+            "key": "Fnom",
+            "display_name": "额定频率",
+            "type": "real",
+            "unit": "Hz",
+            "description": "系统额定频率",
+            "required": true,
+            "default": 50.0
+          }
+        ]
+      },
+      {
+        "group_id": "power_flow",
+        "name": "潮流计算参数",
+        "description": "潮流计算控制参数（关键参数，决定模型是否参与潮流计算）。注意：新能源场站通常作为PQ节点运行（Pctrl_mode='0'），不承担电压控制任务。",
+        "parameters": [
+          {
+            "key": "Pctrl_mode",
+            "display_name": "有功控制模式",
+            "type": "choice",
+            "description": "潮流计算有功功率控制模式：0=PQ节点，1=PV节点，2=平衡节点",
+            "required": true,
+            "default": "1",
+            "choices": ["0", "1", "2"]
+          },
+          {
+            "key": "P_cmd",
+            "display_name": "有功功率指令",
+            "type": "real",
+            "unit": "MW",
+            "description": "有功功率控制指令值，用于潮流计算",
+            "required": true,
+            "default": 2.0
+          },
+          {
+            "key": "Q_cmd",
+            "display_name": "无功功率指令",
+            "type": "real",
+            "unit": "Mvar",
+            "description": "无功功率控制指令值（当Pctrl_mode=0时使用）",
+            "required": false,
+            "default": 0.0
+          },
+          {
+            "key": "V_cmd",
+            "display_name": "电压控制指令",
+            "type": "real",
+            "unit": "p.u.",
+            "description": "电压控制指令值（当Pctrl_mode=1或2时使用）",
+            "required": false,
+            "default": 1.0
+          },
+          {
+            "key": "pf_P",
+            "display_name": "潮流有功功率",
+            "type": "real",
+            "unit": "MW",
+            "description": "潮流计算结果中的有功功率注入值（正为发电）",
+            "required": true,
+            "default": 2.0
+          },
+          {
+            "key": "pf_Q",
+            "display_name": "潮流无功功率",
+            "type": "real",
+            "unit": "Mvar",
+            "description": "潮流计算结果中的无功功率注入值（正为感性无功）",
+            "required": false,
+            "default": 0.0
+          }
+        ]
+      },
+      {
+        "group_id": "wind_turbine",
+        "name": "风机参数",
+        "description": "风力机机械和功率特性参数",
+        "parameters": [
+          {
+            "key": "WindSpeed",
+            "display_name": "风速",
+            "type": "real",
+            "unit": "m/s",
+            "description": "轮毂高度处风速",
+            "required": false,
+            "default": 12.0,
+            "constraints": {"min": 0.0, "max": 50.0}
+          },
+          {
+            "key": "AirDensity",
+            "display_name": "空气密度",
+            "type": "real",
+            "unit": "kg/m³",
+            "description": "空气密度，标准海平面约为1.225 kg/m³",
+            "required": false,
+            "default": 1.225
+          },
+          {
+            "key": "RotorDiameter",
+            "display_name": "风轮直径",
+            "type": "real",
+            "unit": "m",
+            "description": "风轮扫掠直径",
+            "required": false,
+            "default": 90.0
+          },
+          {
+            "key": "CutInSpeed",
+            "display_name": "切入风速",
+            "type": "real",
+            "unit": "m/s",
+            "description": "风机开始发电的最低风速",
+            "required": false,
+            "default": 3.0
+          },
+          {
+            "key": "RatedSpeed",
+            "display_name": "额定风速",
+            "type": "real",
+            "unit": "m/s",
+            "description": "风机达到额定功率的风速",
+            "required": false,
+            "default": 12.0
+          },
+          {
+            "key": "CutOutSpeed",
+            "display_name": "切出风速",
+            "type": "real",
+            "unit": "m/s",
+            "description": "风机停机的最高风速",
+            "required": false,
+            "default": 25.0
+          }
+        ]
+      },
+      {
+        "group_id": "control",
+        "name": "控制参数",
+        "description": "变流器控制参数",
+        "parameters": [
+          {
+            "key": "MPPTEnable",
+            "display_name": "MPPT使能",
+            "type": "boolean",
+            "description": "是否启用最大功率点跟踪控制",
+            "required": false,
+            "default": true
+          },
+          {
+            "key": "VdcRef",
+            "display_name": "直流电压参考值",
+            "type": "real",
+            "unit": "V",
+            "description": "直流侧电容电压参考值",
+            "required": false,
+            "default": 1200.0
+          },
+          {
+            "key": "IqCtrlMode",
+            "display_name": "无功控制模式",
+            "type": "choice",
+            "description": "无功电流控制模式",
+            "required": false,
+            "default": "const_q",
+            "choices": ["const_q", "const_v", "const_pf"]
+          }
+        ]
+      },
+      {
+        "group_id": "protection",
+        "name": "保护参数",
+        "description": "低电压穿越和功率恢复参数",
+        "parameters": [
+          {
+            "key": "LVRTEnable",
+            "display_name": "低电压穿越使能",
+            "type": "boolean",
+            "description": "是否启用低电压穿越功能",
+            "required": false,
+            "default": true
+          },
+          {
+            "key": "RecoveryRate",
+            "display_name": "功率恢复速率",
+            "type": "real",
+            "unit": "pu/s",
+            "description": "故障清除后功率恢复速率",
+            "required": false,
+            "default": 0.1,
+            "constraints": {"min": 0.001, "max": 10.0}
+          },
+          {
+            "key": "FRTMode",
+            "display_name": "故障穿越模式",
+            "type": "choice",
+            "description": "故障穿越控制策略",
+            "required": false,
+            "default": "standard",
+            "choices": ["standard", "enhanced", "grid_forming"]
+          }
+        ]
+      },
+      {
+        "group_id": "monitoring",
+        "name": "监测输出",
+        "description": "用于事件日志和LVRT状态观测的虚拟输出标签",
+        "parameters": [
+          {
+            "key": "PMSG_Name",
+            "display_name": "风机风场名称",
+            "type": "text",
+            "description": "用于电压穿越相关事件日志输出的名称",
+            "required": false,
+            "default": ""
+          },
+          {
+            "key": "P_WT",
+            "display_name": "有功功率输出标签",
+            "type": "text",
+            "description": "输出有功功率（MW）的虚拟输出标签",
+            "required": false,
+            "default": ""
+          },
+          {
+            "key": "Q_WT",
+            "display_name": "无功功率输出标签",
+            "type": "text",
+            "description": "输出无功功率（MVar）的虚拟输出标签",
+            "required": false,
+            "default": ""
+          },
+          {
+            "key": "State_PMSG",
+            "display_name": "电压穿越状态标签",
+            "type": "text",
+            "description": "输出LVRT状态（±3/±2/±1/0）的虚拟输出标签",
+            "required": false,
+            "default": ""
+          }
+        ]
+      },
+      {
+        "group_id": "unit_count",
+        "name": "风场聚合参数",
+        "description": "等值风场参数",
+        "parameters": [
+          {
+            "key": "UnitCount",
+            "display_name": "风机台数",
+            "type": "integer",
+            "description": "等值风场中包含的风机台数",
+            "required": false,
+            "default": 1,
+            "constraints": {"min": 1, "max": 10000}
+          },
+          {
+            "key": "AggregationFactor",
+            "display_name": "等值系数",
+            "type": "real",
+            "unit": "pu",
+            "description": "风场等值聚合系数",
+            "required": false,
+            "default": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "pins": {
+    "electrical": [
+      {
+        "key": "0",
+        "name": "电气连接",
+        "type": "electrical",
+        "dimension": "3×1",
+        "description": "风机三相电气连接端口（连接到电网）",
+        "required": true
+      }
+    ],
+    "input": [
+      {
+        "key": "Pcmd",
+        "name": "有功功率指令",
+        "type": "input",
+        "dimension": "1×1",
+        "description": "外部有功功率控制指令",
+        "required": false
+      },
+      {
+        "key": "Qcmd",
+        "name": "无功功率指令",
+        "type": "input",
+        "dimension": "1×1",
+        "description": "外部无功功率控制指令",
+        "required": false
+      },
+      {
+        "key": "WindSpeedExt",
+        "name": "外部风速",
+        "type": "input",
+        "dimension": "1×1",
+        "description": "外部风速信号输入",
+        "required": false
+      }
+    ],
+    "output": [
+      {
+        "key": "Pout",
+        "name": "有功功率输出",
+        "type": "output",
+        "dimension": "1×1",
+        "description": "总有功功率输出",
+        "required": false
+      },
+      {
+        "key": "Qout",
+        "name": "无功功率输出",
+        "type": "output",
+        "dimension": "1×1",
+        "description": "总无功功率输出",
+        "required": false
+      },
+      {
+        "key": "Vout",
+        "name": "机端电压",
+        "type": "output",
+        "dimension": "1×1",
+        "description": "风机机端电压幅值",
+        "required": false
+      }
+    ]
+  },
+  "validation_rules": {
+    "require_at_least_one_pin": true,
+    "check_voltage_compatibility": true
+  },
+  "simulation_support": {
+    "emt": true,
+    "powerflow": true,
+    "phasor": false
+  },
+  "notes": [
+    "关键参数：Pctrl_mode、P_cmd、pf_P 必须正确设置才能参与潮流计算",
+    "Pctrl_mode=0: PQ节点控制；=1: PV节点控制；=2: 平衡节点控制",
+    "对于等值风场，Sbase应为单台风机容量，UnitCount为风机台数"
+  ]
+}

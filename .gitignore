@@ -17,12 +17,8 @@ sdist/
 var/
 wheels/
 *.egg-info/
-.installed.cfg/
+.installed.cfg
 *.egg
-
-# Recovery scripts (temp)
-_recover_*.py
-_fix_*.py
 
 # PyTest
 .pytest_cache/
@@ -44,8 +40,8 @@ env/
 venv/
 
 # CloudPSS
+token
 .cloudpss_token
-.cloudpss_token_internal
 *.token
 
 # Results
@@ -53,6 +49,7 @@ results/
 *.log
 test_results/
 validation_results/
+validation_results.json
 test_models_*.json
 dual_model_tests/
 
@@ -62,10 +59,3 @@ Thumbs.db
 
 # Test reports
 test_*_report.json
-
-# OMX internal
-.omx/
-
-# Build outputs
-output/
-outputs/

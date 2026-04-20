@@ -1,0 +1,16 @@
+skill: topology_check
+auth:
+  token_file: .cloudpss_token
+model:
+  rid: model/holdme/IEEE39
+  source: cloud
+checks:
+  islands: true       # 检查孤岛
+  dangling: true      # 检查悬空元件
+  parameter: true     # 检查参数完整性
+  emt_ready: false    # 检查EMT仿真准备
+output:
+  format: json
+  path: ./results/
+  prefix: topology_check
+  timestamp: true

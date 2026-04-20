@@ -1,0 +1,57 @@
+# EMT Fault Study - EMT故障研究
+# 三工况对比分析：基线 / 延迟切除 / 轻故障
+
+skill: emt_fault_study
+
+# 认证配置
+auth:
+  token_file: .cloudpss_token
+
+# 模型配置
+model:
+  rid: model/holdme/IEEE3
+  source: cloud
+
+# 工况配置
+scenarios:
+  baseline:
+    enabled: true
+    fs: 2.5          # 故障开始时间 (s)
+    fe: 2.7          # 故障结束时间 (s)
+    chg: 0.01        # 故障电阻参数
+    description: "基线故障: fe=2.7, chg=0.01"
+
+  delayed_clearing:
+    enabled: true
+    fs: 2.5
+    fe: 2.9          # 延长切除时间
+    chg: 0.01
+    description: "延长故障切除: fe=2.9, chg=0.01"
+
+  mild_fault:
+    enabled: true
+    fs: 2.5
+    fe: 2.7
+    chg: 10000.0     # 较大的故障电阻（较轻故障）
+    description: "较轻故障: fe=2.7, chg=1e4"
+
+# 分析配置
+analysis:
+  trace_name: "vac:0"           # 目标波形通道名
+  sampling_freq: 2000           # 采样频率 (Hz)
+  time_windows:                 # RMS计算时间窗口 (s)
+    prefault: [2.42, 2.44]      # 故障前
+    fault: [2.56, 2.58]         # 故障中
+    postfault: [2.92, 2.94]     # 故障后早期
+    late_recovery: [2.96, 2.98] # 恢复后期
+
+# 输出配置
+output:
+  format: json                  # 输出格式: json, csv
+  path: ./results/              # 输出目录
+  prefix: emt_fault_study       # 文件名前缀
+  export_waveforms: true        # 是否导出波形对比
+  waveform_window:              # 波形导出时间范围，空表示全部
+    - 2.4
+    - 3.0
+  generate_report: true         # 是否生成Markdown报告

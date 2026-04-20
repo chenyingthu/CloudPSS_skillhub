@@ -1,0 +1,31 @@
+# Fault Clearing Scan - 故障清除时间扫描
+# 扫描故障切除时间对恢复的影响
+
+skill: fault_clearing_scan
+
+# 认证配置
+auth:
+  token_file: .cloudpss_token
+
+# 模型配置
+model:
+  rid: model/holdme/IEEE3
+  source: cloud
+
+# 扫描配置
+scan:
+  fs: 2.5                        # 故障开始时间 (s)
+  fe_values: [2.70, 2.75, 2.80, 2.85, 2.90]  # 故障结束时间扫描值
+  chg: 0.01                      # 故障电阻
+
+# 评估配置
+assessment:
+  trace_name: "vac:0"            # 监测的电压通道
+  study_time: 2.95               # 研究时刻 (s)
+
+# 输出配置
+output:
+  format: json
+  path: ./results/
+  prefix: fault_clearing_scan
+  generate_report: true

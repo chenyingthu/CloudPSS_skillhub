@@ -1,0 +1,3663 @@
+{
+  "generated_at": "2026-03-16T12:02:16",
+  "sdk_version": "4.5.28",
+  "sdk_root": "/home/chenying/anaconda3/lib/python3.12/site-packages/cloudpss",
+  "classes": [
+    {
+      "name": "Model",
+      "module": "cloudpss.model.model",
+      "doc_path": "docs/api-reference/model-api.md",
+      "priority": "P0",
+      "members": [
+        {
+          "class": "Model",
+          "member": "addComponent",
+          "kind": "method",
+          "signature": "(self, definition, label, args, pins, canvas=None, position=None, size=None)",
+          "source": "cloudpss/model/model.py:119",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 331
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 350
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 358
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/component_example.py",
+              "line": 30
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 212
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 219
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 107
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 132
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 136
+            }
+          ]
+        },
+        {
+          "class": "Model",
+          "member": "dump",
+          "kind": "method",
+          "signature": "(model, file, format='yaml', compress='gzip')",
+          "source": "cloudpss/model/model.py:406",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 131
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 136
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 149
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 152
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 155
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 243
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 101
+            },
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 113
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 7
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 57
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 69
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 74
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 78
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 144
+            }
+          ]
+        },
+        {
+          "class": "Model",
+          "member": "fetch",
+          "kind": "method",
+          "signature": "(rid, **kwargs)",
+          "source": "cloudpss/model/model.py:340",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "integration",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 19
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 37
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 53
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 103
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 132
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 561
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/component_example.py",
+              "line": 116
+            },
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 6
+            },
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 23
+            },
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 32
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 138
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 246
+            },
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 184
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 296
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 305
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 380
+            },
+            {
+              "path": "examples/simulation/run_ies_simulation.py",
+              "line": 186
+            },
+            {
+              "path": "examples/simulation/run_powerflow.py",
+              "line": 169
+            },
+            {
+              "path": "examples/simulation/run_sfemt_simulation.py",
+              "line": 195
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 442
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 459
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 491
+            }
+          ]
+        },
+        {
+          "class": "Model",
+          "member": "fetchMany",
+          "kind": "method",
+          "signature": "(name=None, cursor=[], pageSize=10, owner=None, **kwargs)",
+          "source": "cloudpss/model/model.py:300",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "integration",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 59
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 64
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 89
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 92
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 95
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 98
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 7
+            },
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 57
+            },
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 66
+            },
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 74
+            },
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 80
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 133
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 445
+            }
+          ]
+        },
+        {
+          "class": "Model",
+          "member": "fetchTopology",
+          "kind": "method",
+          "signature": "(self, implementType=None, config=None, maximumDepth=None, **kwargs)",
+          "source": "cloudpss/model/model.py:590",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 616
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 634
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 637
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 640
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 59
+            },
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 75
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 292
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 472
+            }
+          ]
+        },
+        {
+          "class": "Model",
+          "member": "getAllComponents",
+          "kind": "method",
+          "signature": "(self) -> dict",
+          "source": "cloudpss/model/model.py:103",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 55
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 265
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 277
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/component_example.py",
+              "line": 49
+            },
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 108
+            },
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 136
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 104
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 194
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 123
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 129
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 150
+            }
+          ]
+        },
+        {
+          "class": "Model",
+          "member": "getComponentByKey",
+          "kind": "method",
+          "signature": "(self, componentKey: str)",
+          "source": "cloudpss/model/model.py:186",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 285
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 290
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 302
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/component_example.py",
+              "line": 67
+            },
+            {
+              "path": "examples/basic/component_example.py",
+              "line": 77
+            },
+            {
+              "path": "examples/basic/component_example.py",
+              "line": 91
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 115
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 120
+            }
+          ]
+        },
+        {
+          "class": "Model",
+          "member": "getComponentsByRid",
+          "kind": "method",
+          "signature": "(self, rid: str)",
+          "source": "cloudpss/model/model.py:159",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 286
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 309
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 322
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 326
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/component_example.py",
+              "line": 53
+            },
+            {
+              "path": "examples/basic/component_example.py",
+              "line": 58
+            },
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 144
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 116
+            }
+          ]
+        },
+        {
+          "class": "Model",
+          "member": "load",
+          "kind": "method",
+          "signature": "(filePath, format='yaml')",
+          "source": "cloudpss/model/model.py:385",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 22
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 60
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 107
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 124
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 127
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 159
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 8
+            },
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 93
+            },
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 106
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 8
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 91
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 101
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 145
+            }
+          ]
+        },
+        {
+          "class": "Model",
+          "member": "removeComponent",
+          "kind": "method",
+          "signature": "(self, key)",
+          "source": "cloudpss/model/model.py:132",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 393
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 405
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/component_example.py",
+              "line": 86
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 222
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 224
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 122
+            }
+          ]
+        },
+        {
+          "class": "Model",
+          "member": "run",
+          "kind": "method",
+          "signature": "(self, job=None, config=None, name=None, **kwargs)",
+          "source": "cloudpss/model/model.py:357",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 598
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 687
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 112
+            },
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 116
+            },
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 156
+            },
+            {
+              "path": "examples/simulation/run_ies_simulation.py",
+              "line": 161
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 232
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 267
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 485
+            }
+          ]
+        },
+        {
+          "class": "Model",
+          "member": "runEMT",
+          "kind": "method",
+          "signature": "(self, job=None, config=None, **kwargs) -> cloudpss.job.job.Job[cloudpss.job.result.EMTResult.EMTResult]",
+          "source": "cloudpss/model/model.py:663",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "integration",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 528
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 545
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 548
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 551
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 569
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 580
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 591
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 610
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 687
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 6
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 24
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 38
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 41
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 44
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 48
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 335
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 236
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 458
+            }
+          ]
+        },
+        {
+          "class": "Model",
+          "member": "runPowerFlow",
+          "kind": "method",
+          "signature": "(self, job=None, config=None, **kwargs) -> cloudpss.runner.runner.Runner[cloudpss.job.result.PowerFlowResult.PowerFlowResult]",
+          "source": "cloudpss/model/model.py:704",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "integration",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 560
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 576
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 610
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 687
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_powerflow.py",
+              "line": 55
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_powerflow_result.py",
+              "line": 154
+            }
+          ]
+        },
+        {
+          "class": "Model",
+          "member": "runSFEMT",
+          "kind": "method",
+          "signature": "(self, job=None, config=None, **kwargs) -> cloudpss.runner.runner.Runner[cloudpss.job.result.EMTResult.EMTResult]",
+          "source": "cloudpss/model/model.py:684",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 559
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 565
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_sfemt_simulation.py",
+              "line": 65
+            },
+            {
+              "path": "examples/simulation/run_sfemt_simulation.py",
+              "line": 125
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 324
+            }
+          ]
+        },
+        {
+          "class": "Model",
+          "member": "save",
+          "kind": "method",
+          "signature": "(self, key=None)",
+          "source": "cloudpss/model/model.py:423",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 160
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 166
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 176
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 181
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 188
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 198
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 202
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 209
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 227
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 230
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 234
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/component_example.py",
+              "line": 128
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 6
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 23
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 35
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 147
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 162
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 227
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 229
+            },
+            {
+              "path": "examples/simulation/run_powerflow.py",
+              "line": 141
+            },
+            {
+              "path": "examples/simulation/run_powerflow.py",
+              "line": 144
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 343
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 362
+            }
+          ]
+        },
+        {
+          "class": "Model",
+          "member": "updateComponent",
+          "kind": "method",
+          "signature": "(self, key, **kwargs)",
+          "source": "cloudpss/model/model.py:145",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 368
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 382
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 385
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/component_example.py",
+              "line": 71
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 207
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 209
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 118
+            }
+          ]
+        },
+        {
+          "class": "Model",
+          "member": "iesSimulationRun",
+          "kind": "method",
+          "signature": "(self, job=None, config=None, name=None, **kwargs)",
+          "source": "cloudpss/model/model.py:382",
+          "priority": "P1",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "Model",
+          "member": "runIESEnergyStoragePlan",
+          "kind": "method",
+          "signature": "(self, job=None, config=None, **kwargs) -> cloudpss.job.job.Job[cloudpss.runner.result.IESResult]",
+          "source": "cloudpss/model/model.py:784",
+          "priority": "P1",
+          "documented": false,
+          "example_exists": true,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_ies_simulation.py",
+              "line": 92
+            }
+          ],
+          "test_refs": []
+        },
+        {
+          "class": "Model",
+          "member": "runIESLoadPrediction",
+          "kind": "method",
+          "signature": "(self, job=None, config=None, **kwargs) -> cloudpss.job.job.Job[cloudpss.runner.result.IESResult]",
+          "source": "cloudpss/model/model.py:744",
+          "priority": "P1",
+          "documented": false,
+          "example_exists": true,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_ies_simulation.py",
+              "line": 86
+            }
+          ],
+          "test_refs": []
+        },
+        {
+          "class": "Model",
+          "member": "runIESPowerFlow",
+          "kind": "method",
+          "signature": "(self, job=None, config=None, **kwargs) -> cloudpss.job.job.Job[cloudpss.runner.result.IESResult]",
+          "source": "cloudpss/model/model.py:764",
+          "priority": "P1",
+          "documented": false,
+          "example_exists": true,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_ies_simulation.py",
+              "line": 83
+            }
+          ],
+          "test_refs": []
+        },
+        {
+          "class": "Model",
+          "member": "runThreePhasePowerFlow",
+          "kind": "method",
+          "signature": "(self, job=None, config=None, **kwargs) -> cloudpss.job.job.Job[cloudpss.job.result.PowerFlowResult.PowerFlowResult]",
+          "source": "cloudpss/model/model.py:724",
+          "priority": "P1",
+          "documented": true,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 587
+            }
+          ],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "Model",
+          "member": "addConfig",
+          "kind": "method",
+          "signature": "(self, config)",
+          "source": "cloudpss/model/model.py:286",
+          "priority": "reference",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 492
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 497
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 502
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 167
+            }
+          ],
+          "test_refs": []
+        },
+        {
+          "class": "Model",
+          "member": "addJob",
+          "kind": "method",
+          "signature": "(self, job: dict)",
+          "source": "cloudpss/model/model.py:238",
+          "priority": "reference",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 426
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 432
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 436
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 440
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 445
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 455
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 161
+            }
+          ],
+          "test_refs": []
+        },
+        {
+          "class": "Model",
+          "member": "create",
+          "kind": "method",
+          "signature": "(model, **kwargs)",
+          "source": "cloudpss/model/model.py:466",
+          "priority": "reference",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "none",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 164
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 178
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 96
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 181
+            }
+          ]
+        },
+        {
+          "class": "Model",
+          "member": "createConfig",
+          "kind": "method",
+          "signature": "(self, name)",
+          "source": "cloudpss/model/model.py:268",
+          "priority": "reference",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 482
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 496
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 165
+            }
+          ],
+          "test_refs": []
+        },
+        {
+          "class": "Model",
+          "member": "createJob",
+          "kind": "method",
+          "signature": "(self, jobType: str, name: str)",
+          "source": "cloudpss/model/model.py:219",
+          "priority": "reference",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 412
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 431
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 435
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 454
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 159
+            }
+          ],
+          "test_refs": []
+        },
+        {
+          "class": "Model",
+          "member": "getModelConfig",
+          "kind": "method",
+          "signature": "(self, name)",
+          "source": "cloudpss/model/model.py:250",
+          "priority": "reference",
+          "documented": true,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 514
+            }
+          ],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "Model",
+          "member": "getModelJob",
+          "kind": "method",
+          "signature": "(self, name)",
+          "source": "cloudpss/model/model.py:201",
+          "priority": "reference",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 441
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 460
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 472
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 47
+            }
+          ],
+          "test_refs": []
+        },
+        {
+          "class": "Model",
+          "member": "toJSON",
+          "kind": "method",
+          "signature": "(self)",
+          "source": "cloudpss/model/model.py:95",
+          "priority": "reference",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "none",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 247
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 256
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 39
+            },
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 66
+            },
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 82
+            },
+            {
+              "path": "examples/simulation/run_powerflow.py",
+              "line": 131
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_powerflow_result.py",
+              "line": 133
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 154
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 167
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 477
+            }
+          ]
+        },
+        {
+          "class": "Model",
+          "member": "update",
+          "kind": "method",
+          "signature": "(model, **kwargs)",
+          "source": "cloudpss/model/model.py:524",
+          "priority": "reference",
+          "documented": true,
+          "example_exists": false,
+          "test_exists": true,
+          "verification": "none",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 186
+            },
+            {
+              "path": "docs/api-reference/model-api.md",
+              "line": 199
+            }
+          ],
+          "example_refs": [],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 92
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Job",
+      "module": "cloudpss.job.job",
+      "doc_path": "docs/api-reference/job-api.md",
+      "priority": "P0",
+      "members": [
+        {
+          "class": "Job",
+          "member": "abort",
+          "kind": "method",
+          "signature": "(self, timeout=3, **kwargs)",
+          "source": "cloudpss/job/job.py:276",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 260
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 278
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 410
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 116
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 134
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 423
+            }
+          ]
+        },
+        {
+          "class": "Job",
+          "member": "create",
+          "kind": "method",
+          "signature": "(revisionHash, job, config, name=None, rid=None, policy=None, **kwargs)",
+          "source": "cloudpss/job/job.py:170",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "none",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 28
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 61
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 65
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 84
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 96
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 181
+            }
+          ]
+        },
+        {
+          "class": "Job",
+          "member": "dump",
+          "kind": "method",
+          "signature": "(job, file, format='yaml', compress='gzip')",
+          "source": "cloudpss/job/job.py:198",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "none",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 124
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 137
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 140
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 101
+            },
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 113
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 7
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 57
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 69
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 74
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 78
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 144
+            }
+          ]
+        },
+        {
+          "class": "Job",
+          "member": "fetch",
+          "kind": "method",
+          "signature": "(id, **kwargs)",
+          "source": "cloudpss/job/job.py:92",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "integration",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 25
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 35
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 48
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 81
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 101
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 359
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/component_example.py",
+              "line": 116
+            },
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 6
+            },
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 23
+            },
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 32
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 138
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 246
+            },
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 184
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 296
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 305
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 380
+            },
+            {
+              "path": "examples/simulation/run_ies_simulation.py",
+              "line": 186
+            },
+            {
+              "path": "examples/simulation/run_powerflow.py",
+              "line": 169
+            },
+            {
+              "path": "examples/simulation/run_sfemt_simulation.py",
+              "line": 195
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 442
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 459
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 491
+            }
+          ]
+        },
+        {
+          "class": "Job",
+          "member": "load",
+          "kind": "method",
+          "signature": "(file, format='yaml')",
+          "source": "cloudpss/job/job.py:194",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "none",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 105
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 118
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 8
+            },
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 93
+            },
+            {
+              "path": "examples/basic/model_fetch_example.py",
+              "line": 106
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 8
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 91
+            },
+            {
+              "path": "examples/basic/model_save_dump_example.py",
+              "line": 101
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 145
+            }
+          ]
+        },
+        {
+          "class": "Job",
+          "member": "read",
+          "kind": "method",
+          "signature": "(self, receiver=None, **kwargs)",
+          "source": "cloudpss/job/job.py:204",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 147
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 160
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/component_example.py",
+              "line": 18
+            },
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 18
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 183
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 195
+            },
+            {
+              "path": "examples/simulation/run_ies_simulation.py",
+              "line": 19
+            },
+            {
+              "path": "examples/simulation/run_powerflow.py",
+              "line": 19
+            },
+            {
+              "path": "examples/simulation/run_sfemt_simulation.py",
+              "line": 19
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 382
+            }
+          ]
+        },
+        {
+          "class": "Job",
+          "member": "result",
+          "kind": "property",
+          "signature": "(self) -> ~T",
+          "source": "cloudpss/job/job.py:251",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "integration",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 56
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 96
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 219
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 226
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 241
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 313
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 320
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 327
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 334
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 343
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 371
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 402
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 431
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 468
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 12
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 145
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 163
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 170
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 358
+            },
+            {
+              "path": "examples/simulation/run_ies_simulation.py",
+              "line": 101
+            },
+            {
+              "path": "examples/simulation/run_powerflow.py",
+              "line": 66
+            },
+            {
+              "path": "examples/simulation/run_sfemt_simulation.py",
+              "line": 76
+            },
+            {
+              "path": "examples/simulation/run_sfemt_simulation.py",
+              "line": 94
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 5
+            },
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 244
+            },
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 253
+            },
+            {
+              "path": "tests/test_powerflow_result.py",
+              "line": 6
+            },
+            {
+              "path": "tests/test_powerflow_result.py",
+              "line": 162
+            },
+            {
+              "path": "tests/test_powerflow_result.py",
+              "line": 171
+            }
+          ]
+        },
+        {
+          "class": "Job",
+          "member": "status",
+          "kind": "method",
+          "signature": "(self)",
+          "source": "cloudpss/job/job.py:229",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "integration",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 51
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 92
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 119
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 196
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 212
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 217
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 220
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 237
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 276
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 367
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 391
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 401
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 427
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 430
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 467
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 123
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 70
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 82
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 98
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 102
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 105
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 128
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 158
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 308
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 345
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 346
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 353
+            },
+            {
+              "path": "examples/simulation/run_ies_simulation.py",
+              "line": 31
+            },
+            {
+              "path": "examples/simulation/run_powerflow.py",
+              "line": 31
+            },
+            {
+              "path": "examples/simulation/run_sfemt_simulation.py",
+              "line": 40
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 60
+            },
+            {
+              "path": "tests/test_powerflow_result.py",
+              "line": 56
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 462
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 494
+            }
+          ]
+        },
+        {
+          "class": "Job",
+          "member": "write",
+          "kind": "method",
+          "signature": "(self, sender=None, **kwargs) -> cloudpss.job.messageStreamSender.MessageStreamSender",
+          "source": "cloudpss/job/job.py:217",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 172
+            },
+            {
+              "path": "docs/api-reference/job-api.md",
+              "line": 185
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 183
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 196
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 26
+            },
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 34
+            },
+            {
+              "path": "tests/test_powerflow_result.py",
+              "line": 24
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 404
+            }
+          ]
+        },
+        {
+          "class": "Job",
+          "member": "close",
+          "kind": "method",
+          "signature": "(self)",
+          "source": "cloudpss/job/job.py:295",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": []
+        }
+      ]
+    },
+    {
+      "name": "EMTResult",
+      "module": "cloudpss.job.result.EMTResult",
+      "doc_path": "docs/api-reference/emtresult-api.md",
+      "priority": "P0",
+      "members": [
+        {
+          "class": "EMTResult",
+          "member": "control",
+          "kind": "method",
+          "signature": "(self, controlParam, eventTime='-1', eventTimeType='1')",
+          "source": "cloudpss/job/result/EMTResult.py:222",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 297
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 315
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 322
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 512
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 217
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 167
+            }
+          ]
+        },
+        {
+          "class": "EMTResult",
+          "member": "getMessagesByKey",
+          "kind": "method",
+          "signature": "(self, key)",
+          "source": "cloudpss/job/result/result.py:73",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 182
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 195
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 201
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_ies_simulation.py",
+              "line": 135
+            },
+            {
+              "path": "examples/simulation/run_sfemt_simulation.py",
+              "line": 94
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 83
+            },
+            {
+              "path": "tests/test_powerflow_result.py",
+              "line": 79
+            }
+          ]
+        },
+        {
+          "class": "EMTResult",
+          "member": "getPlot",
+          "kind": "method",
+          "signature": "(self, index: int)",
+          "source": "cloudpss/job/result/EMTResult.py:72",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit+integration",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 57
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 62
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 78
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 443
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 252
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 113
+            },
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 254
+            }
+          ]
+        },
+        {
+          "class": "EMTResult",
+          "member": "getPlotChannelData",
+          "kind": "method",
+          "signature": "(self, index, channelName)",
+          "source": "cloudpss/job/result/EMTResult.py:102",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit+integration",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 118
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 122
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 139
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 161
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 171
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 448
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 466
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 485
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 507
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 536
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 546
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 268
+            },
+            {
+              "path": "examples/simulation/run_sfemt_simulation.py",
+              "line": 164
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 115
+            },
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 256
+            }
+          ]
+        },
+        {
+          "class": "EMTResult",
+          "member": "getPlotChannelNames",
+          "kind": "method",
+          "signature": "(self, index)",
+          "source": "cloudpss/job/result/EMTResult.py:85",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit+integration",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 58
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 96
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 109
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 444
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 463
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 483
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 534
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 259
+            },
+            {
+              "path": "examples/simulation/run_sfemt_simulation.py",
+              "line": 155
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 114
+            },
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 255
+            }
+          ]
+        },
+        {
+          "class": "EMTResult",
+          "member": "getPlots",
+          "kind": "method",
+          "signature": "(self)",
+          "source": "cloudpss/job/result/EMTResult.py:47",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit+integration",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 26
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 40
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 230
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 439
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 459
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 244
+            },
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 360
+            },
+            {
+              "path": "examples/simulation/run_ies_simulation.py",
+              "line": 124
+            },
+            {
+              "path": "examples/simulation/run_sfemt_simulation.py",
+              "line": 79
+            },
+            {
+              "path": "examples/simulation/run_sfemt_simulation.py",
+              "line": 146
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 101
+            },
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 245
+            }
+          ]
+        },
+        {
+          "class": "EMTResult",
+          "member": "goto",
+          "kind": "method",
+          "signature": "(self, step)",
+          "source": "cloudpss/job/result/EMTResult.py:129",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 235
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 248
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 253
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 214
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 134
+            }
+          ]
+        },
+        {
+          "class": "EMTResult",
+          "member": "loadSnapshot",
+          "kind": "method",
+          "signature": "(self, snapshotNumber, log='加载断面成功')",
+          "source": "cloudpss/job/result/EMTResult.py:216",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 388
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 398
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 222
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 219
+            }
+          ]
+        },
+        {
+          "class": "EMTResult",
+          "member": "monitor",
+          "kind": "method",
+          "signature": "(self, monitorParam, eventTime='-1', eventTimeType='1')",
+          "source": "cloudpss/job/result/EMTResult.py:245",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 327
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 349
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 219
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 180
+            }
+          ]
+        },
+        {
+          "class": "EMTResult",
+          "member": "next",
+          "kind": "method",
+          "signature": "(self)",
+          "source": "cloudpss/job/result/EMTResult.py:122",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 214
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 224
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 228
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 383
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 401
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 504
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 213
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 126
+            }
+          ]
+        },
+        {
+          "class": "EMTResult",
+          "member": "saveSnapshot",
+          "kind": "method",
+          "signature": "(self, snapshotNumber, log='保存断面成功')",
+          "source": "cloudpss/job/result/EMTResult.py:211",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 368
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 378
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 382
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 516
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 221
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 218
+            }
+          ]
+        },
+        {
+          "class": "EMTResult",
+          "member": "send",
+          "kind": "method",
+          "signature": "(self, message=None)",
+          "source": "cloudpss/job/result/EMTResult.py:148",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 258
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 268
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 279
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 215
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 142
+            }
+          ]
+        },
+        {
+          "class": "EMTResult",
+          "member": "stopSimulation",
+          "kind": "method",
+          "signature": "(self)",
+          "source": "cloudpss/job/result/EMTResult.py:180",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 354
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 362
+            },
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 519
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 223
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 206
+            }
+          ]
+        },
+        {
+          "class": "EMTResult",
+          "member": "writeShm",
+          "kind": "method",
+          "signature": "(self, path, buffer, offset)",
+          "source": "cloudpss/job/result/EMTResult.py:139",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/emtresult-api.md",
+              "line": 284
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_emt_simulation.py",
+              "line": 216
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 152
+            }
+          ]
+        },
+        {
+          "class": "EMTResult",
+          "member": "db",
+          "kind": "property",
+          "signature": "(self)",
+          "source": "cloudpss/job/result/result.py:161",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "EMTResult",
+          "member": "getLogs",
+          "kind": "method",
+          "signature": "(self)",
+          "source": "cloudpss/job/result/result.py:127",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "EMTResult",
+          "member": "getMessage",
+          "kind": "method",
+          "signature": "(self, index)",
+          "source": "cloudpss/job/result/result.py:106",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "EMTResult",
+          "member": "getMessageLength",
+          "kind": "method",
+          "signature": "(self)",
+          "source": "cloudpss/job/result/result.py:144",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "EMTResult",
+          "member": "getMessages",
+          "kind": "method",
+          "signature": "(self)",
+          "source": "cloudpss/job/result/result.py:118",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "EMTResult",
+          "member": "getMessagesByType",
+          "kind": "method",
+          "signature": "(self, type)",
+          "source": "cloudpss/job/result/result.py:90",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "EMTResult",
+          "member": "modify",
+          "kind": "method",
+          "signature": "(self, data, model)",
+          "source": "cloudpss/job/result/result.py:59",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "EMTResult",
+          "member": "pop",
+          "kind": "method",
+          "signature": "(self, index=-1)",
+          "source": "cloudpss/job/result/result.py:171",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "EMTResult",
+          "member": "receive",
+          "kind": "method",
+          "signature": "(self)",
+          "source": "cloudpss/job/result/result.py:36",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "EMTResult",
+          "member": "waitFor",
+          "kind": "method",
+          "signature": "(self, timeOut=9223372036854775807)",
+          "source": "cloudpss/job/result/result.py:153",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": true,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 18
+            },
+            {
+              "path": "tests/test_powerflow_result.py",
+              "line": 19
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ModelRevision",
+      "module": "cloudpss.model.revision",
+      "doc_path": "docs/api-reference/revision-api.md",
+      "priority": "P0",
+      "members": [
+        {
+          "class": "ModelRevision",
+          "member": "create",
+          "kind": "method",
+          "signature": "(revision, parentHash=None, **kwargs)",
+          "source": "cloudpss/model/revision.py:87",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/revision-api.md",
+              "line": 177
+            },
+            {
+              "path": "docs/api-reference/revision-api.md",
+              "line": 183
+            },
+            {
+              "path": "docs/api-reference/revision-api.md",
+              "line": 202
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 96
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 181
+            }
+          ]
+        },
+        {
+          "class": "ModelRevision",
+          "member": "fetchTopology",
+          "kind": "method",
+          "signature": "(self, implementType, config, maximumDepth, **kwargs)",
+          "source": "cloudpss/model/revision.py:111",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "integration",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/revision-api.md",
+              "line": 109
+            },
+            {
+              "path": "docs/api-reference/revision-api.md",
+              "line": 114
+            },
+            {
+              "path": "docs/api-reference/revision-api.md",
+              "line": 138
+            },
+            {
+              "path": "docs/api-reference/revision-api.md",
+              "line": 147
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 59
+            },
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 75
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 292
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 472
+            }
+          ]
+        },
+        {
+          "class": "ModelRevision",
+          "member": "getImplements",
+          "kind": "method",
+          "signature": "(self)",
+          "source": "cloudpss/model/revision.py:54",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/revision-api.md",
+              "line": 33
+            },
+            {
+              "path": "docs/api-reference/revision-api.md",
+              "line": 38
+            },
+            {
+              "path": "docs/api-reference/revision-api.md",
+              "line": 51
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 35
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 163
+            }
+          ]
+        },
+        {
+          "class": "ModelRevision",
+          "member": "run",
+          "kind": "method",
+          "signature": "(self, job, config, name=None, policy=None, stop_on_entry=None, rid=None, **kwargs)",
+          "source": "cloudpss/model/revision.py:65",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "integration",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/revision-api.md",
+              "line": 57
+            },
+            {
+              "path": "docs/api-reference/revision-api.md",
+              "line": 62
+            },
+            {
+              "path": "docs/api-reference/revision-api.md",
+              "line": 92
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 112
+            },
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 116
+            },
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 156
+            },
+            {
+              "path": "examples/simulation/run_ies_simulation.py",
+              "line": 161
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 232
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 267
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 485
+            }
+          ]
+        },
+        {
+          "class": "ModelRevision",
+          "member": "toJSON",
+          "kind": "method",
+          "signature": "(self)",
+          "source": "cloudpss/model/revision.py:45",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/revision-api.md",
+              "line": 143
+            },
+            {
+              "path": "docs/api-reference/revision-api.md",
+              "line": 156
+            },
+            {
+              "path": "docs/api-reference/revision-api.md",
+              "line": 161
+            },
+            {
+              "path": "docs/api-reference/revision-api.md",
+              "line": 171
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 39
+            },
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 66
+            },
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 82
+            },
+            {
+              "path": "examples/simulation/run_powerflow.py",
+              "line": 131
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_powerflow_result.py",
+              "line": 133
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 154
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 167
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 477
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Component",
+      "module": "cloudpss.model.implements.component",
+      "doc_path": "docs/api-reference/component-api.md",
+      "priority": "P0",
+      "members": [
+        {
+          "class": "Component",
+          "member": "toJSON",
+          "kind": "method",
+          "signature": "(self)",
+          "source": "cloudpss/model/implements/component.py:23",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "none",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/component-api.md",
+              "line": 237
+            },
+            {
+              "path": "docs/api-reference/component-api.md",
+              "line": 242
+            },
+            {
+              "path": "docs/api-reference/component-api.md",
+              "line": 255
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 39
+            },
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 66
+            },
+            {
+              "path": "examples/basic/revision_example.py",
+              "line": 82
+            },
+            {
+              "path": "examples/simulation/run_powerflow.py",
+              "line": 131
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_powerflow_result.py",
+              "line": 133
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 154
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 167
+            },
+            {
+              "path": "tests/test_sdk_api.py",
+              "line": 477
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "PowerFlowResult",
+      "module": "cloudpss.job.result.PowerFlowResult",
+      "doc_path": "docs/api-reference/powerflow-result-api.md",
+      "priority": "P0",
+      "members": [
+        {
+          "class": "PowerFlowResult",
+          "member": "getBranches",
+          "kind": "method",
+          "signature": "(self)",
+          "source": "cloudpss/job/result/PowerFlowResult.py:43",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit+integration",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/powerflow-result-api.md",
+              "line": 65
+            },
+            {
+              "path": "docs/api-reference/powerflow-result-api.md",
+              "line": 70
+            },
+            {
+              "path": "docs/api-reference/powerflow-result-api.md",
+              "line": 91
+            },
+            {
+              "path": "docs/api-reference/powerflow-result-api.md",
+              "line": 269
+            },
+            {
+              "path": "docs/api-reference/powerflow-result-api.md",
+              "line": 308
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_powerflow.py",
+              "line": 107
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_powerflow_result.py",
+              "line": 127
+            },
+            {
+              "path": "tests/test_powerflow_result.py",
+              "line": 172
+            }
+          ]
+        },
+        {
+          "class": "PowerFlowResult",
+          "member": "getBuses",
+          "kind": "method",
+          "signature": "(self)",
+          "source": "cloudpss/job/result/PowerFlowResult.py:17",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit+integration",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/powerflow-result-api.md",
+              "line": 23
+            },
+            {
+              "path": "docs/api-reference/powerflow-result-api.md",
+              "line": 28
+            },
+            {
+              "path": "docs/api-reference/powerflow-result-api.md",
+              "line": 52
+            },
+            {
+              "path": "docs/api-reference/powerflow-result-api.md",
+              "line": 260
+            },
+            {
+              "path": "docs/api-reference/powerflow-result-api.md",
+              "line": 303
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_powerflow.py",
+              "line": 91
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_powerflow_result.py",
+              "line": 104
+            },
+            {
+              "path": "tests/test_powerflow_result.py",
+              "line": 163
+            }
+          ]
+        },
+        {
+          "class": "PowerFlowResult",
+          "member": "getMessagesByKey",
+          "kind": "method",
+          "signature": "(self, key)",
+          "source": "cloudpss/job/result/result.py:73",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/powerflow-result-api.md",
+              "line": 149
+            },
+            {
+              "path": "docs/api-reference/powerflow-result-api.md",
+              "line": 154
+            },
+            {
+              "path": "docs/api-reference/powerflow-result-api.md",
+              "line": 167
+            },
+            {
+              "path": "docs/api-reference/powerflow-result-api.md",
+              "line": 168
+            },
+            {
+              "path": "docs/api-reference/powerflow-result-api.md",
+              "line": 171
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_ies_simulation.py",
+              "line": 135
+            },
+            {
+              "path": "examples/simulation/run_sfemt_simulation.py",
+              "line": 94
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 83
+            },
+            {
+              "path": "tests/test_powerflow_result.py",
+              "line": 79
+            }
+          ]
+        },
+        {
+          "class": "PowerFlowResult",
+          "member": "powerFlowModify",
+          "kind": "method",
+          "signature": "(self, model)",
+          "source": "cloudpss/job/result/PowerFlowResult.py:70",
+          "priority": "P0",
+          "documented": true,
+          "example_exists": true,
+          "test_exists": true,
+          "verification": "unit",
+          "docs_refs": [
+            {
+              "path": "docs/api-reference/powerflow-result-api.md",
+              "line": 104
+            },
+            {
+              "path": "docs/api-reference/powerflow-result-api.md",
+              "line": 109
+            },
+            {
+              "path": "docs/api-reference/powerflow-result-api.md",
+              "line": 134
+            },
+            {
+              "path": "docs/api-reference/powerflow-result-api.md",
+              "line": 278
+            }
+          ],
+          "example_refs": [
+            {
+              "path": "examples/simulation/run_powerflow.py",
+              "line": 132
+            }
+          ],
+          "test_refs": [
+            {
+              "path": "tests/test_powerflow_result.py",
+              "line": 146
+            }
+          ]
+        },
+        {
+          "class": "PowerFlowResult",
+          "member": "db",
+          "kind": "property",
+          "signature": "(self)",
+          "source": "cloudpss/job/result/result.py:161",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "PowerFlowResult",
+          "member": "getLogs",
+          "kind": "method",
+          "signature": "(self)",
+          "source": "cloudpss/job/result/result.py:127",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "PowerFlowResult",
+          "member": "getMessage",
+          "kind": "method",
+          "signature": "(self, index)",
+          "source": "cloudpss/job/result/result.py:106",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "PowerFlowResult",
+          "member": "getMessageLength",
+          "kind": "method",
+          "signature": "(self)",
+          "source": "cloudpss/job/result/result.py:144",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "PowerFlowResult",
+          "member": "getMessages",
+          "kind": "method",
+          "signature": "(self)",
+          "source": "cloudpss/job/result/result.py:118",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "PowerFlowResult",
+          "member": "getMessagesByType",
+          "kind": "method",
+          "signature": "(self, type)",
+          "source": "cloudpss/job/result/result.py:90",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "PowerFlowResult",
+          "member": "modify",
+          "kind": "method",
+          "signature": "(self, data, model)",
+          "source": "cloudpss/job/result/result.py:59",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "PowerFlowResult",
+          "member": "pop",
+          "kind": "method",
+          "signature": "(self, index=-1)",
+          "source": "cloudpss/job/result/result.py:171",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "PowerFlowResult",
+          "member": "receive",
+          "kind": "method",
+          "signature": "(self)",
+          "source": "cloudpss/job/result/result.py:36",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": false,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": []
+        },
+        {
+          "class": "PowerFlowResult",
+          "member": "waitFor",
+          "kind": "method",
+          "signature": "(self, timeOut=9223372036854775807)",
+          "source": "cloudpss/job/result/result.py:153",
+          "priority": "reference",
+          "documented": false,
+          "example_exists": false,
+          "test_exists": true,
+          "verification": "none",
+          "docs_refs": [],
+          "example_refs": [],
+          "test_refs": [
+            {
+              "path": "tests/test_emt_result.py",
+              "line": 18
+            },
+            {
+              "path": "tests/test_powerflow_result.py",
+              "line": 19
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,259 @@
+{
+  "component_id": "model/CloudPSS/WGSource",
+  "name": "风场等值模型I：PMSG网侧变流器模型",
+  "description": "风场等值模型，用于模拟风电场的功率输出特性。支持PMSG网侧变流器控制，适用于电磁暂态仿真。",
+  "version": "1.0.0",
+  "category": "renewable",
+  "source": {
+    "documentation_url": "https://kb.cloudpss.net/documents/software/emtlab/component-library/renewable-energy-modules/wgsource-external-ctrl",
+    "version": "2024.12"
+  },
+  "parameters": {
+    "groups": [
+      {
+        "group_id": "basic",
+        "name": "基础参数",
+        "description": "组件的基本配置参数",
+        "parameters": [
+          {
+            "key": "Vbase",
+            "display_name": "基准电压",
+            "type": "real",
+            "unit": "kV",
+            "description": "单台风机基准电压",
+            "required": true,
+            "default": 0.69,
+            "constraints": {"min": 0.1, "max": 1000.0}
+          },
+          {
+            "key": "Fnom",
+            "display_name": "额定频率",
+            "type": "real",
+            "unit": "Hz",
+            "description": "系统额定频率",
+            "required": true,
+            "default": 50.0
+          },
+          {
+            "key": "WindSpeed",
+            "display_name": "风速",
+            "type": "real",
+            "unit": "m/s",
+            "description": "轮毂高度处风速",
+            "required": false,
+            "default": 12.0,
+            "constraints": {"min": 0.0, "max": 50.0}
+          },
+          {
+            "key": "AirDensity",
+            "display_name": "空气密度",
+            "type": "real",
+            "unit": "kg/m³",
+            "description": "空气密度",
+            "required": false,
+            "default": 1.225
+          }
+        ]
+      },
+      {
+        "group_id": "power_flow",
+        "name": "Power Flow Data",
+        "description": "潮流计算相关参数",
+        "parameters": [
+          {
+            "key": "Pnom",
+            "display_name": "额定功率",
+            "type": "real",
+            "unit": "MW",
+            "description": "风场额定装机容量",
+            "required": true,
+            "default": 100.0,
+            "constraints": {"min": 0.1}
+          },
+          {
+            "key": "Vpcc",
+            "display_name": "并网点电压",
+            "type": "real",
+            "unit": "kV",
+            "description": "风场并网点电压",
+            "required": true,
+            "default": 0.69
+          },
+          {
+            "key": "PowerFlowDataSource",
+            "display_name": "潮流数据来源",
+            "type": "choice",
+            "description": "潮流计算数据来源",
+            "required": false,
+            "default": "auto",
+            "choices": ["auto", "manual", "from_file"]
+          }
+        ]
+      },
+      {
+        "group_id": "farm_power",
+        "name": "风场功率参数",
+        "description": "风场级功率控制参数",
+        "parameters": [
+          {
+            "key": "MPPTEnable",
+            "display_name": "MPPT控制使能",
+            "type": "boolean",
+            "description": "是否启用最大功率跟踪控制",
+            "required": false,
+            "default": true
+          },
+          {
+            "key": "Pmax",
+            "display_name": "最大有功功率",
+            "type": "real",
+            "unit": "MW",
+            "description": "风场最大有功功率限值",
+            "required": false,
+            "default": 100.0
+          },
+          {
+            "key": "Qmax",
+            "display_name": "最大无功功率",
+            "type": "real",
+            "unit": "Mvar",
+            "description": "风场最大无功功率限值",
+            "required": false,
+            "default": 50.0
+          }
+        ]
+      },
+      {
+        "group_id": "unit_power",
+        "name": "单机功率参数",
+        "description": "单台风机的功率参数",
+        "parameters": [
+          {
+            "key": "UnitPnom",
+            "display_name": "单机额定功率",
+            "type": "real",
+            "unit": "MW",
+            "description": "单台风机额定功率",
+            "required": false,
+            "default": 2.5
+          },
+          {
+            "key": "UnitCount",
+            "display_name": "风机数量",
+            "type": "integer",
+            "description": "风场中风机数量",
+            "required": false,
+            "default": 40,
+            "constraints": {"min": 1, "max": 10000}
+          }
+        ]
+      },
+      {
+        "group_id": "power_restore",
+        "name": "功率恢复参数",
+        "description": "功率恢复相关参数",
+        "parameters": [
+          {
+            "key": "RecoveryEnable",
+            "display_name": "功率恢复使能",
+            "type": "boolean",
+            "description": "是否启用功率恢复功能",
+            "required": false,
+            "default": true
+          },
+          {
+            "key": "RecoveryRate",
+            "display_name": "恢复速率",
+            "type": "real",
+            "unit": "pu/s",
+            "description": "功率恢复速率",
+            "required": false,
+            "default": 0.1,
+            "constraints": {"min": 0.001, "max": 10.0}
+          }
+        ]
+      },
+      {
+        "group_id": "unit_test",
+        "name": "单元测试",
+        "description": "单元测试相关参数",
+        "parameters": [
+          {
+            "key": "TestMode",
+            "display_name": "测试模式",
+            "type": "choice",
+            "description": "单元测试模式",
+            "required": false,
+            "default": "normal",
+            "choices": ["normal", "test", "debug"]
+          }
+        ]
+      }
+    ]
+  },
+  "pins": {
+    "electrical": [
+      {
+        "key": "0",
+        "name": "电气连接",
+        "type": "electrical",
+        "dimension": "3×1",
+        "description": "风场三相电气连接端口",
+        "required": true
+      }
+    ],
+    "input": [
+      {
+        "key": "Pcmd",
+        "name": "有功功率指令",
+        "type": "input",
+        "dimension": "1×1",
+        "description": "有功功率控制指令输入",
+        "required": false
+      },
+      {
+        "key": "Qcmd",
+        "name": "无功功率指令",
+        "type": "input",
+        "dimension": "1×1",
+        "description": "无功功率控制指令输入",
+        "required": false
+      },
+      {
+        "key": "WindSpeedExt",
+        "name": "外部风速",
+        "type": "input",
+        "dimension": "1×1",
+        "description": "外部风速信号输入",
+        "required": false
+      }
+    ],
+    "output": [
+      {
+        "key": "Pout",
+        "name": "输出功率",
+        "type": "output",
+        "dimension": "1×1",
+        "description": "总有功功率输出",
+        "required": false
+      },
+      {
+        "key": "Qout",
+        "name": "无功功率",
+        "type": "output",
+        "dimension": "1×1",
+        "description": "总无功功率输出",
+        "required": false
+      }
+    ]
+  },
+  "validation_rules": {
+    "require_at_least_one_pin": true,
+    "check_voltage_compatibility": true
+  },
+  "simulation_support": {
+    "emt": true,
+    "powerflow": true,
+    "phasor": false
+  }
+}
