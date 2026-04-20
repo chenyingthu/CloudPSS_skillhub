@@ -3,9 +3,10 @@ from cloudpss_skills_v2.core import SkillResult, SkillStatus, Artifact, LogEntry
 from cloudpss_skills_v2.powerapi import EngineConfig
 from cloudpss_skills_v2.powerskill import APIFactory
 
-class LossAnalysis:
-    name = 'loss_analysis'
-    description = 'Analyze line/transformer losses from a power flow result'
+
+class LossAnalysisSkill:
+    name = "loss_analysis"
+    description = "Analyze line/transformer losses from a power flow result"
 
     def __init__(self):
         self.logs = []
@@ -43,8 +44,11 @@ class LossAnalysis:
             config = {}
         valid, errors = self.validate(config)
         if not valid:
-            return SkillResult(skill_name=self.name, status=SkillStatus.FAILED, errors=errors)
+            return SkillResult(
+                skill_name=self.name, status=SkillStatus.FAILED, errors=errors
+            )
         # TODO: Implement skill logic
         return SkillResult(skill_name=self.name, status=SkillStatus.SUCCESS)
 
-__all__ = ['LossAnalysis']
+
+__all__ = ["LossAnalysisSkill"]

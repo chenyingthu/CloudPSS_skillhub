@@ -1,80 +1,430 @@
+"""CloudPSS PowerFlow Adapter - Heavyweight adapter for CloudPSS power flow simulations.
+
+Implements the EngineAdapter ABC for the CloudPSS platform, handling:
+- Authentication via token
+- Model loading via Model.fetch / Model.load
+- Power flow execution via model.runPowerFlow
+- Result extraction via result.getBuses / result.getBranches
+"""
 
 from __future__ import annotations
+
 import re
+import time
 import uuid
 from datetime import datetime
-from typing import Any
-from cloudpss_skills_v2.powerapi import EngineAdapter, EngineConfig, SimulationResult, SimulationStatus, SimulationType, ValidationError, ValidationResult
+from typing import Any, Optional
 
-def _strip_html(name = None):
-    return re.sub('<[^>]+>', '', name).strip()
+from cloudpss_skills_v2.powerapi.base import (
+    EngineAdapter,
+    EngineConfig,
+    SimulationResult,
+    SimulationStatus,
+    SimulationType,
+    ValidationError,
+    ValidationResult,
+)
+
+
+def _strip_html(name: str) -> str:
+    return re.sub(r"<[^>]+>", "", name).strip()
+
 
 _BUS_KEY_MAP = {
-    'Vm / pu': 'voltage_pu',
-    'Va / deg': 'angle_deg',
-    'Pgen / MW': 'generation_mw',
-    'Qgen / MVar': 'generation_mvar',
-    'Pload / MW': 'load_mw',
-    'Qload / MVar': 'load_mvar',
-    'Bus': 'name' }
-_BRANCH_KEY_MAP = {
-    'Branch': 'name',
-    'From bus': 'from_bus',
-    'To bus': 'to_bus',
-    'Pij / MW': 'p_from_mw',
-    'Qij / MVar': 'q_from_mvar',
-    'Pji / MW': 'p_to_mw',
-    'Qji / MVar': 'q_to_mvar',
-    'Ploss / MW': 'power_loss_mw',
-    'Qloss / MVar': 'reactive_loss_mvar' }
+    "<i>V</i><sub>m</sub> / pu": "voltage_pu",
+    "<i>V</i><sub>a</sub> / deg": "angle_deg",
+    "<i>P</i><sub>g</sub> / MW": "generation_mw",
+    "<i>Q</i><sub>g</sub> / MVar": "generation_mvar",
+    "<i>P</i><sub>l</sub> / MW": "load_mw",
+    "<i>Q</i><sub>l</sub> / MVar": "load_mvar",
+    "Bus": "name",
+    "Vm / pu": "voltage_pu",
+    "Va / deg": "angle_deg",
+    "Pgen / MW": "generation_mw",
+    "Qgen / MVar": "generation_mvar",
+    "Pload / MW": "load_mw",
+    "Qload / MVar": "load_mvar",
+}
 
-def _normalize_bus_row(raw = None):
-    result = { }
+_BRANCH_KEY_MAP = {
+    "Branch": "name",
+    "From bus": "from_bus",
+    "To bus": "to_bus",
+    "<i>P</i><sub>ij</sub> / MW": "p_from_mw",
+    "<i>Q</i><sub>ij</sub> / MVar": "q_from_mvar",
+    "<i>P</i><sub>ji</sub> / MW": "p_to_mw",
+    "<i>Q</i><sub>ji</sub> / MVar": "q_to_mvar",
+    "<i>P</i><sub>loss</sub> / MW": "power_loss_mw",
+    "<i>Q</i><sub>loss</sub> / MVar": "reactive_loss_mvar",
+    "Pij / MW": "p_from_mw",
+    "Qij / MVar": "q_from_mvar",
+    "Pji / MW": "p_to_mw",
+    "Qji / MVar": "q_to_mvar",
+    "Ploss / MW": "power_loss_mw",
+    "Qloss / MVar": "reactive_loss_mvar",
+}
+
+
+def _normalize_bus_row(raw: dict) -> dict:
+    result = {}
     for k, v in raw.items():
         mapped = _BUS_KEY_MAP.get(k)
         if mapped:
             result[mapped] = v
             continue
         result[k] = v
-    if 'name' not in result and 'Bus' in raw:
-        result['name'] = raw['Bus']
-    result.setdefault('voltage_kv', 230)
-    result.setdefault('bus_type', 'pq')
+    if "name" not in result and "Bus" in raw:
+        result["name"] = raw["Bus"]
+    result.setdefault("voltage_kv", 230)
+    result.setdefault("bus_type", "pq")
     return result
 
 
-def _normalize_branch_row(raw = None):
-    result = { }
+def _normalize_branch_row(raw: dict) -> dict:
+    result = {}
     for k, v in raw.items():
         mapped = _BRANCH_KEY_MAP.get(k)
         if mapped:
             result[mapped] = v
             continue
         result[k] = v
-    if 'name' not in result and 'Branch' in raw:
-        result['name'] = raw['Branch']
-    result.setdefault('from_bus', raw.get('From bus', ''))
-    result.setdefault('to_bus', raw.get('To bus', ''))
-    result.setdefault('branch_type', 'line')
+    if "name" not in result and "Branch" in raw:
+        result["name"] = raw["Branch"]
+    result.setdefault("from_bus", raw.get("From bus", ""))
+    result.setdefault("to_bus", raw.get("To bus", ""))
+    result.setdefault("branch_type", "line")
     return result
 
 
-def _columnar_to_rows(table = None):
-    if table or 'data' not in table:
+def _parse_cloudpss_table(table) -> list[dict]:
+    """Parse CloudPSS SDK table format (columnar) into row dicts."""
+    if table is None:
         return []
-    columns = result['data'].get('columns', [])
-    if not columns:
-        return []
-    n_rows = len(columns[0].get('data', []))
-    rows = []
-    for i in range(n_rows):
-        row = { }
-        for col in columns:
-            clean_name = _strip_html(col['name'])
-            row[clean_name] = col['data'][i]
-        rows.append(row)
-    return rows
+    try:
+        raw_data = table
+        if hasattr(table, "toJSON"):
+            raw_data = table.toJSON()
+        if isinstance(raw_data, dict) and "data" in raw_data:
+            columns = raw_data["data"].get("columns", [])
+            if not columns:
+                return []
+            n_rows = len(columns[0].get("data", []))
+            rows = []
+            for i in range(n_rows):
+                row = {}
+                for col in columns:
+                    clean_name = _strip_html(col["name"])
+                    row[clean_name] = col["data"][i]
+                rows.append(row)
+            return rows
+        if isinstance(raw_data, list):
+            return raw_data
+    except (KeyError, TypeError, AttributeError):
+        pass
+    return []
+
+
+def _setup_auth(config: dict) -> None:
+    """Set up CloudPSS authentication from config dict."""
+    import os
+    from pathlib import Path
+
+    auth = config.get("auth", {})
+    token = auth.get("token")
+
+    base_url = auth.get("base_url") or auth.get("baseUrl")
+    if base_url:
+        os.environ["CLOUDPSS_API_URL"] = base_url
+    elif auth.get("server") == "internal":
+        os.environ.setdefault("CLOUDPSS_API_URL", "https://internal.cloudpss.com")
+
+    if not token:
+        token_file = auth.get("token_file", ".cloudpss_token")
+        token_path = Path(token_file)
+        if token_path.exists():
+            token = token_path.read_text().strip()
+        else:
+            for fallback in [".cloudpss_token", ".cloudpss_token_internal"]:
+                p = Path(fallback)
+                if p.exists():
+                    token = p.read_text().strip()
+                    break
+
+    if token:
+        try:
+            from cloudpss import setToken
+
+            setToken(token)
+        except ImportError:
+            pass
 
 
 class CloudPSSPowerFlowAdapter(EngineAdapter):
-    pass
+    """
+    CloudPSS engine adapter for power flow simulations.
+
+    Implements the EngineAdapter ABC by delegating to the CloudPSS SDK:
+    - connect: authenticate via token
+    - load_model: Model.fetch(rid) or Model.load(rid)
+    - run_simulation: model.runPowerFlow()
+    - get_result: extract buses/branches from result
+    """
+
+    _model_cache: dict[str, Any]
+
+    def __init__(self, config: Optional[EngineConfig] = None):
+        super().__init__(config)
+        self._model_cache = {}
+        self._result_cache: dict[str, SimulationResult] = {}
+
+    @property
+    def engine_name(self) -> str:
+        return "cloudpss"
+
+    def get_supported_simulations(self) -> list[SimulationType]:
+        return [SimulationType.POWER_FLOW]
+
+    def _do_connect(self) -> None:
+        auth_token = self._config.extra.get("auth", {}).get("token")
+        if auth_token:
+            try:
+                from cloudpss import setToken
+
+                setToken(auth_token)
+            except ImportError:
+                self._logger.warning("cloudpss SDK not installed; skipping token setup")
+
+    def _do_disconnect(self) -> None:
+        self._model_cache.clear()
+        self._result_cache.clear()
+
+    def _do_load_model(self, model_id: str) -> bool:
+        from cloudpss import Model
+
+        source = self._config.extra.get("model", {}).get("source", "cloud")
+        kwargs = {}
+        base_url = self._config.extra.get("auth", {}).get(
+            "base_url"
+        ) or self._config.extra.get("auth", {}).get("baseUrl")
+        if base_url:
+            kwargs["baseUrl"] = base_url
+
+        if source == "local":
+            model = Model.load(model_id)
+        else:
+            model = Model.fetch(model_id, **kwargs)
+
+        self._model_cache[model_id] = model
+        self._logger.info("Model loaded: %s (%s)", model.name, model.rid)
+        return True
+
+    def _do_run_simulation(self, config: dict[str, Any]) -> SimulationResult:
+        model_id = config.get("model_id") or self._current_model_id
+        if not model_id:
+            return SimulationResult(
+                status=SimulationStatus.FAILED,
+                errors=["No model_id provided"],
+            )
+
+        _setup_auth(config)
+
+        model = self._model_cache.get(model_id)
+        if model is None:
+            source = config.get("source", "cloud")
+            kwargs = {}
+            base_url = config.get("auth", {}).get("base_url") or config.get(
+                "auth", {}
+            ).get("baseUrl")
+            if base_url:
+                kwargs["baseUrl"] = base_url
+            try:
+                from cloudpss import Model
+
+                if source == "local":
+                    model = Model.load(model_id)
+                else:
+                    model = Model.fetch(model_id, **kwargs)
+                self._model_cache[model_id] = model
+            except Exception as e:
+                return SimulationResult(
+                    status=SimulationStatus.FAILED,
+                    errors=[f"Failed to load model {model_id}: {e}"],
+                )
+
+        job_id = str(uuid.uuid4())[:8]
+        started = datetime.now()
+
+        try:
+            kwargs = {}
+            base_url = config.get("auth", {}).get("base_url") or config.get(
+                "auth", {}
+            ).get("baseUrl")
+            if base_url:
+                kwargs["baseUrl"] = base_url
+
+            job = model.runPowerFlow(**kwargs)
+
+            max_wait = config.get("timeout", 120)
+            poll_interval = 2
+            waited = 0
+
+            while waited < max_wait:
+                sdk_status = job.status()
+                if sdk_status == 1:  # DONE
+                    break
+                if sdk_status == 2:  # FAILED
+                    return SimulationResult(
+                        job_id=job_id,
+                        status=SimulationStatus.FAILED,
+                        errors=["Power flow simulation failed"],
+                        started_at=started,
+                        completed_at=datetime.now(),
+                    )
+                time.sleep(poll_interval)
+                waited += poll_interval
+
+            if sdk_status != 1:
+                return SimulationResult(
+                    job_id=job_id,
+                    status=SimulationStatus.TIMEOUT,
+                    errors=[f"Simulation timed out after {waited}s"],
+                    started_at=started,
+                    completed_at=datetime.now(),
+                )
+
+            pf_result = job.result
+            if pf_result is None:
+                return SimulationResult(
+                    job_id=job_id,
+                    status=SimulationStatus.FAILED,
+                    errors=["Power flow result is empty"],
+                    started_at=started,
+                    completed_at=datetime.now(),
+                )
+
+            bus_rows = _parse_cloudpss_table(pf_result.getBuses())
+            branch_rows = _parse_cloudpss_table(pf_result.getBranches())
+
+            normalized_buses = [_normalize_bus_row(b) for b in bus_rows]
+            normalized_branches = [_normalize_branch_row(b) for b in branch_rows]
+
+            summary = _generate_pf_summary(normalized_buses, normalized_branches)
+
+            result_data = {
+                "model": model.name if hasattr(model, "name") else model_id,
+                "model_rid": model.rid if hasattr(model, "rid") else model_id,
+                "job_id": getattr(job, "id", job_id),
+                "converged": True,
+                "bus_count": len(normalized_buses),
+                "branch_count": len(normalized_branches),
+                "buses": normalized_buses,
+                "branches": normalized_branches,
+                "summary": summary,
+            }
+
+            sim_result = SimulationResult(
+                job_id=getattr(job, "id", job_id),
+                status=SimulationStatus.COMPLETED,
+                data=result_data,
+                started_at=started,
+                completed_at=datetime.now(),
+            )
+
+            self._result_cache[getattr(job, "id", job_id)] = sim_result
+            return sim_result
+
+        except Exception as e:
+            return SimulationResult(
+                job_id=job_id,
+                status=SimulationStatus.FAILED,
+                errors=[str(e)],
+                started_at=started,
+                completed_at=datetime.now(),
+            )
+
+    def _do_get_result(self, job_id: str) -> SimulationResult:
+        cached = self._result_cache.get(job_id)
+        if cached:
+            return cached
+        return SimulationResult(
+            job_id=job_id,
+            status=SimulationStatus.FAILED,
+            errors=[f"Result not found for job_id: {job_id}"],
+        )
+
+    def _do_validate_config(self, config: dict[str, Any]) -> ValidationResult:
+        errors = []
+        model_id = config.get("model_id")
+        if not model_id:
+            errors.append(
+                ValidationError(field="model_id", message="model_id is required")
+            )
+        algorithm = config.get("algorithm")
+        if algorithm and algorithm not in ("newton_raphson", "fast_decoupled", "acpf"):
+            errors.append(
+                ValidationError(
+                    field="algorithm", message=f"Unknown algorithm: {algorithm}"
+                )
+            )
+        return ValidationResult(valid=len(errors) == 0, errors=errors)
+
+
+def _generate_pf_summary(bus_rows: list[dict], branch_rows: list[dict]) -> dict:
+    """Generate power flow summary statistics from normalized result rows."""
+    total_p_gen = 0.0
+    total_q_gen = 0.0
+    total_p_load = 0.0
+    total_q_load = 0.0
+    total_loss = 0.0
+    min_voltage = 999.0
+    max_voltage = 0.0
+
+    for bus in bus_rows:
+        p_gen = _as_float(bus.get("generation_mw") or bus.get("Pg"))
+        q_gen = _as_float(bus.get("generation_mvar") or bus.get("Qg"))
+        p_load = _as_float(bus.get("load_mw") or bus.get("Pl"))
+        q_load = _as_float(bus.get("load_mvar") or bus.get("Ql"))
+        vm = _as_float(bus.get("voltage_pu") or bus.get("Vm"), 1.0)
+
+        total_p_gen += p_gen
+        total_q_gen += q_gen
+        total_p_load += p_load
+        total_q_load += q_load
+        if 0 < vm < min_voltage:
+            min_voltage = vm
+        if vm > max_voltage:
+            max_voltage = vm
+
+    for branch in branch_rows:
+        p_loss = _as_float(
+            branch.get("power_loss_mw") or branch.get("Ploss") or branch.get("P_loss")
+        )
+        total_loss += p_loss
+
+    return {
+        "total_generation": {
+            "p_mw": round(total_p_gen, 2),
+            "q_mvar": round(total_q_gen, 2),
+        },
+        "total_load": {
+            "p_mw": round(total_p_load, 2),
+            "q_mvar": round(total_q_load, 2),
+        },
+        "total_loss_mw": round(total_loss, 4),
+        "voltage_range": {
+            "min_pu": round(min_voltage, 4),
+            "max_pu": round(max_voltage, 4),
+        },
+    }
+
+
+def _as_float(value, default=0.0) -> float:
+    try:
+        if value is None or value == "":
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+__all__ = ["CloudPSSPowerFlowAdapter"]

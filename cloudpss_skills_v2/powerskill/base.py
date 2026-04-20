@@ -1,114 +1,75 @@
-
-'''
+"""
 PowerSkill Layer - Engine-agnostic PowerSkill API Framework
 
 This module provides the PowerSkill layer for cloudpss_skills_v2,
-following the Java PowerSkill pattern where APIs are lightweight components
-that provide engine-agnostic interfaces on top of AWT adapters.
+following the Java Swing pattern where APIs are lightweight components
+that provide engine-agnostic interfaces on top of PowerAPI adapters.
 
 Architecture:
-    Skills -> PowerSkill APIs (Lightweight, engine-agnostic) -> powerAPI Adapters (Heavyweight) -> Engines
-'''
+    Skills -> PowerSkill APIs (Lightweight, engine-agnostic) -> PowerAPI Adapters (Heavyweight) -> Engines
+"""
+
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 import logging
-logger = logging.getLogger(__name__)
+
+from cloudpss_skills_v2.powerapi import EngineAdapter, EngineConfig, SimulationResult
+
 
 class SimulationAPI(ABC):
-    '''
+    """
     Abstract base class for simulation APIs.
 
     PowerSkill APIs are lightweight, engine-agnostic interfaces that delegate
-    to AWT adapters. This follows the Java PowerSkill pattern where the API
+    to PowerAPI adapters. This follows the Java Swing pattern where the API
     facade hides engine-specific implementation details.
-    '''
-    
-    def __init__(self, adapter):
-        '''
-        Initialize the API with an AWT adapter.
+
+    Each API wraps an EngineAdapter and provides domain-specific convenience
+    methods on top of the generic adapter interface.
+    """
+
+    def __init__(self, adapter: EngineAdapter):
+        """
+        Initialize the API with a PowerAPI adapter.
 
         Args:
-            adapter: An EngineAdapter instance
-        '''
+            adapter: An EngineAdapter instance that handles engine-specific logic.
+        """
+        if not isinstance(adapter, EngineAdapter):
+            raise TypeError(f"Expected EngineAdapter, got {type(adapter).__name__}")
         self._adapter = adapter
         self._logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
 
-    pass  # FIXME: lambda pattern()
-    pass  # FIXME: lambda pattern()
-    
-    def connect(self):
-        '''Connect to the engine.'''
+    @property
+    def adapter(self) -> EngineAdapter:
+        return self._adapter
+
+    def connect(self) -> None:
         self._adapter.connect()
 
-    
-    def disconnect(self):
-        '''Disconnect from the engine.'''
+    def disconnect(self) -> None:
         self._adapter.disconnect()
 
-    
-    def load_model(self, model_id = None):
-        '''
-        Load a model.
-
-        Args:
-            model_id: Model identifier
-
-        Returns:
-            True if loaded successfully
-        '''
+    def load_model(self, model_id: str | None = None) -> bool:
         return self._adapter.load_model(model_id)
 
-    
-    def validate_config(self, config = None):
-        '''
-        Validate configuration.
-
-        Args:
-            config: Configuration to validate
-
-        Returns:
-            ValidationResult
-        '''
+    def validate_config(self, config: dict[str, Any] | None = None):
         return self._adapter.validate_config(config)
 
-    
-    def run(self, config = None):
-        '''
-        Run simulation with configuration.
-
-        Args:
-            config: Simulation configuration
-
-        Returns:
-            SimulationResult
-        '''
+    def run(self, config: dict[str, Any] | None = None) -> SimulationResult:
         return self._adapter.run_simulation(config)
 
-    
-    def get_result(self, job_id = None):
-        '''
-        Fetch simulation result.
-
-        Args:
-            job_id: Job identifier
-
-        Returns:
-            SimulationResult
-        '''
+    def get_result(self, job_id: str | None = None) -> SimulationResult:
         return self._adapter.get_result(job_id)
 
-    
-    def __enter__(self):
-        '''Context manager entry.'''
+    def __enter__(self) -> SimulationAPI:
         self.connect()
         return self
 
-    
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        '''Context manager exit.'''
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.disconnect()
 
 
-__all__ = [
-    'SimulationAPI']
+__all__ = ["SimulationAPI"]
