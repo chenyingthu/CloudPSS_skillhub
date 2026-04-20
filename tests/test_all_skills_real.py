@@ -481,7 +481,7 @@ def main():
     print("=" * 70)
 
     # 加载token
-    token_path = Path("/home/chenying/researches/cloudpss-api-enhanced/.cloudpss_token")
+    token_path = Path(".cloudpss_token")
     if not token_path.exists():
         print("❌ Token文件不存在")
         return False

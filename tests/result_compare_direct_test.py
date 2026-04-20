@@ -25,7 +25,7 @@ def run_emt_and_compare():
     print("="*70)
 
     # 加载token
-    token = Path("/home/chenying/researches/cloudpss-api-enhanced/.cloudpss_token").read_text().strip()
+    token = Path(".cloudpss_token").read_text().strip()
     setToken(token)
 
     results = []

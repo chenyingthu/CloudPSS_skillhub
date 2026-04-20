@@ -45,7 +45,7 @@ def test_with_real_jobs():
     print("=" * 70)
 
     token = (
-        Path("/home/chenying/researches/cloudpss-api-enhanced/.cloudpss_token")
+        Path(".cloudpss_token")
         .read_text()
         .strip()
     )
@@ -88,7 +88,7 @@ def test_n1_security_improved():
     print("=" * 70)
 
     token = (
-        Path("/home/chenying/researches/cloudpss-api-enhanced/.cloudpss_token")
+        Path(".cloudpss_token")
         .read_text()
         .strip()
     )
@@ -244,7 +244,7 @@ def test_param_scan_improved():
     print("=" * 70)
 
     token = (
-        Path("/home/chenying/researches/cloudpss-api-enhanced/.cloudpss_token")
+        Path(".cloudpss_token")
         .read_text()
         .strip()
     )

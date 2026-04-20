@@ -29,7 +29,7 @@ def test_param_scan_emt():
 
     # 加载token
     token = (
-        Path("/home/chenying/researches/cloudpss-api-enhanced/.cloudpss_token")
+        Path(".cloudpss_token")
         .read_text()
         .strip()
     )

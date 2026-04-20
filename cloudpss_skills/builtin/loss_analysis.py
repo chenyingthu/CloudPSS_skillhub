@@ -676,12 +676,7 @@ class LossAnalysisSkill(SkillBase):
         # 设置 API URL
         if base_url:
             os.environ["CLOUDPSS_API_URL"] = base_url
-        elif server == "internal":
-            os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
-        else:
-            os.environ["CLOUDPSS_API_URL"] = "https://cloudpss.net/"
-
-        if not token and auth.get("token_file"):
+        elif server == "internal":        else:        if not token and auth.get("token_file"):
             try:
                 with open(auth["token_file"], "r") as f:
                     token = f.read().strip()

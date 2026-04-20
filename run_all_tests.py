@@ -146,7 +146,7 @@ def test_python_api():
     """测试Python API"""
     test_code = '''
 import sys
-sys.path.insert(0, '/home/chenying/researches/cloudpss-api-enhanced')
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from cloudpss_skills.builtin import (
     N1SecuritySkill, ParamScanSkill, ResultCompareSkill,

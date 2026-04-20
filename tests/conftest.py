@@ -1,7 +1,7 @@
 import os
 import sys
 
-os.environ["CLOUDPSS_API_URL"] = "http://166.111.60.76:50001"
+# CLOUDPSS_API_URL should be set via environment or config, not hardcoded
 
 from pathlib import Path
 import time

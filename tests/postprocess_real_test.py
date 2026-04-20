@@ -125,7 +125,7 @@ def main():
     print("=" * 70)
 
     # 加载token
-    token_path = Path("/home/chenying/researches/cloudpss-api-enhanced/.cloudpss_token")
+    token_path = Path(".cloudpss_token")
     token = token_path.read_text().strip()
     setToken(token)
     print(f"\n✓ Token已加载 ({len(token)} 字符)")

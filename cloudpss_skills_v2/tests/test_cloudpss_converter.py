@@ -4671,7 +4671,7 @@ pass  # TODO: restore
 #             258 CALL                     1
 #             266 POP_TOP
 # 
-# 341     >>  268 LOAD_CONST               6 ('http://166.111.60.76:50001/')
+# 341     >>  268 LOAD_CONST               6 ('http://api.example.com/')
 #             270 LOAD_GLOBAL              0 (os)
 #             280 LOAD_ATTR               16 (environ)
 #             300 LOAD_CONST               7 ('CLOUDPSS_API_URL')
