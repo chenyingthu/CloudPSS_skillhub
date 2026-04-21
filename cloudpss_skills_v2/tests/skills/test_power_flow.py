@@ -1572,7 +1572,7 @@ pass  # TODO: restore
 # 
 # 139         248 LOAD_FAST                4 (mock_api)
 #             250 LOAD_FAST                1 (mock_factory)
-#             252 LOAD_ATTR               18 (create_powerflow_api)
+#             252 LOAD_ATTR               18 (create_powerflow)
 #             272 STORE_ATTR               4 (return_value)
 # 
 # 142         282 LOAD_CONST               9 ('rid')
@@ -1994,7 +1994,7 @@ pass  # TODO: restore
 #            1064 STORE_FAST              14 (@py_assert12)
 # 
 # 161        1066 LOAD_FAST                1 (mock_factory)
-#            1068 LOAD_ATTR               24 (create_powerflow_api)
+#            1068 LOAD_ATTR               24 (create_powerflow)
 #            1088 LOAD_ATTR               27 (NULL|self + assert_not_called)
 #            1108 CALL                     0
 #            1116 POP_TOP

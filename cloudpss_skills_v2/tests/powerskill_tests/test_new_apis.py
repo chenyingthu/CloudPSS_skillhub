@@ -1153,24 +1153,24 @@ pass  # TODO: restore
 # 149          10 LOAD_CONST               1 ('Tests for new Engine methods.')
 #              12 STORE_NAME               3 (__doc__)
 # 
-# 151          14 LOAD_CONST               2 (<code object test_create_short_circuit_api at 0x3af9a2d0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 151>)
+# 151          14 LOAD_CONST               2 (<code object test_create_short_circuit at 0x3af9a2d0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 151>)
 #              16 MAKE_FUNCTION            0
-#              18 STORE_NAME               4 (test_create_short_circuit_api)
+#              18 STORE_NAME               4 (test_create_short_circuit)
 # 
-# 155          20 LOAD_CONST               3 (<code object test_create_emt_api at 0x3af9b9b0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 155>)
+# 155          20 LOAD_CONST               3 (<code object test_create_emt at 0x3af9b9b0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 155>)
 #              22 MAKE_FUNCTION            0
-#              24 STORE_NAME               5 (test_create_emt_api)
+#              24 STORE_NAME               5 (test_create_emt)
 # 
 # 159          26 LOAD_CONST               4 (<code object test_list_engines_all_types at 0x3afa5a90, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 159>)
 #              28 MAKE_FUNCTION            0
 #              30 STORE_NAME               6 (test_list_engines_all_types)
 #              32 RETURN_CONST             5 (None)
 # 
-# Disassembly of <code object test_create_short_circuit_api at 0x3af9a2d0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 151>:
+# Disassembly of <code object test_create_short_circuit at 0x3af9a2d0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 151>:
 # 151           0 RESUME                   0
 # 
 # 152           2 LOAD_GLOBAL              1 (NULL + Engine)
-#              12 LOAD_ATTR                2 (create_short_circuit_api)
+#              12 LOAD_ATTR                2 (create_short_circuit)
 #              32 LOAD_CONST               1 ('cloudpss')
 #              34 KW_NAMES                 2 (('engine',))
 #              36 CALL                     1
@@ -1255,11 +1255,11 @@ pass  # TODO: restore
 #             620 STORE_FAST               2 (@py_assert3)
 #             622 RETURN_CONST             0 (None)
 # 
-# Disassembly of <code object test_create_emt_api at 0x3af9b9b0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 155>:
+# Disassembly of <code object test_create_emt at 0x3af9b9b0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 155>:
 # 155           0 RESUME                   0
 # 
 # 156           2 LOAD_GLOBAL              1 (NULL + Engine)
-#              12 LOAD_ATTR                2 (create_emt_api)
+#              12 LOAD_ATTR                2 (create_emt)
 #              32 LOAD_CONST               1 ('cloudpss')
 #              34 KW_NAMES                 2 (('engine',))
 #              36 CALL                     1

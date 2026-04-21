@@ -5005,7 +5005,7 @@ pass  # TODO: restore
 #              12 POP_TOP
 # 
 # 238          14 LOAD_FAST                1 (Engine)
-#              16 LOAD_ATTR                5 (NULL|self + create_powerflow_api)
+#              16 LOAD_ATTR                5 (NULL|self + create_powerflow)
 #              36 LOAD_CONST               3 ('pandapower')
 #              38 KW_NAMES                 4 (('engine',))
 #              40 CALL                     1
@@ -5162,7 +5162,7 @@ pass  # TODO: restore
 #              12 POP_TOP
 # 
 # 250          14 LOAD_FAST                1 (Engine)
-#              16 LOAD_ATTR                5 (NULL|self + create_powerflow_api)
+#              16 LOAD_ATTR                5 (NULL|self + create_powerflow)
 #              36 LOAD_CONST               3 ('pandapower')
 #              38 KW_NAMES                 4 (('engine',))
 #              40 CALL                     1

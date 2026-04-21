@@ -75,7 +75,7 @@ class TestPowerFlowPreset:
                 "converged": True,
             },
         )
-        mock_factory_cls.create_powerflow_api.return_value = mock_api
+        mock_factory_cls.create_powerflow.return_value = mock_api
 
         with tempfile.TemporaryDirectory() as tmpdir:
             skill = PowerFlowPreset()
@@ -100,7 +100,7 @@ class TestPowerFlowPreset:
             is_success=False,
             errors=["Power flow failed to converge"],
         )
-        mock_factory_cls.create_powerflow_api.return_value = mock_api
+        mock_factory_cls.create_powerflow.return_value = mock_api
 
         skill = PowerFlowPreset()
         result = skill.run(
@@ -119,7 +119,7 @@ class TestPowerFlowPreset:
             is_success=True,
             data={"buses": [], "branches": []},
         )
-        mock_factory_cls.create_powerflow_api.return_value = mock_api
+        mock_factory_cls.create_powerflow.return_value = mock_api
 
         skill = PowerFlowPreset()
         result = skill.run(
@@ -189,7 +189,7 @@ class TestEMTPreset:
                 "plot_count": 1,
             },
         )
-        mock_factory_cls.create_emt_api.return_value = mock_api
+        mock_factory_cls.create_emt.return_value = mock_api
 
         with tempfile.TemporaryDirectory() as tmpdir:
             skill = EMTPreset()

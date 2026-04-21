@@ -63,7 +63,7 @@ class HarmonicAnalysisAnalysis:
                 error="; ".join(errors),
                 data={"stage": "validation"},
             )
-        emt_api = None.create_emt_api(self.config.get("emt_config", {}))
+        emt_api = None.create_emt(self.config.get("emt_config", {}))
         waveform = None
         sample_rate = 1000
         if hasattr(emt_api, "run_short_simulation"):

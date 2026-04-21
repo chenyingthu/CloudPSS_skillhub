@@ -222,35 +222,35 @@ class TestShortCircuit:
 
 
 class TestEngine:
-    def test_create_powerflow_api(self):
-        api = Engine.create_powerflow_api(engine="cloudpss")
+    def test_create_powerflow(self):
+        api = Engine.create_powerflow(engine="cloudpss")
         assert isinstance(api, PowerFlow)
         assert isinstance(api.adapter, EngineAdapter)
 
-    def test_create_emt_api(self):
-        api = Engine.create_emt_api(engine="cloudpss")
+    def test_create_emt(self):
+        api = Engine.create_emt(engine="cloudpss")
         assert isinstance(api, EMT)
         assert api.adapter.engine_name == "cloudpss_emt"
 
-    def test_create_short_circuit_api(self):
-        api = Engine.create_short_circuit_api(engine="cloudpss")
+    def test_create_short_circuit(self):
+        api = Engine.create_short_circuit(engine="cloudpss")
         assert isinstance(api, ShortCircuit)
         assert api.adapter.engine_name == "cloudpss_sc"
 
-    def test_create_api_generic(self):
-        api = Engine.create_api("powerflow", engine="cloudpss")
+    def test_create_generic(self):
+        api = Engine.create("powerflow", engine="cloudpss")
         assert isinstance(api, PowerFlow)
 
-    def test_create_api_unknown_type_raises(self):
+    def test_create_unknown_type_raises(self):
         with pytest.raises(ValueError, match="Unknown API type"):
-            Engine.create_api("nonexistent")
+            Engine.create("nonexistent")
 
     def test_each_api_gets_correct_adapter(self):
-        pf = Engine.create_powerflow_api(engine="cloudpss")
+        pf = Engine.create_powerflow(engine="cloudpss")
         assert pf.adapter.engine_name == "cloudpss"
 
-        emt = Engine.create_emt_api(engine="cloudpss")
+        emt = Engine.create_emt(engine="cloudpss")
         assert emt.adapter.engine_name == "cloudpss_emt"
 
-        sc = Engine.create_short_circuit_api(engine="cloudpss")
+        sc = Engine.create_short_circuit(engine="cloudpss")
         assert sc.adapter.engine_name == "cloudpss_sc"

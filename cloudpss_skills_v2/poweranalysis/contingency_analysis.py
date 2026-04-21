@@ -206,7 +206,7 @@ class ContingencyAnalysis:
 
         try:
             engine = config.get("engine", "cloudpss")
-            api = Engine.create_powerflow_api(engine=engine)
+            api = Engine.create_powerflow(engine=engine)
             self._log("INFO", f"使用引擎: {api.adapter.engine_name}")
 
             model_config = config["model"]

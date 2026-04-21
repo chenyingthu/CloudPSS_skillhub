@@ -56,28 +56,31 @@ class Engine:
     """Factory for creating engine-agnostic API instances backed by adapters."""
 
     @classmethod
-    def create_powerflow_api(
+    def create_powerflow(
         cls, engine: str = "cloudpss", config: EngineConfig | None = None
     ) -> PowerFlow:
         adapter = _create_adapter(engine, "power_flow", config)
+        adapter.connect()
         return PowerFlow(adapter=adapter)
 
     @classmethod
-    def create_short_circuit_api(
+    def create_short_circuit(
         cls, engine: str = "cloudpss", config: EngineConfig | None = None
     ) -> ShortCircuit:
         adapter = _create_adapter(engine, "short_circuit", config)
+        adapter.connect()
         return ShortCircuit(adapter=adapter)
 
     @classmethod
-    def create_emt_api(
+    def create_emt(
         cls, engine: str = "cloudpss", config: EngineConfig | None = None
     ) -> EMT:
         adapter = _create_adapter(engine, "emt", config)
+        adapter.connect()
         return EMT(adapter=adapter)
 
     @classmethod
-    def create_api(
+    def create(
         cls, api_type: str, engine: str = "cloudpss", config: EngineConfig | None = None
     ) -> SimulationAPI:
         api_cls = _API_MAP.get(api_type)
@@ -86,6 +89,7 @@ class Engine:
                 f"Unknown API type: {api_type}. Available: {list(_API_MAP.keys())}"
             )
         adapter = _create_adapter(engine, api_type, config)
+        adapter.connect()
         return api_cls(adapter=adapter)
 
 

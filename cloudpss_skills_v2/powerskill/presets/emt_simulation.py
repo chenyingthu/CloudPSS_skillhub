@@ -121,7 +121,7 @@ class EMTPreset:
 
     def _get_api(self, config: dict[str, Any]) -> EMT:
         engine = config.get("engine", "cloudpss")
-        return Engine.create_emt_api(engine=engine)
+        return Engine.create_emt(engine=engine)
 
     def validate(self, config: dict[str, Any]) -> tuple[bool, list[str]]:
         errors = []

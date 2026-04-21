@@ -1758,7 +1758,7 @@ pass  # TODO: restore
 #              12 POP_TOP
 # 
 # 113          14 LOAD_FAST                1 (Engine)
-#              16 LOAD_ATTR                5 (NULL|self + create_short_circuit_api)
+#              16 LOAD_ATTR                5 (NULL|self + create_short_circuit)
 #              36 LOAD_CONST               3 ('pandapower')
 #              38 KW_NAMES                 4 (('engine',))
 #              40 CALL                     1

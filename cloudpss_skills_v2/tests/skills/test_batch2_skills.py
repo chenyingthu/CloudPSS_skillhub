@@ -111,7 +111,7 @@ class TestShortCircuitAnalysis:
         with patch(
             "cloudpss_skills_v2.poweranalysis.short_circuit.Engine"
         ) as mock_factory:
-            mock_factory.create_short_circuit_api.return_value = mock_api
+            mock_factory.create_short_circuit.return_value = mock_api
             result = skill.run(
                 {
                     "model": {"rid": "test", "source": "cloud"},
@@ -436,7 +436,7 @@ class TestVoltageStabilityAnalysis:
         with patch(
             "cloudpss_skills_v2.poweranalysis.voltage_stability.Engine"
         ) as mock_factory:
-            mock_factory.create_powerflow_api.return_value = mock_api
+            mock_factory.create_powerflow.return_value = mock_api
             result = skill.run(
                 {
                     "model": {"rid": "test", "source": "cloud"},

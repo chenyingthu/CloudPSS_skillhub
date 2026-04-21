@@ -20,7 +20,7 @@ class TransientStabilityAnalysis:
         self.engine = engine
 
     def _get_api(self):
-        return Engine.create_powerflow_api(self.engine)
+        return Engine.create_powerflow(self.engine)
 
     def validate(self, config: Optional[Dict] = None) -> tuple:
         errors = []
