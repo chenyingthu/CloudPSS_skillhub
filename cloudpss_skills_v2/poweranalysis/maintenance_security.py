@@ -32,7 +32,7 @@ class MaintenanceSecurityAnalysis:
                 "skill": {"type": "string", "const": "maintenance_security"},
                 "engine": {
                     "type": "string",
-                    "enum": ["cloudpss", "pandapower", "algolib"],
+                    "enum": ["cloudpss", "pandapower"],
                     "default": "cloudpss",
                 },
                 "model": {

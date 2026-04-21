@@ -52,7 +52,7 @@ class N1SecurityAnalysis:
                 "skill": {"type": "string", "const": "n1_security"},
                 "engine": {
                     "type": "string",
-                    "enum": ["cloudpss", "pandapower", "algolib"],
+                    "enum": ["cloudpss", "pandapower"],
                     "default": "cloudpss",
                 },
                 "auth": {

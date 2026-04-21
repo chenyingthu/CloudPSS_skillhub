@@ -37,7 +37,7 @@ class BatchPowerFlowAnalysis:
                 "skill": {"type": "string", "const": "batch_powerflow"},
                 "engine": {
                     "type": "string",
-                    "enum": ["cloudpss", "pandapower", "algolib"],
+                    "enum": ["cloudpss", "pandapower"],
                     "default": "cloudpss",
                 },
                 "auth": {

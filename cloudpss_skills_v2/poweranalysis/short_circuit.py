@@ -50,7 +50,7 @@ class ShortCircuitAnalysis:
                 "skill": {"type": "string", "const": "short_circuit"},
                 "engine": {
                     "type": "string",
-                    "enum": ["cloudpss", "pandapower", "algolib"],
+                    "enum": ["cloudpss", "pandapower"],
                     "default": "cloudpss",
                 },
                 "auth": {

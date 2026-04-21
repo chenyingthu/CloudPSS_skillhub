@@ -75,7 +75,7 @@ class LossAnalysis:
                 "skill": {"type": "string", "const": "loss_analysis"},
                 "engine": {
                     "type": "string",
-                    "enum": ["cloudpss", "pandapower", "algolib"],
+                    "enum": ["cloudpss", "pandapower"],
                     "default": "cloudpss",
                 },
                 "auth": {

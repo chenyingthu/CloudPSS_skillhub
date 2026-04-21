@@ -38,7 +38,7 @@ class PowerFlowPreset:
                 "skill": {"type": "string", "const": "power_flow"},
                 "engine": {
                     "type": "string",
-                    "enum": ["cloudpss", "pandapower", "algolib"],
+                    "enum": ["cloudpss", "pandapower"],
                     "default": "cloudpss",
                 },
                 "auth": {

@@ -59,19 +59,6 @@ def _register_defaults(registry: AdapterRegistry) -> None:
     except ImportError:
         pass
 
-    try:
-        from cloudpss_skills_v2.powerapi.adapters.algolib.powerflow import (
-            AlgoLibPowerFlowAdapter,
-        )
-        from cloudpss_skills_v2.powerapi.adapters.algolib.short_circuit import (
-            AlgoLibShortCircuitAdapter,
-        )
-
-        registry.register("algolib", "power_flow", AlgoLibPowerFlowAdapter)
-        registry.register("algolib", "short_circuit", AlgoLibShortCircuitAdapter)
-    except ImportError:
-        pass
-
 
 registry = AdapterRegistry()
 _register_defaults(registry)

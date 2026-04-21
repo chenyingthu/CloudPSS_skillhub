@@ -33,7 +33,7 @@ class TheveninEquivalentAnalysis:
                 "skill": {"type": "string", "const": "thevenin_equivalent"},
                 "engine": {
                     "type": "string",
-                    "enum": ["cloudpss", "pandapower", "algolib"],
+                    "enum": ["cloudpss", "pandapower"],
                     "default": "cloudpss",
                 },
                 "model": {

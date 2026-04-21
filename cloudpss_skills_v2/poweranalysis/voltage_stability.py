@@ -53,7 +53,7 @@ class VoltageStabilityAnalysis:
                 "skill": {"type": "string", "const": "voltage_stability"},
                 "engine": {
                     "type": "string",
-                    "enum": ["cloudpss", "pandapower", "algolib"],
+                    "enum": ["cloudpss", "pandapower"],
                     "default": "cloudpss",
                 },
                 "auth": {
