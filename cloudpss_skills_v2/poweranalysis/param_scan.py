@@ -1,99 +1,181 @@
+"""Parametric Scan Analysis - Scan parameter values and analyze system response.
 
+参数扫描分析 - 扫描参数值并分析系统响应。
+"""
+
+from __future__ import annotations
+
+import logging
 from datetime import datetime
-from typing import Any, Dict, List
-from cloudpss_skills_v2.core import SkillResult, SkillStatus, Artifact, LogEntry
-from cloudpss_skills_v2.powerapi import EngineConfig
+from typing import Any
+
+from cloudpss_skills_v2.core.skill_result import (
+    Artifact,
+    SkillResult,
+    SkillStatus,
+)
 from cloudpss_skills_v2.powerskill import Engine, PowerFlow
 
-def _log_entry(level = None, message = None):
-    return LogEntry(timestamp = datetime.now(), level = level, message = message, context = None)
+logger = logging.getLogger(__name__)
 
 
 class ParamScanAnalysis:
-    '''Parametric scan over a given component/parameter using the CloudPSS API.
+    name = "param_scan"
+    description = "参数扫描分析 - 扫描参数值分析系统响应"
 
-    This is a lightweight v2 port of the legacy param_scan skill. It validates
-    the required fields and then iterates over provided values, calling the
-    engine API for each iteration.
-    '''
-    name = 'param_scan'
-    
-    def __init__(self, engine = None, **adapter_kwargs):
-        self._engine = engine
-        self._adapter_kwargs = adapter_kwargs
-        self._api = None
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["skill", "model", "scan"],
+            "properties": {
+                "skill": {"type": "string", "const": "param_scan"},
+                "engine": {
+                    "type": "string",
+                    "enum": ["cloudpss", "pandapower"],
+                    "default": "pandapower",
+                },
+                "model": {
+                    "type": "object",
+                    "required": ["rid"],
+                    "properties": {"rid": {"type": "string"}},
+                },
+                "scan": {
+                    "type": "object",
+                    "required": ["parameter", "values"],
+                    "properties": {
+                        "parameter": {
+                            "type": "string",
+                            "description": "e.g., load.p_mw, gen.p_mw",
+                        },
+                        "values": {"type": "array", "items": {"type": "number"}},
+                        "component": {
+                            "type": "string",
+                            "description": "Component key to modify",
+                        },
+                    },
+                },
+            },
+        }
 
-    
-    def validate(self, config = None):
+    def __init__(self):
+        self.logs = []
+        self.artifacts = []
+
+    def _log(self, level: str, message: str) -> None:
+        self.logs.append(
+            {
+                "timestamp": datetime.now().isoformat(),
+                "level": level,
+                "message": message,
+            }
+        )
+        getattr(logger, level.lower(), logger.info)(message)
+
+    def validate(self, config: dict | None) -> tuple[bool, list[str]]:
         errors = []
-        if not config or isinstance(config, dict):
-            errors.append('config must be a dictionary with required fields: component, parameter, values')
-            return (len(errors) == 0, errors)
-        if None not in config:
-            errors.append('component is required')
-        if 'parameter' not in config:
-            errors.append('parameter is required')
-        if 'values' not in config and isinstance(config.get('values'), list) or len(config.get('values', [])) == 0:
-            errors.append('values must be a non-empty list')
+        if not config:
+            errors.append("config is required")
+            return (False, errors)
+        if not config.get("model", {}).get("rid"):
+            errors.append("model.rid is required")
+        scan = config.get("scan", {})
+        if not scan.get("parameter"):
+            errors.append("scan.parameter is required")
+        if not scan.get("values"):
+            errors.append("scan.values is required")
         return (len(errors) == 0, errors)
 
-    
-    def get_default_config(self):
-        '''Return default configuration with all required fields.'''
-        return {
-            'skill': self.name,
-            'auth': {
-                'token_file': '.cloudpss_token' },
-            'model': {
-                'rid': '',
-                'source': 'cloud' },
-            'component': '',
-            'parameter': '',
-            'values': [],
-            'algorithm': {
-                'type': 'acpf',
-                'tolerance': 1e-06,
-                'max_iterations': 100 },
-            'output': {
-                'format': 'json',
-                'path': './results/',
-                'prefix': 'param_scan' } }
+    def run(self, config: dict | None) -> SkillResult:
+        start_time = datetime.now()
+        if config is None:
+            config = {}
+        self.logs = []
+        self.artifacts = []
 
-    config_schema: Dict[(str, Any)] = {
-        'type': 'object',
-        'required': [
-            'component',
-            'parameter',
-            'values'],
-        'properties': {
-            'component': {
-                'type': 'string' },
-            'parameter': {
-                'type': 'string' },
-            'values': {
-                'type': 'array',
-                'items': {
-                    'type': 'any' } } } }
-    
-    def _get_api(self):
-        pass
-def run(self, config = None):
-        '''Execute parameter scan across provided values and return a SkillResult.'''
-        skill_name = self.name
-        start = datetime.now()
-        logs = []
-        logs.append(_log_entry('INFO', 'Starting param_scan execution'))
-        (valid, errors) = self.validate(config)
+        valid, errors = self.validate(config)
         if not valid:
-            error_msg = '; '.join(errors)
-            logs.append(_log_entry('ERROR', f"Config validation failed: {error_msg}"))
-            return SkillResult.failure(skill_name = skill_name, error = error_msg, data = {
-                'stage': 'param_scan',
-                'partial_results': [] })
-        component = None.get('component')
-        parameter = config.get('parameter')
-        values = config.get('values', [])
-        model_ref = config.get('model', { })
-        results = []
-__all__ = [
-    'ParamScanAnalysis']
+            return SkillResult(
+                skill_name=self.name,
+                status=SkillStatus.FAILED,
+                error="; ".join(errors),
+                logs=self.logs,
+                start_time=start_time,
+                end_time=datetime.now(),
+            )
+
+        try:
+            engine = config.get("engine", "pandapower")
+            api = Engine.create_powerflow(engine=engine)
+            self._log("INFO", f"Using engine: {api.adapter.engine_name}")
+
+            model_rid = config["model"]["rid"]
+            self._log("INFO", f"Model: {model_rid}")
+
+            scan_config = config["scan"]
+            parameter = scan_config["parameter"]
+            values = scan_config["values"]
+            component_key = scan_config.get("component")
+
+            self._log("INFO", f"Scanning {parameter} across {len(values)} values")
+
+            handle = api.get_model_handle(model_rid)
+            results = []
+
+            for i, value in enumerate(values):
+                self._log("INFO", f"[{i + 1}/{len(values)}] {parameter}={value}")
+
+                working = handle.clone()
+                if component_key:
+                    working.update_component_args(component_key, parameter, value)
+
+                sim_result = api.run_power_flow(model_handle=working)
+
+                results.append(
+                    {
+                        "index": i,
+                        "parameter": parameter,
+                        "value": value,
+                        "converged": sim_result.is_success,
+                        "errors": sim_result.errors,
+                    }
+                )
+
+                if sim_result.is_success:
+                    self._log("INFO", f"  -> Converged")
+                else:
+                    self._log("ERROR", f"  -> Failed: {sim_result.errors}")
+
+            passed = len([r for r in results if r["converged"]])
+
+            result_data = {
+                "parameter": parameter,
+                "total_values": len(values),
+                "converged": passed,
+                "failed": len(values) - passed,
+                "results": results,
+            }
+
+            return SkillResult(
+                skill_name=self.name,
+                status=SkillStatus.COMPLETED,
+                data=result_data,
+                logs=self.logs,
+                artifacts=self.artifacts,
+                start_time=start_time,
+                end_time=datetime.now(),
+            )
+
+        except Exception as e:
+            self._log("ERROR", f"Param scan failed: {e}")
+            return SkillResult(
+                skill_name=self.name,
+                status=SkillStatus.FAILED,
+                error=str(e),
+                logs=self.logs,
+                start_time=start_time,
+                end_time=datetime.now(),
+            )
+
+
+__all__ = ["ParamScanAnalysis"]
