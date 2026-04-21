@@ -1,4 +1,4 @@
-"""Tests for PowerSkill API layer - SimulationAPI, PowerFlowAPI, EMTAPI, ShortCircuitAPI, APIFactory."""
+"""Tests for PowerSkill API layer - SimulationAPI, PowerFlow, EMT, ShortCircuit, Engine."""
 
 import pytest
 from unittest.mock import MagicMock, patch
@@ -11,10 +11,10 @@ from cloudpss_skills_v2.powerapi import (
     ValidationResult,
 )
 from cloudpss_skills_v2.powerskill.base import SimulationAPI
-from cloudpss_skills_v2.powerskill.apis.powerflow import PowerFlowAPI
-from cloudpss_skills_v2.powerskill.apis.emt import EMTAPI
-from cloudpss_skills_v2.powerskill.apis.short_circuit import ShortCircuitAPI
-from cloudpss_skills_v2.powerskill.apis.factory import APIFactory
+from cloudpss_skills_v2.powerskill.powerflow import PowerFlow
+from cloudpss_skills_v2.powerskill.emt import EMT
+from cloudpss_skills_v2.powerskill.short_circuit import ShortCircuit
+from cloudpss_skills_v2.powerskill.engine import Engine
 
 
 class MockAdapter(EngineAdapter):
@@ -109,10 +109,10 @@ class TestSimulationAPI:
         assert api.adapter.engine_name == "mock"
 
 
-class TestPowerFlowAPI:
+class TestPowerFlow:
     def test_run_power_flow(self):
         adapter = MockAdapter()
-        api = PowerFlowAPI(adapter=adapter)
+        api = PowerFlow(adapter=adapter)
         api.connect()
         result = api.run_power_flow(model_id="IEEE39")
         assert result.status == SimulationStatus.COMPLETED
@@ -123,7 +123,7 @@ class TestPowerFlowAPI:
 
     def test_run_power_flow_passes_config(self):
         adapter = MockAdapter()
-        api = PowerFlowAPI(adapter=adapter)
+        api = PowerFlow(adapter=adapter)
         api.connect()
         result = api.run_power_flow(
             model_id="IEEE39",
@@ -145,28 +145,28 @@ class TestPowerFlowAPI:
 
     def test_get_bus_results(self):
         adapter = MockAdapter()
-        api = PowerFlowAPI(adapter=adapter)
+        api = PowerFlow(adapter=adapter)
         api.connect()
         buses = api.get_bus_results("test-job")
         assert len(buses) == 1
 
     def test_get_branch_results(self):
         adapter = MockAdapter()
-        api = PowerFlowAPI(adapter=adapter)
+        api = PowerFlow(adapter=adapter)
         api.connect()
         branches = api.get_branch_results("test-job")
         assert len(branches) == 1
 
     def test_get_summary(self):
         adapter = MockAdapter()
-        api = PowerFlowAPI(adapter=adapter)
+        api = PowerFlow(adapter=adapter)
         api.connect()
         summary = api.get_summary("test-job")
         assert summary is not None
 
     def test_get_bus_results_empty(self):
         adapter = MockAdapter()
-        api = PowerFlowAPI(adapter=adapter)
+        api = PowerFlow(adapter=adapter)
         api.connect()
         adapter._do_get_result = lambda job_id: SimulationResult(
             job_id=job_id, status=SimulationStatus.COMPLETED, data={}
@@ -175,17 +175,17 @@ class TestPowerFlowAPI:
         assert buses == []
 
 
-class TestEMTAPI:
+class TestEMT:
     def test_run_emt(self):
         adapter = MockAdapter()
-        api = EMTAPI(adapter=adapter)
+        api = EMT(adapter=adapter)
         api.connect()
         result = api.run_emt(model_id="IEEE3", duration=1.0)
         assert result.status == SimulationStatus.COMPLETED
 
     def test_run_emt_with_fault(self):
         adapter = MockAdapter()
-        api = EMTAPI(adapter=adapter)
+        api = EMT(adapter=adapter)
         api.connect()
         fault = {"start_time": 0.5, "end_time": 0.6}
         result = api.run_emt(model_id="IEEE3", fault_config=fault)
@@ -199,58 +199,58 @@ class TestEMTAPI:
 
     def test_get_waveforms_empty(self):
         adapter = MockAdapter()
-        api = EMTAPI(adapter=adapter)
+        api = EMT(adapter=adapter)
         api.connect()
         waveforms = api.get_waveforms("no-plots-job")
         assert waveforms == []
 
 
-class TestShortCircuitAPI:
+class TestShortCircuit:
     def test_run_short_circuit(self):
         adapter = MockAdapter()
-        api = ShortCircuitAPI(adapter=adapter)
+        api = ShortCircuit(adapter=adapter)
         api.connect()
         result = api.run_short_circuit(model_id="IEEE39", fault_type="three_phase")
         assert result.status == SimulationStatus.COMPLETED
 
     def test_fault_currents(self):
         adapter = MockAdapter()
-        api = ShortCircuitAPI(adapter=adapter)
+        api = ShortCircuit(adapter=adapter)
         api.connect()
         currents = api.get_fault_currents("test-job")
         assert len(currents) >= 1
 
 
-class TestAPIFactory:
+class TestEngine:
     def test_create_powerflow_api(self):
-        api = APIFactory.create_powerflow_api(engine="cloudpss")
-        assert isinstance(api, PowerFlowAPI)
+        api = Engine.create_powerflow_api(engine="cloudpss")
+        assert isinstance(api, PowerFlow)
         assert isinstance(api.adapter, EngineAdapter)
 
     def test_create_emt_api(self):
-        api = APIFactory.create_emt_api(engine="cloudpss")
-        assert isinstance(api, EMTAPI)
+        api = Engine.create_emt_api(engine="cloudpss")
+        assert isinstance(api, EMT)
         assert api.adapter.engine_name == "cloudpss_emt"
 
     def test_create_short_circuit_api(self):
-        api = APIFactory.create_short_circuit_api(engine="cloudpss")
-        assert isinstance(api, ShortCircuitAPI)
+        api = Engine.create_short_circuit_api(engine="cloudpss")
+        assert isinstance(api, ShortCircuit)
         assert api.adapter.engine_name == "cloudpss_sc"
 
     def test_create_api_generic(self):
-        api = APIFactory.create_api("powerflow", engine="cloudpss")
-        assert isinstance(api, PowerFlowAPI)
+        api = Engine.create_api("powerflow", engine="cloudpss")
+        assert isinstance(api, PowerFlow)
 
     def test_create_api_unknown_type_raises(self):
         with pytest.raises(ValueError, match="Unknown API type"):
-            APIFactory.create_api("nonexistent")
+            Engine.create_api("nonexistent")
 
     def test_each_api_gets_correct_adapter(self):
-        pf = APIFactory.create_powerflow_api(engine="cloudpss")
+        pf = Engine.create_powerflow_api(engine="cloudpss")
         assert pf.adapter.engine_name == "cloudpss"
 
-        emt = APIFactory.create_emt_api(engine="cloudpss")
+        emt = Engine.create_emt_api(engine="cloudpss")
         assert emt.adapter.engine_name == "cloudpss_emt"
 
-        sc = APIFactory.create_short_circuit_api(engine="cloudpss")
+        sc = Engine.create_short_circuit_api(engine="cloudpss")
         assert sc.adapter.engine_name == "cloudpss_sc"

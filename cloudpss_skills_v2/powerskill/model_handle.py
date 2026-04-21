@@ -93,7 +93,7 @@ class ModelHandle:
     - Clone the model (clone) — for iterative what-if scenarios
 
     Usage:
-        api = APIFactory.create_powerflow_api(engine="cloudpss")
+        api = Engine.create_powerflow_api(engine="cloudpss")
         handle = api.get_model_handle(model_rid)
 
         # Query branches for N-1 analysis

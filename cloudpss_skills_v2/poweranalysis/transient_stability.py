@@ -2,7 +2,7 @@
 from typing import Any, Dict, List, Optional
 from cloudpss_skills_v2.core import SkillResult, SkillStatus
 from cloudpss_skills_v2.powerapi import EngineConfig
-from cloudpss_skills_v2.powerskill import APIFactory
+from cloudpss_skills_v2.powerskill import Engine
 
 class TransientStabilityAnalysis:
     name = 'transient_stability'
@@ -20,7 +20,7 @@ class TransientStabilityAnalysis:
         self.engine = engine
 
     def _get_api(self):
-        return APIFactory.create_powerflow_api(self.engine)
+        return Engine.create_powerflow_api(self.engine)
 
     def validate(self, config: Optional[Dict] = None) -> tuple:
         errors = []

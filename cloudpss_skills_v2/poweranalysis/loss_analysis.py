@@ -19,8 +19,8 @@ from cloudpss_skills_v2.core.skill_result import (
     SkillStatus,
 )
 from cloudpss_skills_v2.powerskill import (
-    APIFactory,
-    PowerFlowAPI,
+    Engine,
+    PowerFlow,
     ModelHandle,
     ComponentType,
 )
@@ -181,9 +181,9 @@ class LossAnalysis:
         )
         getattr(logger, level.lower(), logger.info)(message)
 
-    def _get_api(self, config: dict[str, Any]) -> PowerFlowAPI:
+    def _get_api(self, config: dict[str, Any]) -> PowerFlow:
         engine = config.get("engine", "cloudpss")
-        return APIFactory.create_powerflow_api(engine=engine)
+        return Engine.create_powerflow_api(engine=engine)
 
     def validate(self, config: dict[str, Any]) -> tuple[bool, list[str]]:
         errors = []
@@ -349,7 +349,7 @@ class LossAnalysis:
         self,
         branches: list[dict],
         model_rid: str,
-        api: PowerFlowAPI,
+        api: PowerFlow,
     ) -> None:
         handle = api.get_model_handle(model_rid)
         transformer_comps = handle.get_components_by_type(ComponentType.TRANSFORMER)

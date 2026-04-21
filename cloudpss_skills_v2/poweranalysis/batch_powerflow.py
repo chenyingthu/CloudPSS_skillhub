@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any, Dict, List
 from cloudpss_skills_v2.core import SkillResult, SkillStatus
 from cloudpss_skills_v2.powerapi import EngineConfig
-from cloudpss_skills_v2.powerskill import APIFactory
+from cloudpss_skills_v2.powerskill import Engine
 logger = logging.getLogger(__name__)
 
 class BatchPowerFlowAnalysis:

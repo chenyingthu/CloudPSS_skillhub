@@ -56,18 +56,18 @@ class MockEMTAdapter:
         pass  # TODO: restore
 
 
-def TestShortCircuitAPI():
-    """TestShortCircuitAPI"""
+def TestShortCircuit():
+    """TestShortCircuit"""
 pass  # TODO: restore
 
 
-def TestEMTAPI():
-    """TestEMTAPI"""
+def TestEMT():
+    """TestEMT"""
 pass  # TODO: restore
 
 
-def TestAPIFactoryNewMethods():
-    """TestAPIFactoryNewMethods"""
+def TestEngineNewMethods():
+    """TestEngineNewMethods"""
 pass  # TODO: restore
 
 
@@ -75,7 +75,7 @@ pass  # TODO: restore
 # === FULL DISASSEMBLY (for manual reconstruction) ===
 #   0           0 RESUME                   0
 # 
-#   1           2 LOAD_CONST               0 ('Tests for ShortCircuitAPI and EMTAPI.')
+#   1           2 LOAD_CONST               0 ('Tests for ShortCircuit and EMT.')
 #               4 STORE_NAME               0 (__doc__)
 # 
 #   3           6 LOAD_CONST               1 (0)
@@ -112,14 +112,14 @@ pass  # TODO: restore
 #              66 POP_TOP
 # 
 #  11          68 LOAD_CONST               1 (0)
-#              70 LOAD_CONST               4 (('ShortCircuitAPI', 'EMTAPI', 'APIFactory'))
-#              72 IMPORT_NAME             14 (cloudpss_skills_v2.powerskill.apis)
-#              74 IMPORT_FROM             15 (ShortCircuitAPI)
-#              76 STORE_NAME              15 (ShortCircuitAPI)
-#              78 IMPORT_FROM             16 (EMTAPI)
-#              80 STORE_NAME              16 (EMTAPI)
-#              82 IMPORT_FROM             17 (APIFactory)
-#              84 STORE_NAME              17 (APIFactory)
+#              70 LOAD_CONST               4 (('ShortCircuit', 'EMT', 'Engine'))
+#              72 IMPORT_NAME             14 (cloudpss_skills_v2.powerskill)
+#              74 IMPORT_FROM             15 (ShortCircuit)
+#              76 STORE_NAME              15 (ShortCircuit)
+#              78 IMPORT_FROM             16 (EMT)
+#              80 STORE_NAME              16 (EMT)
+#              82 IMPORT_FROM             17 (Engine)
+#              84 STORE_NAME              17 (Engine)
 #              86 POP_TOP
 # 
 #  14          88 PUSH_NULL
@@ -142,27 +142,27 @@ pass  # TODO: restore
 # 
 #  89         132 PUSH_NULL
 #             134 LOAD_BUILD_CLASS
-#             136 LOAD_CONST               9 (<code object TestShortCircuitAPI at 0x73cd945fedb0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 89>)
+#             136 LOAD_CONST               9 (<code object TestShortCircuit at 0x73cd945fedb0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 89>)
 #             138 MAKE_FUNCTION            0
-#             140 LOAD_CONST              10 ('TestShortCircuitAPI')
+#             140 LOAD_CONST              10 ('TestShortCircuit')
 #             142 CALL                     2
-#             150 STORE_NAME              20 (TestShortCircuitAPI)
+#             150 STORE_NAME              20 (TestShortCircuit)
 # 
 # 113         152 PUSH_NULL
 #             154 LOAD_BUILD_CLASS
-#             156 LOAD_CONST              11 (<code object TestEMTAPI at 0x73cd93b065b0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 113>)
+#             156 LOAD_CONST              11 (<code object TestEMT at 0x73cd93b065b0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 113>)
 #             158 MAKE_FUNCTION            0
-#             160 LOAD_CONST              12 ('TestEMTAPI')
+#             160 LOAD_CONST              12 ('TestEMT')
 #             162 CALL                     2
-#             170 STORE_NAME              21 (TestEMTAPI)
+#             170 STORE_NAME              21 (TestEMT)
 # 
 # 148         172 PUSH_NULL
 #             174 LOAD_BUILD_CLASS
-#             176 LOAD_CONST              13 (<code object TestAPIFactoryNewMethods at 0x73cd93b064c0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 148>)
+#             176 LOAD_CONST              13 (<code object TestEngineNewMethods at 0x73cd93b064c0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 148>)
 #             178 MAKE_FUNCTION            0
-#             180 LOAD_CONST              14 ('TestAPIFactoryNewMethods')
+#             180 LOAD_CONST              14 ('TestEngineNewMethods')
 #             182 CALL                     2
-#             190 STORE_NAME              22 (TestAPIFactoryNewMethods)
+#             190 STORE_NAME              22 (TestEngineNewMethods)
 #             192 RETURN_CONST             2 (None)
 # 
 # Disassembly of <code object MockSCAdapter at 0x73cd93b39c50, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 14>:
@@ -174,7 +174,7 @@ pass  # TODO: restore
 #               8 LOAD_CONST               0 ('MockSCAdapter')
 #              10 STORE_NAME               2 (__qualname__)
 # 
-#  15          12 LOAD_CONST               1 ('Mock adapter for testing ShortCircuitAPI.')
+#  15          12 LOAD_CONST               1 ('Mock adapter for testing ShortCircuit.')
 #              14 STORE_NAME               3 (__doc__)
 # 
 #  17          16 LOAD_CLOSURE             0 (__class__)
@@ -319,7 +319,7 @@ pass  # TODO: restore
 #               8 LOAD_CONST               0 ('MockEMTAdapter')
 #              10 STORE_NAME               2 (__qualname__)
 # 
-#  52          12 LOAD_CONST               1 ('Mock adapter for testing EMTAPI.')
+#  52          12 LOAD_CONST               1 ('Mock adapter for testing EMT.')
 #              14 STORE_NAME               3 (__doc__)
 # 
 #  54          16 LOAD_CLOSURE             0 (__class__)
@@ -460,14 +460,14 @@ pass  # TODO: restore
 #              16 CALL                     1
 #              24 RETURN_VALUE
 # 
-# Disassembly of <code object TestShortCircuitAPI at 0x73cd945fedb0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 89>:
+# Disassembly of <code object TestShortCircuit at 0x73cd945fedb0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 89>:
 #  89           0 RESUME                   0
 #               2 LOAD_NAME                0 (__name__)
 #               4 STORE_NAME               1 (__module__)
-#               6 LOAD_CONST               0 ('TestShortCircuitAPI')
+#               6 LOAD_CONST               0 ('TestShortCircuit')
 #               8 STORE_NAME               2 (__qualname__)
 # 
-#  90          10 LOAD_CONST               1 ('Tests for ShortCircuitAPI.')
+#  90          10 LOAD_CONST               1 ('Tests for ShortCircuit.')
 #              12 STORE_NAME               3 (__doc__)
 # 
 #  92          14 LOAD_CONST               2 (<code object test_run_short_circuit at 0x3af94600, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 92>)
@@ -486,7 +486,7 @@ pass  # TODO: restore
 #              12 CALL                     0
 #              20 STORE_FAST               1 (adapter)
 # 
-#  94          22 LOAD_GLOBAL              3 (NULL + ShortCircuitAPI)
+#  94          22 LOAD_GLOBAL              3 (NULL + ShortCircuit)
 #              32 LOAD_FAST                1 (adapter)
 #              34 CALL                     1
 #              42 STORE_FAST               2 (api)
@@ -605,7 +605,7 @@ pass  # TODO: restore
 #              12 CALL                     0
 #              20 STORE_FAST               1 (adapter)
 # 
-# 102          22 LOAD_GLOBAL              3 (NULL + ShortCircuitAPI)
+# 102          22 LOAD_GLOBAL              3 (NULL + ShortCircuit)
 #              32 LOAD_FAST                1 (adapter)
 #              34 CALL                     1
 #              42 STORE_FAST               2 (api)
@@ -780,14 +780,14 @@ pass  # TODO: restore
 #             950 STORE_FAST              11 (@py_assert3)
 #             952 RETURN_CONST             0 (None)
 # 
-# Disassembly of <code object TestEMTAPI at 0x73cd93b065b0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 113>:
+# Disassembly of <code object TestEMT at 0x73cd93b065b0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 113>:
 # 113           0 RESUME                   0
 #               2 LOAD_NAME                0 (__name__)
 #               4 STORE_NAME               1 (__module__)
-#               6 LOAD_CONST               0 ('TestEMTAPI')
+#               6 LOAD_CONST               0 ('TestEMT')
 #               8 STORE_NAME               2 (__qualname__)
 # 
-# 114          10 LOAD_CONST               1 ('Tests for EMTAPI.')
+# 114          10 LOAD_CONST               1 ('Tests for EMT.')
 #              12 STORE_NAME               3 (__doc__)
 # 
 # 116          14 LOAD_CONST               2 (<code object test_run_emt at 0x3af9b610, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 116>)
@@ -810,7 +810,7 @@ pass  # TODO: restore
 #              12 CALL                     0
 #              20 STORE_FAST               1 (adapter)
 # 
-# 118          22 LOAD_GLOBAL              3 (NULL + EMTAPI)
+# 118          22 LOAD_GLOBAL              3 (NULL + EMT)
 #              32 LOAD_FAST                1 (adapter)
 #              34 CALL                     1
 #              42 STORE_FAST               2 (api)
@@ -929,7 +929,7 @@ pass  # TODO: restore
 #              12 CALL                     0
 #              20 STORE_FAST               1 (adapter)
 # 
-# 126          22 LOAD_GLOBAL              3 (NULL + EMTAPI)
+# 126          22 LOAD_GLOBAL              3 (NULL + EMT)
 #              32 LOAD_FAST                1 (adapter)
 #              34 CALL                     1
 #              42 STORE_FAST               2 (api)
@@ -1059,7 +1059,7 @@ pass  # TODO: restore
 #              12 CALL                     0
 #              20 STORE_FAST               1 (adapter)
 # 
-# 137          22 LOAD_GLOBAL              3 (NULL + EMTAPI)
+# 137          22 LOAD_GLOBAL              3 (NULL + EMT)
 #              32 LOAD_FAST                1 (adapter)
 #              34 CALL                     1
 #              42 STORE_FAST               2 (api)
@@ -1143,14 +1143,14 @@ pass  # TODO: restore
 #             396 STORE_FAST               6 (@py_assert3)
 #             398 RETURN_CONST             0 (None)
 # 
-# Disassembly of <code object TestAPIFactoryNewMethods at 0x73cd93b064c0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 148>:
+# Disassembly of <code object TestEngineNewMethods at 0x73cd93b064c0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 148>:
 # 148           0 RESUME                   0
 #               2 LOAD_NAME                0 (__name__)
 #               4 STORE_NAME               1 (__module__)
-#               6 LOAD_CONST               0 ('TestAPIFactoryNewMethods')
+#               6 LOAD_CONST               0 ('TestEngineNewMethods')
 #               8 STORE_NAME               2 (__qualname__)
 # 
-# 149          10 LOAD_CONST               1 ('Tests for new APIFactory methods.')
+# 149          10 LOAD_CONST               1 ('Tests for new Engine methods.')
 #              12 STORE_NAME               3 (__doc__)
 # 
 # 151          14 LOAD_CONST               2 (<code object test_create_short_circuit_api at 0x3af9a2d0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 151>)
@@ -1169,7 +1169,7 @@ pass  # TODO: restore
 # Disassembly of <code object test_create_short_circuit_api at 0x3af9a2d0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 151>:
 # 151           0 RESUME                   0
 # 
-# 152           2 LOAD_GLOBAL              1 (NULL + APIFactory)
+# 152           2 LOAD_GLOBAL              1 (NULL + Engine)
 #              12 LOAD_ATTR                2 (create_short_circuit_api)
 #              32 LOAD_CONST               1 ('cloudpss')
 #              34 KW_NAMES                 2 (('engine',))
@@ -1178,7 +1178,7 @@ pass  # TODO: restore
 # 
 # 153          46 LOAD_GLOBAL              5 (NULL + isinstance)
 #              56 LOAD_FAST                1 (api)
-#              58 LOAD_GLOBAL              6 (ShortCircuitAPI)
+#              58 LOAD_GLOBAL              6 (ShortCircuit)
 #              68 CALL                     2
 #              76 STORE_FAST               2 (@py_assert3)
 #              78 LOAD_FAST                2 (@py_assert3)
@@ -1219,7 +1219,7 @@ pass  # TODO: restore
 #             350 CALL                     1
 #             358 JUMP_FORWARD             1 (to 362)
 #         >>  360 LOAD_CONST               5 ('api')
-#         >>  362 LOAD_CONST               6 ('ShortCircuitAPI')
+#         >>  362 LOAD_CONST               6 ('ShortCircuit')
 #             364 LOAD_GLOBAL              9 (NULL + @py_builtins)
 #             374 LOAD_ATTR               10 (locals)
 #             394 CALL                     0
@@ -1227,15 +1227,15 @@ pass  # TODO: restore
 #             404 POP_JUMP_IF_TRUE        25 (to 456)
 #             406 LOAD_GLOBAL             13 (NULL + @pytest_ar)
 #             416 LOAD_ATTR               14 (_should_repr_global_name)
-#             436 LOAD_GLOBAL              6 (ShortCircuitAPI)
+#             436 LOAD_GLOBAL              6 (ShortCircuit)
 #             446 CALL                     1
 #             454 POP_JUMP_IF_FALSE       25 (to 506)
 #         >>  456 LOAD_GLOBAL             13 (NULL + @pytest_ar)
 #             466 LOAD_ATTR               16 (_saferepr)
-#             486 LOAD_GLOBAL              6 (ShortCircuitAPI)
+#             486 LOAD_GLOBAL              6 (ShortCircuit)
 #             496 CALL                     1
 #             504 JUMP_FORWARD             1 (to 508)
-#         >>  506 LOAD_CONST               6 ('ShortCircuitAPI')
+#         >>  506 LOAD_CONST               6 ('ShortCircuit')
 #         >>  508 LOAD_GLOBAL             13 (NULL + @pytest_ar)
 #             518 LOAD_ATTR               16 (_saferepr)
 #             538 LOAD_FAST                2 (@py_assert3)
@@ -1258,7 +1258,7 @@ pass  # TODO: restore
 # Disassembly of <code object test_create_emt_api at 0x3af9b9b0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 155>:
 # 155           0 RESUME                   0
 # 
-# 156           2 LOAD_GLOBAL              1 (NULL + APIFactory)
+# 156           2 LOAD_GLOBAL              1 (NULL + Engine)
 #              12 LOAD_ATTR                2 (create_emt_api)
 #              32 LOAD_CONST               1 ('cloudpss')
 #              34 KW_NAMES                 2 (('engine',))
@@ -1267,7 +1267,7 @@ pass  # TODO: restore
 # 
 # 157          46 LOAD_GLOBAL              5 (NULL + isinstance)
 #              56 LOAD_FAST                1 (api)
-#              58 LOAD_GLOBAL              6 (EMTAPI)
+#              58 LOAD_GLOBAL              6 (EMT)
 #              68 CALL                     2
 #              76 STORE_FAST               2 (@py_assert3)
 #              78 LOAD_FAST                2 (@py_assert3)
@@ -1308,7 +1308,7 @@ pass  # TODO: restore
 #             350 CALL                     1
 #             358 JUMP_FORWARD             1 (to 362)
 #         >>  360 LOAD_CONST               5 ('api')
-#         >>  362 LOAD_CONST               6 ('EMTAPI')
+#         >>  362 LOAD_CONST               6 ('EMT')
 #             364 LOAD_GLOBAL              9 (NULL + @py_builtins)
 #             374 LOAD_ATTR               10 (locals)
 #             394 CALL                     0
@@ -1316,15 +1316,15 @@ pass  # TODO: restore
 #             404 POP_JUMP_IF_TRUE        25 (to 456)
 #             406 LOAD_GLOBAL             13 (NULL + @pytest_ar)
 #             416 LOAD_ATTR               14 (_should_repr_global_name)
-#             436 LOAD_GLOBAL              6 (EMTAPI)
+#             436 LOAD_GLOBAL              6 (EMT)
 #             446 CALL                     1
 #             454 POP_JUMP_IF_FALSE       25 (to 506)
 #         >>  456 LOAD_GLOBAL             13 (NULL + @pytest_ar)
 #             466 LOAD_ATTR               16 (_saferepr)
-#             486 LOAD_GLOBAL              6 (EMTAPI)
+#             486 LOAD_GLOBAL              6 (EMT)
 #             496 CALL                     1
 #             504 JUMP_FORWARD             1 (to 508)
-#         >>  506 LOAD_CONST               6 ('EMTAPI')
+#         >>  506 LOAD_CONST               6 ('EMT')
 #         >>  508 LOAD_GLOBAL             13 (NULL + @pytest_ar)
 #             518 LOAD_ATTR               16 (_saferepr)
 #             538 LOAD_FAST                2 (@py_assert3)
@@ -1347,19 +1347,19 @@ pass  # TODO: restore
 # Disassembly of <code object test_list_engines_all_types at 0x3afa5a90, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerskill_tests/test_new_apis.py", line 159>:
 # 159           0 RESUME                   0
 # 
-# 160           2 LOAD_GLOBAL              1 (NULL + APIFactory)
+# 160           2 LOAD_GLOBAL              1 (NULL + Engine)
 #              12 LOAD_ATTR                2 (list_engines)
 #              32 LOAD_CONST               1 ('power_flow')
 #              34 CALL                     1
 #              42 STORE_FAST               1 (pf_engines)
 # 
-# 161          44 LOAD_GLOBAL              1 (NULL + APIFactory)
+# 161          44 LOAD_GLOBAL              1 (NULL + Engine)
 #              54 LOAD_ATTR                2 (list_engines)
 #              74 LOAD_CONST               2 ('short_circuit')
 #              76 CALL                     1
 #              84 STORE_FAST               2 (sc_engines)
 # 
-# 162          86 LOAD_GLOBAL              1 (NULL + APIFactory)
+# 162          86 LOAD_GLOBAL              1 (NULL + Engine)
 #              96 LOAD_ATTR                2 (list_engines)
 #             116 LOAD_CONST               3 ('emt')
 #             118 CALL                     1

@@ -22,7 +22,7 @@ from cloudpss_skills_v2.libs.data_lib.types import (
 )
 
 
-class ShortCircuitAPI(SimulationAPI):
+class ShortCircuit(SimulationAPI):
     """
     Lightweight API facade for short circuit simulations.
 
@@ -76,4 +76,4 @@ class ShortCircuitAPI(SimulationAPI):
         return self._adapter.get_result(job_id)
 
 
-__all__ = ["ShortCircuitAPI"]
+__all__ = ["ShortCircuit"]

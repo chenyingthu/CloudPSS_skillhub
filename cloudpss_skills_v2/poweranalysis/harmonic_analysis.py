@@ -3,7 +3,7 @@ import math
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 from cloudpss_skills_v2.core import SkillResult, SkillStatus, Artifact, LogEntry
-from cloudpss_skills_v2.powerskill import APIFactory
+from cloudpss_skills_v2.powerskill import Engine
 
 
 class HarmonicAnalysisAnalysis:

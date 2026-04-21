@@ -4978,7 +4978,7 @@ pass  # TODO: restore
 #               6 LOAD_CONST               0 ('TestPandapowerAdapterViaFactory')
 #               8 STORE_NAME               2 (__qualname__)
 # 
-# 233          10 LOAD_CONST               1 ('Test the adapter through the APIFactory + PowerFlowAPI pipeline.')
+# 233          10 LOAD_CONST               1 ('Test the adapter through the Engine + PowerFlow pipeline.')
 #              12 STORE_NAME               3 (__doc__)
 # 
 # 235          14 LOAD_CONST               2 (<code object test_factory_creates_pandapower_api at 0x3af12be0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/powerapi_tests/test_pandapower_adapter.py", line 235>)
@@ -4998,13 +4998,13 @@ pass  # TODO: restore
 # 235           0 RESUME                   0
 # 
 # 236           2 LOAD_CONST               1 (0)
-#               4 LOAD_CONST               2 (('APIFactory',))
-#               6 IMPORT_NAME              0 (cloudpss_skills_v2.powerskill.apis.factory)
-#               8 IMPORT_FROM              1 (APIFactory)
-#              10 STORE_FAST               1 (APIFactory)
+#               4 LOAD_CONST               2 (('Engine',))
+#               6 IMPORT_NAME              0 (cloudpss_skills_v2.powerskill.engine)
+#               8 IMPORT_FROM              1 (Engine)
+#              10 STORE_FAST               1 (Engine)
 #              12 POP_TOP
 # 
-# 238          14 LOAD_FAST                1 (APIFactory)
+# 238          14 LOAD_FAST                1 (Engine)
 #              16 LOAD_ATTR                5 (NULL|self + create_powerflow_api)
 #              36 LOAD_CONST               3 ('pandapower')
 #              38 KW_NAMES                 4 (('engine',))
@@ -5077,13 +5077,13 @@ pass  # TODO: restore
 # 241           0 RESUME                   0
 # 
 # 242           2 LOAD_CONST               1 (0)
-#               4 LOAD_CONST               2 (('APIFactory',))
-#               6 IMPORT_NAME              0 (cloudpss_skills_v2.powerskill.apis.factory)
-#               8 IMPORT_FROM              1 (APIFactory)
-#              10 STORE_FAST               1 (APIFactory)
+#               4 LOAD_CONST               2 (('Engine',))
+#               6 IMPORT_NAME              0 (cloudpss_skills_v2.powerskill.engine)
+#               8 IMPORT_FROM              1 (Engine)
+#              10 STORE_FAST               1 (Engine)
 #              12 POP_TOP
 # 
-# 244          14 LOAD_FAST                1 (APIFactory)
+# 244          14 LOAD_FAST                1 (Engine)
 #              16 LOAD_ATTR                5 (NULL|self + list_engines)
 #              36 LOAD_CONST               3 ('power_flow')
 #              38 CALL                     1
@@ -5155,13 +5155,13 @@ pass  # TODO: restore
 # 247           0 RESUME                   0
 # 
 # 248           2 LOAD_CONST               1 (0)
-#               4 LOAD_CONST               2 (('APIFactory',))
-#               6 IMPORT_NAME              0 (cloudpss_skills_v2.powerskill.apis.factory)
-#               8 IMPORT_FROM              1 (APIFactory)
-#              10 STORE_FAST               1 (APIFactory)
+#               4 LOAD_CONST               2 (('Engine',))
+#               6 IMPORT_NAME              0 (cloudpss_skills_v2.powerskill.engine)
+#               8 IMPORT_FROM              1 (Engine)
+#              10 STORE_FAST               1 (Engine)
 #              12 POP_TOP
 # 
-# 250          14 LOAD_FAST                1 (APIFactory)
+# 250          14 LOAD_FAST                1 (Engine)
 #              16 LOAD_ATTR                5 (NULL|self + create_powerflow_api)
 #              36 LOAD_CONST               3 ('pandapower')
 #              38 KW_NAMES                 4 (('engine',))

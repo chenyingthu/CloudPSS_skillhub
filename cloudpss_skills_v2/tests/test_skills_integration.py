@@ -1316,7 +1316,7 @@ pass  # TODO: restore
 # 
 #  99          14 PUSH_NULL
 #              16 LOAD_NAME                4 (patch)
-#              18 LOAD_CONST               2 ('cloudpss_skills_v2.powerskill.presets.power_flow.APIFactory')
+#              18 LOAD_CONST               2 ('cloudpss_skills_v2.powerskill.presets.power_flow.Engine')
 #              20 CALL                     1
 # 
 # 100          28 LOAD_CONST               3 (<code object test_power_flow_failure_includes_error at 0x3afa6250, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/test_skills_integration.py", line 99>)
@@ -1328,7 +1328,7 @@ pass  # TODO: restore
 # 
 # 108          42 PUSH_NULL
 #              44 LOAD_NAME                4 (patch)
-#              46 LOAD_CONST               4 ('cloudpss_skills_v2.powerskill.presets.emt_simulation.APIFactory')
+#              46 LOAD_CONST               4 ('cloudpss_skills_v2.powerskill.presets.emt_simulation.Engine')
 #              48 CALL                     1
 # 
 # 109          56 LOAD_CONST               5 (<code object test_emt_failure_includes_error at 0x3af9d7e0, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/test_skills_integration.py", line 108>)
@@ -1340,7 +1340,7 @@ pass  # TODO: restore
 # 
 # 116          70 PUSH_NULL
 #              72 LOAD_NAME                4 (patch)
-#              74 LOAD_CONST               6 ('cloudpss_skills_v2.poweranalysis.short_circuit.APIFactory')
+#              74 LOAD_CONST               6 ('cloudpss_skills_v2.poweranalysis.short_circuit.Engine')
 #              76 CALL                     1
 # 
 # 117          84 LOAD_CONST               7 (<code object test_short_circuit_failure_includes_error at 0x3afa8540, file "/home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/test_skills_integration.py", line 116>)

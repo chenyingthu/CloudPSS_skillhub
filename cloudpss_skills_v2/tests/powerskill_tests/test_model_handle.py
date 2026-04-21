@@ -335,9 +335,9 @@ class TestSimulationAPIModelHandle:
     def test_get_model_handle_via_api(self):
         adapter = StubAdapter()
         adapter.connect()
-        from cloudpss_skills_v2.powerskill.apis.powerflow import PowerFlowAPI
+        from cloudpss_skills_v2.powerskill.powerflow import PowerFlow
 
-        api = PowerFlowAPI(adapter)
+        api = PowerFlow(adapter)
 
         handle = api.get_model_handle("model/test/IEEE39")
         assert isinstance(handle, ModelHandle)
@@ -346,9 +346,9 @@ class TestSimulationAPIModelHandle:
     def test_run_power_flow_with_model_handle(self):
         adapter = StubAdapter()
         adapter.connect()
-        from cloudpss_skills_v2.powerskill.apis.powerflow import PowerFlowAPI
+        from cloudpss_skills_v2.powerskill.powerflow import PowerFlow
 
-        api = PowerFlowAPI(adapter)
+        api = PowerFlow(adapter)
 
         handle = api.get_model_handle("model/test/IEEE39")
         result = api.run_power_flow(model_handle=handle)
@@ -357,9 +357,9 @@ class TestSimulationAPIModelHandle:
     def test_run_power_flow_with_model_id(self):
         adapter = StubAdapter()
         adapter.connect()
-        from cloudpss_skills_v2.powerskill.apis.powerflow import PowerFlowAPI
+        from cloudpss_skills_v2.powerskill.powerflow import PowerFlow
 
-        api = PowerFlowAPI(adapter)
+        api = PowerFlow(adapter)
 
         result = api.run_power_flow(model_id="model/test/IEEE39")
         assert result.is_success
@@ -367,9 +367,9 @@ class TestSimulationAPIModelHandle:
     def test_run_power_flow_no_model_fails(self):
         adapter = StubAdapter()
         adapter.connect()
-        from cloudpss_skills_v2.powerskill.apis.powerflow import PowerFlowAPI
+        from cloudpss_skills_v2.powerskill.powerflow import PowerFlow
 
-        api = PowerFlowAPI(adapter)
+        api = PowerFlow(adapter)
 
         result = api.run_power_flow()
         assert result.status == SimulationStatus.FAILED
@@ -378,9 +378,9 @@ class TestSimulationAPIModelHandle:
         adapter = StubAdapter()
         adapter.connect()
         adapter.load_model("model/test/IEEE39")
-        from cloudpss_skills_v2.powerskill.apis.powerflow import PowerFlowAPI
+        from cloudpss_skills_v2.powerskill.powerflow import PowerFlow
 
-        api = PowerFlowAPI(adapter)
+        api = PowerFlow(adapter)
 
         handle = api.get_model_handle("model/test/IEEE39")
         branches = handle.get_components_by_type(ComponentType.BRANCH)
@@ -512,12 +512,12 @@ class TestCloudPSSAdapterModelManipulation:
         from cloudpss_skills_v2.powerapi.adapters.cloudpss.powerflow import (
             CloudPSSPowerFlowAdapter,
         )
-        from cloudpss_skills_v2.powerskill.apis.powerflow import PowerFlowAPI
+        from cloudpss_skills_v2.powerskill.powerflow import PowerFlow
 
         adapter = CloudPSSPowerFlowAdapter()
         adapter.connect()
 
-        api = PowerFlowAPI(adapter)
+        api = PowerFlow(adapter)
         handle = api.get_model_handle("model/holdme/IEEE39")
 
         branches = handle.get_components_by_type(ComponentType.BRANCH)

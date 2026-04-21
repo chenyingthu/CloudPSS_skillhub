@@ -119,10 +119,10 @@ pass  # TODO: restore
 #              70 POP_TOP
 # 
 #  12          72 LOAD_CONST               1 (0)
-#              74 LOAD_CONST               4 (('APIFactory',))
+#              74 LOAD_CONST               4 (('Engine',))
 #              76 IMPORT_NAME             15 (cloudpss_skills_v2.powerskill)
-#              78 IMPORT_FROM             16 (APIFactory)
-#              80 STORE_NAME              16 (APIFactory)
+#              78 IMPORT_FROM             16 (Engine)
+#              80 STORE_NAME              16 (Engine)
 #              82 POP_TOP
 # 
 #  15          84 PUSH_NULL

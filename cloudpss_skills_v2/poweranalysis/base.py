@@ -10,7 +10,7 @@ from cloudpss_skills_v2.core.skill_result import (
     SkillResult,
     SkillStatus,
 )
-from cloudpss_skills_v2.powerskill import APIFactory, ModelHandle, ComponentType
+from cloudpss_skills_v2.powerskill import Engine, ModelHandle, ComponentType
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ class AnalysisBase:
 
     def _get_api(self, config: dict[str, Any]):
         engine = config.get("engine", "cloudpss")
-        return APIFactory.create_powerflow_api(engine=engine)
+        return Engine.create_powerflow_api(engine=engine)
 
     def _get_handle(self, config: dict[str, Any], api=None):
         model_rid = config.get("model", {}).get("rid", "")

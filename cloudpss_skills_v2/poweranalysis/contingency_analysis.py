@@ -21,8 +21,8 @@ from cloudpss_skills_v2.core.skill_result import (
     SkillStatus,
 )
 from cloudpss_skills_v2.powerskill import (
-    APIFactory,
-    PowerFlowAPI,
+    Engine,
+    PowerFlow,
     ModelHandle,
     ComponentType,
 )
@@ -206,7 +206,7 @@ class ContingencyAnalysis:
 
         try:
             engine = config.get("engine", "cloudpss")
-            api = APIFactory.create_powerflow_api(engine=engine)
+            api = Engine.create_powerflow_api(engine=engine)
             self._log("INFO", f"使用引擎: {api.adapter.engine_name}")
 
             model_config = config["model"]
@@ -453,7 +453,7 @@ class ContingencyAnalysis:
         analysis_config: dict,
         voltage_limit: dict,
         thermal_limit: float,
-        api: PowerFlowAPI,
+        api: PowerFlow,
         source: str,
         auth: dict,
     ) -> dict:

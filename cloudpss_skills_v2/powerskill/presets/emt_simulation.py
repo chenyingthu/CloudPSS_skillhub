@@ -19,7 +19,7 @@ from cloudpss_skills_v2.core.skill_result import (
     SkillResult,
     SkillStatus,
 )
-from cloudpss_skills_v2.powerskill import APIFactory, EMTAPI
+from cloudpss_skills_v2.powerskill import Engine, EMT
 
 logger = logging.getLogger(__name__)
 
@@ -119,9 +119,9 @@ class EMTPreset:
         )
         getattr(logger, level.lower(), logger.info)(message)
 
-    def _get_api(self, config: dict[str, Any]) -> EMTAPI:
+    def _get_api(self, config: dict[str, Any]) -> EMT:
         engine = config.get("engine", "cloudpss")
-        return APIFactory.create_emt_api(engine=engine)
+        return Engine.create_emt_api(engine=engine)
 
     def validate(self, config: dict[str, Any]) -> tuple[bool, list[str]]:
         errors = []

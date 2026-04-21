@@ -1,7 +1,7 @@
 """N-1 Security Skill v2 - Engine-agnostic N-1 security analysis.
 
 N-1安全校核 - 逐一断开每条支路，检查系统是否仍能正常运行。
-Uses the PowerSkill PowerFlowAPI and ModelHandle for all operations.
+Uses the PowerSkill PowerFlow and ModelHandle for all operations.
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ from cloudpss_skills_v2.core.skill_result import (
     SkillStatus,
 )
 from cloudpss_skills_v2.powerskill import (
-    APIFactory,
-    PowerFlowAPI,
+    Engine,
+    PowerFlow,
     ModelHandle,
     ComponentType,
 )
@@ -159,7 +159,7 @@ class N1SecurityAnalysis:
 
         try:
             engine = config.get("engine", "cloudpss")
-            api = APIFactory.create_powerflow_api(engine=engine)
+            api = Engine.create_powerflow_api(engine=engine)
             self._log("INFO", f"使用引擎: {api.adapter.engine_name}")
 
             model_config = config["model"]

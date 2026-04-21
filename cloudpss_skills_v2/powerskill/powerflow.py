@@ -23,7 +23,7 @@ from cloudpss_skills_v2.libs.data_lib.types import (
 )
 
 
-class PowerFlowAPI(SimulationAPI):
+class PowerFlow(SimulationAPI):
     """
     Lightweight API facade for power flow simulations.
 
@@ -80,4 +80,4 @@ class PowerFlowAPI(SimulationAPI):
         return self._adapter.get_result(job_id)
 
 
-__all__ = ["PowerFlowAPI"]
+__all__ = ["PowerFlow"]

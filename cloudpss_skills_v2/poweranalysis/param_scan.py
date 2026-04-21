@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any, Dict, List
 from cloudpss_skills_v2.core import SkillResult, SkillStatus, Artifact, LogEntry
 from cloudpss_skills_v2.powerapi import EngineConfig
-from cloudpss_skills_v2.powerskill import APIFactory, PowerFlowAPI
+from cloudpss_skills_v2.powerskill import Engine, PowerFlow
 
 def _log_entry(level = None, message = None):
     return LogEntry(timestamp = datetime.now(), level = level, message = message, context = None)

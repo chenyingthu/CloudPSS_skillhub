@@ -21,7 +21,7 @@ from cloudpss_skills_v2.core.skill_result import (
     SkillResult,
     SkillStatus,
 )
-from cloudpss_skills_v2.powerskill import APIFactory, ShortCircuitAPI
+from cloudpss_skills_v2.powerskill import Engine, ShortCircuit
 
 logger = logging.getLogger(__name__)
 
@@ -180,9 +180,9 @@ class ShortCircuitAnalysis:
         )
         getattr(logger, level.lower(), logger.info)(message)
 
-    def _get_api(self, config: dict[str, Any]) -> ShortCircuitAPI:
+    def _get_api(self, config: dict[str, Any]) -> ShortCircuit:
         engine = config.get("engine", "cloudpss")
-        return APIFactory.create_short_circuit_api(engine=engine)
+        return Engine.create_short_circuit_api(engine=engine)
 
     def validate(self, config: dict[str, Any]) -> tuple[bool, list[str]]:
         errors = []
@@ -364,7 +364,7 @@ class ShortCircuitAnalysis:
         to extract detailed peak/steady-state/DC component data from the raw
         waveform. Currently requires CloudPSS SDK for waveform access.
 
-        TODO: Extend ModelHandle/ShortCircuitAPI to support waveform data
+        TODO: Extend ModelHandle/ShortCircuit to support waveform data
         extraction so skills don't need direct SDK access.
         """
         analysis: dict[str, Any] = {}

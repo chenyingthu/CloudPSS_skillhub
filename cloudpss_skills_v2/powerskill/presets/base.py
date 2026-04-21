@@ -10,7 +10,7 @@ from cloudpss_skills_v2.core.skill_result import (
     SkillResult,
     SkillStatus,
 )
-from cloudpss_skills_v2.powerskill import APIFactory
+from cloudpss_skills_v2.powerskill import Engine
 
 logger = logging.getLogger(__name__)
 

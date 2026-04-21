@@ -20,7 +20,7 @@ from cloudpss_skills_v2.poweranalysis.voltage_stability import VoltageStabilityA
 
 
 def _make_mock_api(sim_data=None):
-    """Create a mock PowerFlowAPI/ShortCircuitAPI that returns given data."""
+    """Create a mock PowerFlow/ShortCircuit that returns given data."""
     mock_api = MagicMock()
     mock_adapter = MagicMock()
     mock_adapter.engine_name = "mock_engine"
@@ -109,7 +109,7 @@ class TestShortCircuitAnalysis:
         )
 
         with patch(
-            "cloudpss_skills_v2.poweranalysis.short_circuit.APIFactory"
+            "cloudpss_skills_v2.poweranalysis.short_circuit.Engine"
         ) as mock_factory:
             mock_factory.create_short_circuit_api.return_value = mock_api
             result = skill.run(
@@ -434,7 +434,7 @@ class TestVoltageStabilityAnalysis:
         mock_api.get_model_handle.return_value = mock_handle
 
         with patch(
-            "cloudpss_skills_v2.poweranalysis.voltage_stability.APIFactory"
+            "cloudpss_skills_v2.poweranalysis.voltage_stability.Engine"
         ) as mock_factory:
             mock_factory.create_powerflow_api.return_value = mock_api
             result = skill.run(

@@ -17,7 +17,7 @@ from cloudpss_skills_v2.powerskill.base import SimulationAPI
 from cloudpss_skills_v2.libs.data_lib.types import BusData, BranchData
 
 
-class EMTAPI(SimulationAPI):
+class EMT(SimulationAPI):
     """
     Lightweight API facade for electromagnetic transient simulations.
 
@@ -98,4 +98,4 @@ class EMTAPI(SimulationAPI):
         return self._adapter.get_result(job_id)
 
 
-__all__ = ["EMTAPI"]
+__all__ = ["EMT"]

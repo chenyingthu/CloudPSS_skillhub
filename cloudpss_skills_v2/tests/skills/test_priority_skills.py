@@ -61,7 +61,7 @@ class TestPowerFlowPreset:
         assert result.status == SkillStatus.FAILED
         assert result.error is not None
 
-    @patch("cloudpss_skills_v2.powerskill.presets.power_flow.APIFactory")
+    @patch("cloudpss_skills_v2.powerskill.presets.power_flow.Engine")
     def test_run_success(self, mock_factory_cls):
         mock_api = MagicMock()
         mock_api.adapter.engine_name = "cloudpss"
@@ -92,7 +92,7 @@ class TestPowerFlowPreset:
             assert result.data["branch_count"] == 1
             assert len(result.artifacts) >= 1
 
-    @patch("cloudpss_skills_v2.powerskill.presets.power_flow.APIFactory")
+    @patch("cloudpss_skills_v2.powerskill.presets.power_flow.Engine")
     def test_run_simulation_failure(self, mock_factory_cls):
         mock_api = MagicMock()
         mock_api.adapter.engine_name = "cloudpss"
@@ -111,7 +111,7 @@ class TestPowerFlowPreset:
         )
         assert result.status == SkillStatus.FAILED
 
-    @patch("cloudpss_skills_v2.powerskill.presets.power_flow.APIFactory")
+    @patch("cloudpss_skills_v2.powerskill.presets.power_flow.Engine")
     def test_run_empty_result(self, mock_factory_cls):
         mock_api = MagicMock()
         mock_api.adapter.engine_name = "cloudpss"
@@ -163,7 +163,7 @@ class TestEMTPreset:
         )
         assert valid
 
-    @patch("cloudpss_skills_v2.powerskill.presets.emt_simulation.APIFactory")
+    @patch("cloudpss_skills_v2.powerskill.presets.emt_simulation.Engine")
     def test_run_success(self, mock_factory_cls):
         mock_api = MagicMock()
         mock_api.adapter.engine_name = "cloudpss_emt"

@@ -10,9 +10,9 @@ from typing import Optional
 
 from cloudpss_skills_v2.powerapi import EngineAdapter, EngineConfig
 from cloudpss_skills_v2.powerskill.base import SimulationAPI
-from cloudpss_skills_v2.powerskill.apis.powerflow import PowerFlowAPI
-from cloudpss_skills_v2.powerskill.apis.short_circuit import ShortCircuitAPI
-from cloudpss_skills_v2.powerskill.apis.emt import EMTAPI
+from cloudpss_skills_v2.powerskill.powerflow import PowerFlow
+from cloudpss_skills_v2.powerskill.short_circuit import ShortCircuit
+from cloudpss_skills_v2.powerskill.emt import EMT
 
 
 def _create_adapter(
@@ -46,35 +46,35 @@ def _create_adapter(
 
 
 _API_MAP = {
-    "powerflow": PowerFlowAPI,
-    "short_circuit": ShortCircuitAPI,
-    "emt": EMTAPI,
+    "powerflow": PowerFlow,
+    "short_circuit": ShortCircuit,
+    "emt": EMT,
 }
 
 
-class APIFactory:
+class Engine:
     """Factory for creating engine-agnostic API instances backed by adapters."""
 
     @classmethod
     def create_powerflow_api(
         cls, engine: str = "cloudpss", config: EngineConfig | None = None
-    ) -> PowerFlowAPI:
+    ) -> PowerFlow:
         adapter = _create_adapter(engine, "power_flow", config)
-        return PowerFlowAPI(adapter=adapter)
+        return PowerFlow(adapter=adapter)
 
     @classmethod
     def create_short_circuit_api(
         cls, engine: str = "cloudpss", config: EngineConfig | None = None
-    ) -> ShortCircuitAPI:
+    ) -> ShortCircuit:
         adapter = _create_adapter(engine, "short_circuit", config)
-        return ShortCircuitAPI(adapter=adapter)
+        return ShortCircuit(adapter=adapter)
 
     @classmethod
     def create_emt_api(
         cls, engine: str = "cloudpss", config: EngineConfig | None = None
-    ) -> EMTAPI:
+    ) -> EMT:
         adapter = _create_adapter(engine, "emt", config)
-        return EMTAPI(adapter=adapter)
+        return EMT(adapter=adapter)
 
     @classmethod
     def create_api(
@@ -89,4 +89,4 @@ class APIFactory:
         return api_cls(adapter=adapter)
 
 
-__all__ = ["APIFactory"]
+__all__ = ["Engine"]
