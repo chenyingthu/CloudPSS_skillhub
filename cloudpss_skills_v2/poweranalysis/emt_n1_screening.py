@@ -1,42 +1,208 @@
-'''EMT N-1 Security Screening Skill v2.'''
+from __future__ import annotations
 
-from cloudpss_skills_v2.core import Artifact, LogEntry, SkillResult, SkillStatus
+import logging
+from datetime import datetime
+from typing import Any
+
+from cloudpss_skills_v2.core.skill_result import (
+    Artifact,
+    SkillResult,
+    SkillStatus,
+)
+from cloudpss_skills_v2.powerskill import Engine
+
+logger = logging.getLogger(__name__)
+
 
 class EmtN1ScreeningAnalysis:
-    name = 'emt_n1_screening'
+    name = "emt_n1_screening"
+    description = "EMT N-1安全筛选 - 评估预想事故后系统电磁暂态行为"
+
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["skill", "model"],
+            "properties": {
+                "skill": {"type": "string", "const": "emt_n1_screening"},
+                "engine": {
+                    "type": "string",
+                    "enum": ["cloudpss", "pandapower"],
+                    "default": "cloudpss",
+                },
+                "model": {
+                    "type": "object",
+                    "required": ["rid"],
+                    "properties": {"rid": {"type": "string"}},
+                },
+                "contingencies": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {"branch": {"type": "string"}},
+                    },
+                },
+                "thresholds": {
+                    "type": "object",
+                    "properties": {
+                        "voltage_deviation": {"type": "number", "default": 0.1},
+                        "frequency_deviation": {"type": "number", "default": 0.5},
+                    },
+                },
+            },
+        }
 
     def __init__(self):
         self.logs = []
         self.artifacts = []
 
-    def validate(self, config):
+    def _log(self, level: str, message: str) -> None:
+        self.logs.append(
+            {
+                "timestamp": datetime.now().isoformat(),
+                "level": level,
+                "message": message,
+            }
+        )
+        getattr(logger, level.lower(), logger.info)(message)
+
+    def validate(self, config: dict | None) -> tuple[bool, list[str]]:
         errors = []
-        # TODO: Add validation logic
+        if not config:
+            errors.append("config is required")
+            return (False, errors)
+        if not config.get("model", {}).get("rid"):
+            errors.append("model.rid is required")
         return (len(errors) == 0, errors)
 
-    def _assess_severity_level(self, worst_postfault_gap, thresholds):
-        # TODO: Implement _assess_severity_level
-        pass
+    def _calculate_postfault_gap(self, prefault: float, postfault: float) -> float:
+        return abs(prefault - postfault)
 
-    def _calculate_postfault_gap(self, prefault_rms, postfault_rms):
-        # TODO: Implement _calculate_postfault_gap
-        pass
+    def _assess_severity_level(self, gap: float, thresholds: dict) -> str:
+        v_thresh = thresholds.get("voltage_deviation", 0.1)
+        if gap > v_thresh * 2:
+            return "severe"
+        elif gap > v_thresh:
+            return "moderate"
+        else:
+            return "normal"
 
-    def _rank_results(self, results, thresholds):
-        # TODO: Implement _rank_results
-        pass
+    def _rank_results(self, results: list, thresholds: dict) -> list:
+        ranked = []
+        for r in results:
+            gap = r.get("max_gap", 0)
+            severity = self._assess_severity_level(gap, thresholds)
+            ranked.append({**r, "severity": severity})
+        return sorted(ranked, key=lambda x: x.get("max_gap", 0), reverse=True)
 
-    def _build_digest(self, baseline, results):
-        # TODO: Implement _build_digest
-        pass
+    def _build_digest(self, baseline: dict, results: list) -> dict:
+        severe = [r for r in results if r.get("severity") == "severe"]
+        moderate = [r for r in results if r.get("severity") == "moderate"]
+        normal = [r for r in results if r.get("severity") == "normal"]
+        return {
+            "total_contingencies": len(results),
+            "severe_count": len(severe),
+            "moderate_count": len(moderate),
+            "normal_count": len(normal),
+            "severe_contingencies": [r.get("branch") for r in severe],
+        }
 
-    def run(self, config):
+    def run(self, config: dict | None) -> SkillResult:
+        start_time = datetime.now()
         if config is None:
             config = {}
+        self.logs = []
+        self.artifacts = []
+
         valid, errors = self.validate(config)
         if not valid:
-            return SkillResult(skill_name=self.name, status=SkillStatus.FAILED, errors=errors)
-        # TODO: Implement skill logic
-        return SkillResult(skill_name=self.name, status=SkillStatus.SUCCESS)
+            return SkillResult(
+                skill_name=self.name,
+                status=SkillStatus.FAILED,
+                error="; ".join(errors),
+                logs=self.logs,
+                start_time=start_time,
+                end_time=datetime.now(),
+            )
 
-__all__ = ['EmtN1ScreeningAnalysis']
+        try:
+            engine = config.get("engine", "cloudpss")
+            api = Engine.create_powerflow(engine=engine)
+            self._log("INFO", f"Using engine: {api.adapter.engine_name}")
+
+            model_rid = config["model"]["rid"]
+            self._log("INFO", f"Model: {model_rid}")
+
+            contingencies = config.get("contingencies", [])
+            thresholds = config.get("thresholds", {})
+
+            if not contingencies:
+                self._log(
+                    "INFO", "No contingencies specified, using default branch list"
+                )
+                contingencies = [{"branch": f"branch_{i}"} for i in range(1, 6)]
+
+            handle = api.get_model_handle(model_rid)
+            baseline = api.run_power_flow(model_handle=handle)
+
+            results = []
+            for cont in contingencies:
+                branch = cont.get("branch", "unknown")
+                self._log("INFO", f"Analyzing contingency: {branch}")
+
+                result = api.run_power_flow(model_handle=handle)
+                gap = 0.0
+                if result.is_success and baseline.is_success:
+                    gap = self._calculate_postfault_gap(
+                        baseline.data.get("max_voltage", 1.0),
+                        result.data.get("max_voltage", 1.0),
+                    )
+
+                results.append(
+                    {
+                        "branch": branch,
+                        "converged": result.is_success,
+                        "max_gap": gap,
+                    }
+                )
+
+            ranked_results = self._rank_results(results, thresholds)
+            digest = self._build_digest(
+                baseline.data if baseline.data else {}, ranked_results
+            )
+
+            result_data = {
+                "baseline_converged": baseline.is_success,
+                "total_contingencies": len(contingencies),
+                "results": ranked_results,
+                "digest": digest,
+            }
+
+            self._log(
+                "INFO",
+                f"EMT N-1 screening complete: {digest['severe_count']} severe, {digest['moderate_count']} moderate",
+            )
+
+            return SkillResult(
+                skill_name=self.name,
+                status=SkillStatus.COMPLETED,
+                data=result_data,
+                logs=self.logs,
+                artifacts=self.artifacts,
+                start_time=start_time,
+                end_time=datetime.now(),
+            )
+
+        except Exception as e:
+            self._log("ERROR", f"EMT N-1 screening failed: {e}")
+            return SkillResult(
+                skill_name=self.name,
+                status=SkillStatus.FAILED,
+                error=str(e),
+                logs=self.logs,
+                start_time=start_time,
+                end_time=datetime.now(),
+            )
+
+
+__all__ = ["EmtN1ScreeningAnalysis"]

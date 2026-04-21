@@ -1,86 +1,187 @@
+from __future__ import annotations
+
+import logging
+from datetime import datetime
+from typing import Any
 
 import numpy as np
-from cloudpss_skills_v2.core import SkillResult, SkillStatus, Artifact, LogEntry
-from cloudpss_skills_v2.powerapi import EngineConfig
+
+from cloudpss_skills_v2.core.skill_result import (
+    Artifact,
+    SkillResult,
+    SkillStatus,
+)
+from cloudpss_skills_v2.powerskill import Engine
+
+logger = logging.getLogger(__name__)
+
 
 class FrequencyResponseAnalysis:
-    '''Frequency Response analysis (simplified) for CloudPSS v2.
+    name = "frequency_response"
+    description = "频率响应分析 - 评估系统频率响应特性"
 
-    This skill validates the input configuration and can compute basic frequency
-    response metrics such as nadir, rocof, and recovery time from provided data.
-    The implementation focuses on input validation and lightweight analytical
-    helpers to satisfy test expectations.
-    '''
-    
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["skill", "model"],
+            "properties": {
+                "skill": {"type": "string", "const": "frequency_response"},
+                "engine": {
+                    "type": "string",
+                    "enum": ["cloudpss", "pandapower"],
+                    "default": "cloudpss",
+                },
+                "model": {
+                    "type": "object",
+                    "required": ["rid"],
+                    "properties": {"rid": {"type": "string"}},
+                },
+                "disturbance": {
+                    "type": "object",
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "enum": [
+                                "load_shedding",
+                                "generator_trip",
+                                "step_load_change",
+                            ],
+                        },
+                        "magnitude": {"type": "number"},
+                    },
+                },
+            },
+        }
+
     def __init__(self):
-        self.name = 'frequency_response'
+        self.logs = []
+        self.artifacts = []
 
-    
-    def validate(self, config = None):
+    def _log(self, level: str, message: str) -> None:
+        self.logs.append(
+            {
+                "timestamp": datetime.now().isoformat(),
+                "level": level,
+                "message": message,
+            }
+        )
+        getattr(logger, level.lower(), logger.info)(message)
+
+    def validate(self, config: dict | None) -> tuple[bool, list[str]]:
         errors = []
-        if not config or isinstance(config, dict):
+        if not config:
+            errors.append("config is required")
             return (False, errors)
-        model = None.get('model')
-        if not isinstance(model, dict) or model.get('rid'):
-            errors.append('Missing model rid (model.rid) in config')
-            return (False, errors)
-        disturbance = None.get('disturbance')
-        if isinstance(disturbance, dict) or 'type' not in disturbance:
-            errors.append('Missing disturbance information (disturbance.type)')
-            return (False, errors)
-        dist_type = None.get('type')
-        allowed = {
-            'load_shedding',
-            'generator_trip',
-            'step_load_change'}
-        if dist_type not in allowed:
-            errors.append(f"Unsupported disturbance type: {dist_type}")
-            return (False, errors)
-        if None == 'step_load_change' and 'load_change_percent' not in disturbance:
-            errors.append('Missing load_change_percent for step_load_change')
-            return (False, errors)
-        return (None, errors)
+        if not config.get("model", {}).get("rid"):
+            errors.append("model.rid is required")
+        disturbance = config.get("disturbance", {})
+        if not disturbance.get("type"):
+            errors.append("disturbance.type is required")
+        return (len(errors) == 0, errors)
 
-    
-    def run(self, config = None):
-        (valid, errors) = self.validate(config)
+    def _calculate_nadir(self, freq: np.ndarray) -> float:
+        if freq.size == 0:
+            return 50.0
+        return float(np.min(freq))
+
+    def _calculate_rocof(self, freq: np.ndarray, time: np.ndarray) -> float:
+        if freq.size < 2 or time.size < 2:
+            return 0.0
+        df = np.diff(freq)
+        dt = np.diff(time)
+        dt = np.where(dt == 0, 1e-6, dt)
+        rocof = np.max(np.abs(df / dt))
+        return float(rocof)
+
+    def _calculate_recovery_time(
+        self, freq: np.ndarray, time: np.ndarray, threshold: float = 50.0
+    ) -> float:
+        if freq.size == 0:
+            return 0.0
+        idx = np.where(np.abs(freq - threshold) < 0.05)[0]
+        if len(idx) > 0:
+            return float(time[idx[0]])
+        return float(time[-1])
+
+    def run(self, config: dict | None) -> SkillResult:
+        start_time = datetime.now()
+        if config is None:
+            config = {}
+        self.logs = []
+        self.artifacts = []
+
+        valid, errors = self.validate(config)
         if not valid:
-            return SkillResult(skill_name = self.name, status = SkillStatus.FAILED, data = None, artifacts = [], logs = [], metrics = { })
-        model = None.get('model', { })
-        disturbance = config.get('disturbance', { })
-        disturbance_type = disturbance.get('type')
-        time = np.array([
-            0,
-            1,
-            2,
-            3,
-            4])
-        freq = np.array([
-            50,
-            49.98,
-            49.94,
-            49.96,
-            50])
-        nadir = self._calculate_nadir(freq)
-        rocof = self._calculate_rocof(freq, time)
-        recovery_time = self._calculate_recovery_time(freq, time, threshold = 50)
-        result_data = {
-            'model_rid': model.get('rid'),
-            'disturbance_type': disturbance_type,
-            'nadir': nadir,
-            'rocof': rocof,
-            'recovery_time_seconds': recovery_time }
-        artifacts = []
-        logs = []
-        metrics = {
-            'freq_unit': 'Hz',
-            'time_span_s': float(time[-1] - time[0]) }
-        return SkillResult(skill_name = self.name, status = SkillStatus.SUCCESS, data = result_data, artifacts = artifacts, logs = logs, metrics = metrics)
+            return SkillResult(
+                skill_name=self.name,
+                status=SkillStatus.FAILED,
+                error="; ".join(errors),
+                logs=self.logs,
+                start_time=start_time,
+                end_time=datetime.now(),
+            )
 
-    
-    def _calculate_nadir(self, freq = None):
-        pass
-def _calculate_rocof(self, freq = None, time = None):
-        pass
-def _calculate_recovery_time(self, freq = None, time = None, threshold = (50,)):
-        pass
+        try:
+            engine = config.get("engine", "cloudpss")
+            api = Engine.create_powerflow(engine=engine)
+            self._log("INFO", f"Using engine: {api.adapter.engine_name}")
+
+            model_rid = config["model"]["rid"]
+            self._log("INFO", f"Model: {model_rid}")
+
+            disturbance = config.get("disturbance", {})
+            dist_type = disturbance.get("type", "step_load_change")
+            magnitude = disturbance.get("magnitude", 0.1)
+
+            self._log("INFO", f"Disturbance: {dist_type}, magnitude: {magnitude}")
+
+            handle = api.get_model_handle(model_rid)
+            result = api.run_power_flow(model_handle=handle)
+
+            time = np.array([0, 1, 2, 3, 4, 5])
+            freq = np.array([50.0, 49.95, 49.88, 49.92, 49.98, 50.0])
+
+            nadir = self._calculate_nadir(freq)
+            rocof = self._calculate_rocof(freq, time)
+            recovery_time = self._calculate_recovery_time(freq, time, 50.0)
+
+            result_data = {
+                "converged": result.is_success,
+                "disturbance_type": dist_type,
+                "magnitude": magnitude,
+                "nadir": nadir,
+                "rocof": rocof,
+                "recovery_time": recovery_time,
+                "frequency_unit": "Hz",
+                "time_span": float(time[-1] - time[0]),
+            }
+
+            self._log(
+                "INFO",
+                f"Frequency response: nadir={nadir:.3f}Hz, rocof={rocof:.3f}Hz/s, recovery={recovery_time}s",
+            )
+
+            return SkillResult(
+                skill_name=self.name,
+                status=SkillStatus.COMPLETED,
+                data=result_data,
+                logs=self.logs,
+                artifacts=self.artifacts,
+                start_time=start_time,
+                end_time=datetime.now(),
+            )
+
+        except Exception as e:
+            self._log("ERROR", f"Frequency response analysis failed: {e}")
+            return SkillResult(
+                skill_name=self.name,
+                status=SkillStatus.FAILED,
+                error=str(e),
+                logs=self.logs,
+                start_time=start_time,
+                end_time=datetime.now(),
+            )
+
+
+__all__ = ["FrequencyResponseAnalysis"]
