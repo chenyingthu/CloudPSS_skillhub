@@ -18,7 +18,12 @@ from cloudpss_skills_v2.core.skill_result import (
     SkillResult,
     SkillStatus,
 )
-from cloudpss_skills_v2.powerskill import APIFactory, PowerFlowAPI
+from cloudpss_skills_v2.powerskill import (
+    APIFactory,
+    PowerFlowAPI,
+    ModelHandle,
+    ComponentType,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -242,9 +247,7 @@ class LossAnalysisSkill:
 
                 if "transformers" in components:
                     self._log("INFO", "计算变压器损耗...")
-                    self._calculate_transformer_losses(
-                        branches, model_rid, source, auth
-                    )
+                    self._calculate_transformer_losses(branches, model_rid, api)
 
             sensitivity_results = {}
             if analysis_config.get("loss_sensitivity", {}).get("enabled", True):
@@ -340,113 +343,57 @@ class LossAnalysisSkill:
                 )
             )
 
-        self._log(
-            "INFO",
-            f"从潮流结果提取了 {len(self.branch_losses)} 条线路的损耗",
-        )
+        self._log("INFO", f"从潮流结果提取了 {len(self.branch_losses)} 条线路的损耗")
 
     def _calculate_transformer_losses(
         self,
         branches: list[dict],
         model_rid: str,
-        source: str,
-        auth: dict,
+        api: PowerFlowAPI,
     ) -> None:
-        transformer_rids = [
-            "model/CloudPSS/_newTransformer_3p2w",
-            "model/CloudPSS/_newTransformer_3p",
-        ]
-        transformer_keys = set()
+        handle = api.get_model_handle(model_rid)
+        transformer_comps = handle.get_components_by_type(ComponentType.TRANSFORMER)
+        transformer_keys = {c.key for c in transformer_comps}
 
-        try:
-            from cloudpss import Model
-            from cloudpss_skills_v2.powerapi.adapters.cloudpss._component_utils import (
-                get_components_by_definition,
+        for branch in branches:
+            branch_id = branch.get("key", branch.get("name", ""))
+            definition = str(branch.get("definition", "")).lower()
+
+            is_transformer = (
+                branch_id in transformer_keys or "transformer" in definition
+            )
+            if not is_transformer:
+                continue
+
+            p_loss = _as_float(
+                branch.get("power_loss_mw")
+                or branch.get("Ploss")
+                or branch.get("P_loss")
+            )
+            q_loss = _as_float(
+                branch.get("reactive_loss_mvar")
+                or branch.get("Qloss")
+                or branch.get("Q_loss")
+            )
+            label = branch.get("name", branch_id)
+            from_bus = branch.get("from_bus", branch.get("From bus", ""))
+            to_bus = branch.get("to_bus", branch.get("To bus", ""))
+
+            self.transformer_losses.append(
+                TransformerLoss(
+                    transformer_id=label,
+                    hv_bus=str(from_bus),
+                    lv_bus=str(to_bus),
+                    core_loss_mw=None,
+                    copper_loss_mw=None,
+                    total_loss_mw=abs(p_loss),
+                    reactive_loss_mvar=abs(q_loss),
+                    breakdown_verified=False,
+                )
             )
 
-            kwargs = {}
-            base_url = auth.get("base_url") or auth.get("baseUrl")
-            if base_url:
-                kwargs["baseUrl"] = base_url
-
-            if source == "local":
-                model = Model.load(model_rid)
-            else:
-                model = Model.fetch(model_rid, **kwargs)
-
-            for trid in transformer_rids:
-                try:
-                    comps = get_components_by_definition(model, trid)
-                    for comp in comps:
-                        comp_id = getattr(comp, "id", "")
-                        if comp_id:
-                            transformer_keys.add(comp_id)
-                except Exception:
-                    pass
-
-            for branch in branches:
-                branch_id = branch.get("key", branch.get("name", ""))
-                if not branch_id:
-                    continue
-
-                if branch_id not in transformer_keys:
-                    definition = str(branch.get("definition", "")).lower()
-                    if "transformer" not in definition:
-                        continue
-
-                p_loss = _as_float(
-                    branch.get("power_loss_mw")
-                    or branch.get("Ploss")
-                    or branch.get("P_loss")
-                )
-                q_loss = _as_float(
-                    branch.get("reactive_loss_mvar")
-                    or branch.get("Qloss")
-                    or branch.get("Q_loss")
-                )
-                label = branch.get("name", branch_id)
-                from_bus = branch.get("from_bus", branch.get("From bus", ""))
-                to_bus = branch.get("to_bus", branch.get("To bus", ""))
-
-                self.transformer_losses.append(
-                    TransformerLoss(
-                        transformer_id=label,
-                        hv_bus=str(from_bus),
-                        lv_bus=str(to_bus),
-                        core_loss_mw=None,
-                        copper_loss_mw=None,
-                        total_loss_mw=abs(p_loss),
-                        reactive_loss_mvar=abs(q_loss),
-                        breakdown_verified=False,
-                    )
-                )
-
-        except Exception as e:
-            self._log("WARNING", f"变压器损耗计算回退到简化模式: {e}")
-            for branch in branches:
-                definition = str(branch.get("definition", "")).lower()
-                if "transformer" not in definition:
-                    continue
-                p_loss = _as_float(branch.get("power_loss_mw") or branch.get("Ploss"))
-                q_loss = _as_float(
-                    branch.get("reactive_loss_mvar") or branch.get("Qloss")
-                )
-                label = branch.get("name", "Unknown")
-                self.transformer_losses.append(
-                    TransformerLoss(
-                        transformer_id=label,
-                        hv_bus="",
-                        lv_bus="",
-                        core_loss_mw=None,
-                        copper_loss_mw=None,
-                        total_loss_mw=abs(p_loss),
-                        reactive_loss_mvar=abs(q_loss),
-                    )
-                )
-
         self._log(
-            "INFO",
-            f"从潮流结果提取了 {len(self.transformer_losses)} 台变压器的损耗",
+            "INFO", f"从潮流结果提取了 {len(self.transformer_losses)} 台变压器的损耗"
         )
 
     def _calculate_loss_sensitivity(

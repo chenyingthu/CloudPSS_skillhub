@@ -1,10 +1,14 @@
 """Tests for cloudpss_skills_v2.libs.algo_lib."""
+
 import pytest
-from cloudpss_skills_v2.libs.algo_lib import NewtonRaphsonSolver, FastDecoupledSolver, IEC60909Calculator
+from cloudpss_skills_v2.libs.algo_lib import (
+    NewtonRaphsonSolver,
+    FastDecoupledSolver,
+    IEC60909Calculator,
+)
 
 
 class TestNewtonRaphsonSolver:
-
     def test_import(self):
         """Smoke test: module and class can be imported."""
         assert NewtonRaphsonSolver is not None
@@ -20,6 +24,6 @@ class TestNewtonRaphsonSolver:
         """Smoke test: instance has expected attributes."""
         try:
             instance = NewtonRaphsonSolver()
-            assert hasattr(instance, 'name') or hasattr(instance, 'run')
+            assert hasattr(instance, "name") or hasattr(instance, "solve")
         except TypeError:
             pytest.skip("Class requires constructor arguments")

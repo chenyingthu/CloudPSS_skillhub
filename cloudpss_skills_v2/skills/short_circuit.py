@@ -25,9 +25,6 @@ from cloudpss_skills_v2.powerskill import APIFactory, ShortCircuitAPI
 
 logger = logging.getLogger(__name__)
 
-FAULT_DEFINITION_3P = "model/CloudPSS/_newFaultResistor_3p"
-FAULT_DEFINITION_1P = "model/CloudPSS/_newFaultResistor_1p"
-
 
 def _as_float(value, default=0.0) -> float:
     try:
@@ -77,7 +74,6 @@ class ShortCircuitSkill:
                     "properties": {
                         "location": {
                             "type": "string",
-                            "description": "短路位置母线ID",
                         },
                         "type": {
                             "enum": [
@@ -86,22 +82,18 @@ class ShortCircuitSkill:
                                 "line_to_line",
                             ],
                             "default": "three_phase",
-                            "description": "短路类型",
                         },
                         "resistance": {
                             "type": "number",
                             "default": 0.0001,
-                            "description": "短路电阻(Ω)",
                         },
                         "fs": {
                             "type": "number",
                             "default": 2.0,
-                            "description": "故障开始时间(s)",
                         },
                         "fe": {
                             "type": "number",
                             "default": 2.1,
-                            "description": "故障结束时间(s)",
                         },
                     },
                 },
@@ -111,12 +103,10 @@ class ShortCircuitSkill:
                         "current_channels": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "监测电流的通道",
                         },
                         "voltage_channels": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "监测电压的通道",
                         },
                     },
                 },
@@ -126,18 +116,15 @@ class ShortCircuitSkill:
                         "base_voltage": {
                             "type": "number",
                             "default": 500,
-                            "description": "基准电压(kV)",
                         },
                         "base_capacity": {
                             "type": "number",
                             "default": 100,
-                            "description": "基准容量(MVA)",
                         },
                         "sample_window": {
                             "type": "array",
                             "items": {"type": "number"},
                             "default": [2.0, 2.05],
-                            "description": "采样时间窗口[s]",
                         },
                     },
                 },
@@ -303,10 +290,7 @@ class ShortCircuitSkill:
 
             self._save_output(result_data, output_config)
 
-            self._log(
-                "INFO",
-                f"短路计算完成: {len(analysis)} 个通道分析",
-            )
+            self._log("INFO", f"短路计算完成: {len(analysis)} 个通道分析")
 
             has_currents = any(
                 "peak_current" in v or "current_ka" in v for v in analysis.values()
@@ -346,7 +330,6 @@ class ShortCircuitSkill:
             )
 
     def _build_analysis_from_adapter_data(self, result_data: dict) -> dict:
-        """Build analysis dict from adapter-extracted data (fault_currents, bus_voltages)."""
         analysis = {}
 
         for fc in result_data.get("fault_currents", []):
@@ -377,23 +360,23 @@ class ShortCircuitSkill:
     ) -> dict:
         """Analyze short circuit from raw EMT result waveform data.
 
-        This is used when specific monitoring channels are configured,
-        allowing detailed peak/steady-state/DC component extraction.
+        When specific monitoring channels are configured, this method attempts
+        to extract detailed peak/steady-state/DC component data from the raw
+        waveform. Currently requires CloudPSS SDK for waveform access.
+
+        TODO: Extend ModelHandle/ShortCircuitAPI to support waveform data
+        extraction so skills don't need direct SDK access.
         """
         analysis: dict[str, Any] = {}
 
-        # Try to access the raw CloudPSS job result for waveform extraction
+        raw_result = sim_result.data.get("_raw_result")
+        if raw_result is None:
+            return self._build_analysis_from_adapter_data(sim_result.data)
+
         try:
-            from cloudpss import Model
-
-            raw_result = sim_result.data.get("_raw_result")
-            if raw_result is None:
-                return self._build_analysis_from_adapter_data(sim_result.data)
-
             for plot_idx in range(len(raw_result.getPlots())):
                 channel_names = raw_result.getPlotChannelNames(plot_idx)
 
-                # Analyze current channels
                 for ch in current_channels:
                     if ch in channel_names:
                         trace = raw_result.getPlotChannelData(plot_idx, ch)
@@ -403,7 +386,6 @@ class ShortCircuitSkill:
                             if not xs or not ys:
                                 continue
 
-                            # Extract fault period data
                             fault_data = [
                                 (t, v)
                                 for t, v in zip(xs, ys)
@@ -412,31 +394,25 @@ class ShortCircuitSkill:
                             if not fault_data:
                                 continue
 
-                            times = [d[0] for d in fault_data]
                             currents = [d[1] for d in fault_data]
+                            times = [d[0] for d in fault_data]
 
-                            # Peak current
                             peak_current = (
                                 max(abs(v) for v in currents) if currents else 0
                             )
-
-                            # Steady-state current (average of last 10 points)
                             steady_current = (
                                 sum(currents[-10:]) / len(currents[-10:])
                                 if len(currents) >= 10
                                 else 0
                             )
-
-                            # DC component
                             dc_component = peak_current - abs(steady_current)
 
-                            # Time constant estimation
                             time_constant = 0
                             if len(currents) > 20 and dc_component > 0:
                                 target = steady_current + dc_component * 0.37
                                 for i, (t, v) in enumerate(fault_data):
                                     if i > 0 and abs(v) < abs(target):
-                                        time_constant = (t - times[0]) * 1000  # ms
+                                        time_constant = (t - times[0]) * 1000
                                         break
 
                             analysis[ch] = {
@@ -446,7 +422,6 @@ class ShortCircuitSkill:
                                 "time_constant": time_constant,
                             }
 
-                # Analyze voltage channels
                 for ch in voltage_channels:
                     if ch in channel_names:
                         trace = raw_result.getPlotChannelData(plot_idx, ch)
@@ -465,7 +440,7 @@ class ShortCircuitSkill:
                                     "min_voltage": min_voltage,
                                 }
 
-        except (AttributeError, TypeError, ImportError):
+        except (AttributeError, TypeError):
             return self._build_analysis_from_adapter_data(sim_result.data)
 
         return analysis
@@ -473,7 +448,6 @@ class ShortCircuitSkill:
     def _calculate_short_circuit_capacity(
         self, analysis: dict, base_voltage: float, base_capacity: float
     ) -> dict:
-        """Calculate short circuit capacity S = sqrt(3) * V * I."""
         sqrt3 = math.sqrt(3)
         results = {}
 

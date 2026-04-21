@@ -20,9 +20,11 @@ from cloudpss_skills_v2.core.skill_result import (
     SkillResult,
     SkillStatus,
 )
-from cloudpss_skills_v2.powerskill import APIFactory, PowerFlowAPI
-from cloudpss_skills_v2.powerapi.adapters.cloudpss._component_utils import (
-    remove_component_safe,
+from cloudpss_skills_v2.powerskill import (
+    APIFactory,
+    PowerFlowAPI,
+    ModelHandle,
+    ComponentType,
 )
 
 logger = logging.getLogger(__name__)
@@ -227,7 +229,6 @@ class ContingencyAnalysisSkill:
             )
             thermal_limit = analysis_config.get("thermal_limit", 1.0)
             severity_threshold = analysis_config.get("severity_threshold", 0.8)
-
             top_n = ranking_config.get("top_n", 10)
 
             self._log("INFO", f"预想事故分析: {level}")
@@ -249,17 +250,15 @@ class ContingencyAnalysisSkill:
                 f"基态: {len(base_buses)} 节点, {len(base_branches)} 支路",
             )
 
+            handle = api.get_model_handle(model_rid)
             self._log("INFO", "生成故障组合...")
             contingencies = self._generate_contingencies(
-                model_rid,
-                source,
-                auth,
+                handle,
                 component_types,
                 level,
                 k,
                 contingency_config.get("components", []),
                 max_combinations,
-                api,
             )
             self._log("INFO", f"共 {len(contingencies)} 个故障场景")
 
@@ -274,18 +273,17 @@ class ContingencyAnalysisSkill:
             for i, contingency in enumerate(contingencies, 1):
                 try:
                     self._log(
-                        "INFO",
-                        f"[{i}/{len(contingencies)}] {contingency['name']}",
+                        "INFO", f"[{i}/{len(contingencies)}] {contingency['name']}"
                     )
                     result = self._evaluate_contingency(
-                        model_rid,
-                        source,
-                        auth,
+                        handle,
                         contingency,
                         analysis_config,
                         voltage_limit,
                         thermal_limit,
                         api,
+                        source,
+                        auth,
                     )
                     results.append(result)
                     if result["status"] == "PASS":
@@ -390,15 +388,12 @@ class ContingencyAnalysisSkill:
 
     def _generate_contingencies(
         self,
-        model_rid: str,
-        source: str,
-        auth: dict,
+        handle: ModelHandle,
         component_types: list[str],
         level: str,
         k: int,
         specified_components: list[str],
         max_combinations: int,
-        api: PowerFlowAPI,
     ) -> list[dict]:
         if level == "N-1":
             k = 1
@@ -406,9 +401,8 @@ class ContingencyAnalysisSkill:
             k = 2
 
         available = self._discover_components(
-            model_rid, source, auth, component_types, specified_components, api
+            handle, component_types, specified_components
         )
-
         if not available:
             return []
 
@@ -425,93 +419,43 @@ class ContingencyAnalysisSkill:
 
     def _discover_components(
         self,
-        model_rid: str,
-        source: str,
-        auth: dict,
+        handle: ModelHandle,
         component_types: list[str],
         specified_components: list[str],
-        api: PowerFlowAPI,
     ) -> list[dict]:
+        type_map = {
+            "branch": ComponentType.BRANCH,
+            "transformer": ComponentType.TRANSFORMER,
+            "generator": ComponentType.GENERATOR,
+            "load": ComponentType.LOAD,
+        }
+
         available = []
-        try:
-            from cloudpss import Model
-
-            kwargs = {}
-            base_url = auth.get("base_url") or auth.get("baseUrl")
-            if base_url:
-                kwargs["baseUrl"] = base_url
-
-            if source == "local":
-                model = Model.load(model_rid)
-            else:
-                model = Model.fetch(model_rid, **kwargs)
-
-            try:
-                topology = model.fetchTopology(implementType="powerflow")
-                topology_dict = topology.toJSON()
-                components = topology_dict.get("components", {})
-            except Exception:
-                model_dict = model.toJSON()
-                components = model_dict.get("components", {})
-
-            branch_types = [
-                "model/CloudPSS/line",
-                "model/CloudPSS/3pline",
-                "model/CloudPSS/transformer",
-                "model/CloudPSS/3ptransformer",
-                "model/CloudPSS/TransmissionLine",
-                "model/CloudPSS/_newTransformer_3p2w",
-            ]
-
-            if isinstance(components, dict):
-                items = components.items()
-            else:
-                items = [(c.get("key", ""), c) for c in components]
-
-            for comp_key, comp in items:
-                if isinstance(comp, dict):
-                    comp_type = self._classify_component(comp)
-                    if comp_type in component_types:
-                        key = comp.get(
-                            "key", comp_key if isinstance(comp_key, str) else ""
-                        )
-                        name = comp.get("name", comp.get("label", key))
-                        if (
-                            not specified_components
-                            or key in specified_components
-                            or name in specified_components
-                        ):
-                            available.append(
-                                {"key": key, "name": name, "type": comp_type}
-                            )
-
-        except Exception as e:
-            self._log("WARNING", f"获取模型拓扑失败: {e}")
+        for comp_type_str in component_types:
+            comp_type = type_map.get(comp_type_str, ComponentType.OTHER)
+            comps = handle.get_components_by_type(comp_type)
+            for c in comps:
+                if (
+                    not specified_components
+                    or c.name in specified_components
+                    or c.key in specified_components
+                ):
+                    available.append(
+                        {"key": c.key, "name": c.name, "type": comp_type_str}
+                    )
 
         return available
 
-    def _classify_component(self, component: dict) -> str:
-        definition = str(component.get("definition", "")).lower()
-        if "line" in definition and "transformer" not in definition:
-            return "branch"
-        if "transformer" in definition:
-            return "transformer"
-        if "generator" in definition or "gen" in definition:
-            return "generator"
-        if "load" in definition:
-            return "load"
-        return "other"
-
     def _evaluate_contingency(
         self,
-        model_rid: str,
-        source: str,
-        auth: dict,
+        handle: ModelHandle,
         contingency: dict,
         analysis_config: dict,
         voltage_limit: dict,
         thermal_limit: float,
         api: PowerFlowAPI,
+        source: str,
+        auth: dict,
     ) -> dict:
         result = {
             "name": contingency["name"],
@@ -524,84 +468,30 @@ class ContingencyAnalysisSkill:
         check_thermal = analysis_config.get("check_thermal", True)
 
         try:
-            from cloudpss import Model
-
-            kwargs = {}
-            base_url = auth.get("base_url") or auth.get("baseUrl")
-            if base_url:
-                kwargs["baseUrl"] = base_url
-
-            if source == "local":
-                working_model = Model.load(model_rid)
-            else:
-                working_model = Model.fetch(model_rid, **kwargs)
+            working = handle.clone()
 
             for comp_key in contingency["components"]:
-                try:
-                    clean_key = comp_key.lstrip("/")
-                    working_model.removeComponent(clean_key)
-                except (KeyError, AttributeError) as e:
-                    self._log("WARNING", f"无法移除元件 {comp_key}: {e}")
+                working.remove_component(comp_key)
 
-            from cloudpss_skills_v2.powerapi.adapters.cloudpss._component_utils import (
-                get_components_by_definition,
+            sim_result = api.run_power_flow(
+                model_handle=working, source=source, auth=auth
             )
 
-            model_fetch_kwargs = {}
-            base_url = auth.get("base_url") or auth.get("baseUrl")
-            if base_url:
-                model_fetch_kwargs["baseUrl"] = base_url
-
-            job = working_model.runPowerFlow(**model_fetch_kwargs)
-            max_wait = 120
-            waited = 0
-            poll_interval = 2
-            sdk_status = 0
-
-            while waited < max_wait:
-                sdk_status = job.status()
-                if sdk_status == 1:
-                    break
-                if sdk_status == 2:
-                    break
-                import time
-
-                time.sleep(poll_interval)
-                waited += poll_interval
-
-            if sdk_status != 1:
+            if not sim_result.is_success:
                 result["status"] = "FAIL"
                 result["violations"].append(
                     {"type": "CONVERGENCE", "description": "潮流计算不收敛"}
                 )
                 return result
 
-            pf_result = job.result
-            if pf_result is None:
-                result["status"] = "FAIL"
-                result["violations"].append(
-                    {"type": "CONVERGENCE", "description": "潮流结果为空"}
-                )
-                return result
-
-            from cloudpss_skills_v2.powerapi.adapters.cloudpss.powerflow import (
-                _parse_cloudpss_table,
-                _normalize_bus_row,
-                _normalize_branch_row,
-            )
-
-            buses_raw = pf_result.getBuses()
-            branches_raw = pf_result.getBranches()
-            bus_rows = [_normalize_bus_row(b) for b in _parse_cloudpss_table(buses_raw)]
-            branch_rows = [
-                _normalize_branch_row(b) for b in _parse_cloudpss_table(branches_raw)
-            ]
+            bus_data = sim_result.data.get("buses", [])
+            branch_data = sim_result.data.get("branches", [])
 
             min_voltage = float("inf")
             max_voltage = float("-inf")
 
             if check_voltage:
-                for bus in bus_rows:
+                for bus in bus_data:
                     vm = _as_float(bus.get("voltage_pu"), 1.0)
                     bus_name = bus.get("name", "Unknown")
                     min_voltage = min(min_voltage, vm)
@@ -643,15 +533,16 @@ class ContingencyAnalysisSkill:
                 result["status"] = "VIOLATION"
 
             if check_thermal:
-                for branch in branch_rows:
+                for branch in branch_data:
                     branch_name = branch.get("name", "unknown")
-                    p_from = _as_float(branch.get("p_from_mw"))
-                    p_to = _as_float(branch.get("p_to_mw"))
                     loading_val = _as_float(branch.get("loading_pct"), 0)
                     loading = (
                         loading_val / 100.0
                         if loading_val > 0
-                        else max(abs(p_from), abs(p_to))
+                        else max(
+                            abs(_as_float(branch.get("p_from_mw"))),
+                            abs(_as_float(branch.get("p_to_mw"))),
+                        )
                     )
 
                     if loading > thermal_limit:

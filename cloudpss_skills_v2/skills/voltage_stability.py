@@ -19,7 +19,12 @@ from cloudpss_skills_v2.core.skill_result import (
     SkillResult,
     SkillStatus,
 )
-from cloudpss_skills_v2.powerskill import APIFactory, PowerFlowAPI
+from cloudpss_skills_v2.powerskill import (
+    APIFactory,
+    PowerFlowAPI,
+    ModelHandle,
+    ComponentType,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +81,6 @@ class VoltageStabilitySkill:
                         },
                         "load_target": {
                             "type": "string",
-                            "description": "目标负荷组件标签（可选，默认所有负荷）",
                         },
                         "scale_generation": {
                             "type": "boolean",
@@ -194,21 +198,24 @@ class VoltageStabilitySkill:
             target_buses = monitoring_config.get("buses", [])
             collapse_threshold = monitoring_config.get("collapse_threshold", 0.7)
 
+            self._log("INFO", f"电压稳定性分析: {len(load_scaling)}个负荷水平")
             self._log(
-                "INFO",
-                f"电压稳定性分析: {len(load_scaling)}个负荷水平",
-            )
-            self._log(
-                "INFO",
-                f"负荷增长范围: {min(load_scaling)}x ~ {max(load_scaling)}x",
+                "INFO", f"负荷增长范围: {min(load_scaling)}x ~ {max(load_scaling)}x"
             )
 
-            base_loads, base_gens = self._get_base_components(
-                model_rid, source, auth, load_target
-            )
+            handle = api.get_model_handle(model_rid)
+            base_loads = handle.get_components_by_type(ComponentType.LOAD)
+            base_gens = handle.get_components_by_type(ComponentType.GENERATOR)
+
+            if load_target:
+                base_loads = [
+                    l
+                    for l in base_loads
+                    if load_target in (l.name or "") or load_target in (l.key or "")
+                ]
+
             self._log(
-                "INFO",
-                f"基线负荷数: {len(base_loads)}, 发电机数: {len(base_gens)}",
+                "INFO", f"基线负荷数: {len(base_loads)}, 发电机数: {len(base_gens)}"
             )
 
             results = []
@@ -217,27 +224,20 @@ class VoltageStabilitySkill:
             max_loadability = None
 
             for i, scale in enumerate(load_scaling):
-                self._log(
-                    "INFO",
-                    f"[{i + 1}/{len(load_scaling)}] 负荷水平={scale}x",
-                )
+                self._log("INFO", f"[{i + 1}/{len(load_scaling)}] 负荷水平={scale}x")
 
                 try:
-                    working_model = self._load_model(model_rid, source, auth)
-                    if working_model is None:
-                        raise RuntimeError("无法加载模型")
+                    working = handle.clone()
 
                     self._scale_loads_and_generation(
-                        working_model,
-                        base_loads,
-                        base_gens,
-                        scale,
-                        scale_generation,
+                        working, base_loads, base_gens, scale, scale_generation
                     )
 
-                    job = self._run_pf_on_model(working_model, auth)
+                    sim_result = api.run_power_flow(
+                        model_handle=working, source=source, auth=auth
+                    )
 
-                    if job is None or self._get_job_status(job) != 1:
+                    if not sim_result.is_success:
                         fallback_voltages = {}
                         if converged_cases:
                             fallback_voltages = converged_cases[-1].get("voltages", {})
@@ -250,8 +250,8 @@ class VoltageStabilitySkill:
                         )
                         continue
 
-                    pf_result = job.result
-                    voltages = self._extract_bus_voltages(pf_result, target_buses)
+                    bus_data = sim_result.data.get("buses", [])
+                    voltages = self._extract_bus_voltages(bus_data, target_buses)
                     min_voltage = min(voltages.values()) if voltages else 1.0
 
                     case_result = {
@@ -337,198 +337,82 @@ class VoltageStabilitySkill:
                 end_time=datetime.now(),
             )
 
-    def _load_model(self, model_rid: str, source: str, auth: dict) -> Any:
-        try:
-            from cloudpss import Model
-
-            kwargs = {}
-            base_url = auth.get("base_url") or auth.get("baseUrl")
-            if base_url:
-                kwargs["baseUrl"] = base_url
-
-            if source == "local":
-                return Model.load(model_rid)
-            return Model.fetch(model_rid, **kwargs)
-        except Exception:
-            return None
-
-    def _run_pf_on_model(self, model: Any, auth: dict) -> Any:
-        try:
-            kwargs = {}
-            base_url = auth.get("base_url") or auth.get("baseUrl")
-            if base_url:
-                kwargs["baseUrl"] = base_url
-            return model.runPowerFlow(**kwargs)
-        except Exception:
-            return None
-
-    def _get_job_status(self, job: Any) -> int:
-        import time
-
-        max_wait = 120
-        waited = 0
-        poll_interval = 2
-        while waited < max_wait:
-            sdk_status = job.status()
-            if sdk_status in (1, 2):
-                return sdk_status
-            time.sleep(poll_interval)
-            waited += poll_interval
-        return 0
-
-    def _get_base_components(
-        self,
-        model_rid: str,
-        source: str,
-        auth: dict,
-        load_target: Optional[str],
-    ) -> tuple[list, list]:
-        loads = []
-        gens = []
-
-        try:
-            from cloudpss import Model
-
-            kwargs = {}
-            base_url = auth.get("base_url") or auth.get("baseUrl")
-            if base_url:
-                kwargs["baseUrl"] = base_url
-
-            if source == "local":
-                model = Model.load(model_rid)
-            else:
-                model = Model.fetch(model_rid, **kwargs)
-
-            components = model.getAllComponents()
-            for key, comp in components.items():
-                if not hasattr(comp, "args"):
-                    continue
-
-                comp_def = getattr(comp, "definition", "")
-                comp_label = getattr(comp, "label", "")
-
-                if any(x in comp_def for x in ["Load", "_newExpLoad", "_newLoad"]):
-                    if (
-                        load_target is None
-                        or comp_label == load_target
-                        or load_target in key
-                    ):
-                        loads.append(
-                            {"key": key, "component": comp, "label": comp_label}
-                        )
-
-                if "Generator" in comp_def or "Gen" in comp_def:
-                    gens.append({"key": key, "component": comp, "label": comp_label})
-
-        except Exception as e:
-            self._log("WARNING", f"获取基线组件失败: {e}")
-
-        return loads, gens
-
     def _scale_loads_and_generation(
         self,
-        model: Any,
-        loads: list,
-        gens: list,
+        handle: ModelHandle,
+        base_loads: list,
+        base_gens: list,
         scale: float,
         scale_gen: bool,
     ) -> None:
         total_load_p = 0
 
-        for load_info in loads:
-            comp = load_info["component"]
-            key = load_info["key"]
-
-            if not hasattr(comp, "args") or comp.args is None:
+        for load_info in base_loads:
+            key = load_info.key
+            args = load_info.args
+            if not args:
                 continue
 
-            comp_def = getattr(comp, "definition", "")
-
-            if "_newExpLoad" in comp_def:
-                p_source = comp.args.get("p", {}).get("source", "1")
-                q_source = comp.args.get("q", {}).get("source", "0")
+            if "_newExpLoad" in (load_info.definition or ""):
+                p_source = args.get("p", {}).get("source", "1")
+                q_source = args.get("q", {}).get("source", "0")
                 try:
                     base_P = float(p_source)
                     base_Q = float(q_source)
                 except (ValueError, TypeError):
                     continue
-
-                args = {
+                new_args = {
                     "p": {"source": str(base_P * scale), "ɵexp": ""},
                     "q": {"source": str(base_Q * scale), "ɵexp": ""},
                 }
-                try:
-                    model.updateComponent(key, args=args)
+                if handle.update_component_args(key, new_args):
                     total_load_p += base_P * scale
-                except (AttributeError, TypeError):
-                    pass
             else:
-                pf_P = comp.args.get("pf_P", {}).get("source", "1")
-                pf_Q = comp.args.get("pf_Q", {}).get("source", "0")
+                pf_P = args.get("pf_P", {}).get("source", "1")
+                pf_Q = args.get("pf_Q", {}).get("source", "0")
                 try:
                     base_P = float(pf_P)
                     base_Q = float(pf_Q)
                 except (ValueError, TypeError):
                     continue
-
-                args = {
+                new_args = {
                     "pf_P": {"source": str(base_P * scale), "ɵexp": ""},
                     "pf_Q": {"source": str(base_Q * scale), "ɵexp": ""},
                 }
-                try:
-                    model.updateComponent(key, args=args)
+                if handle.update_component_args(key, new_args):
                     total_load_p += base_P * scale
-                except (AttributeError, TypeError):
-                    pass
 
-        if scale_gen and gens and scale > 1.0 and total_load_p > 0:
-            for gen_info in gens:
-                comp = gen_info["component"]
-                key = gen_info["key"]
-
-                if not hasattr(comp, "args") or comp.args is None:
+        if scale_gen and base_gens and scale > 1.0 and total_load_p > 0:
+            for gen_info in base_gens:
+                key = gen_info.key
+                args = gen_info.args
+                if not args:
                     continue
 
-                comp_def = getattr(comp, "definition", "")
-                if "_newGenerator" in comp_def or "SyncGenerator" in comp_def:
-                    pf_P = comp.args.get("pf_P", {}).get("source", "1")
+                definition = gen_info.definition or ""
+                if "_newGenerator" in definition or "SyncGenerator" in definition:
+                    pf_P = args.get("pf_P", {}).get("source", "1")
                     try:
                         base_P = float(pf_P)
                     except (ValueError, TypeError):
                         continue
-                    args = {"pf_P": {"source": str(base_P * scale), "ɵexp": ""}}
-                    try:
-                        model.updateComponent(key, args=args)
-                    except (AttributeError, TypeError):
-                        pass
+                    new_args = {"pf_P": {"source": str(base_P * scale), "ɵexp": ""}}
+                    handle.update_component_args(key, new_args)
 
     def _extract_bus_voltages(
-        self, pf_result: Any, target_buses: list[str]
+        self, bus_data: list[dict], target_buses: list[str]
     ) -> dict[str, float]:
         voltages: dict[str, float] = {}
         if not target_buses:
             return voltages
 
-        try:
-            from cloudpss_skills_v2.powerapi.adapters.cloudpss.powerflow import (
-                _parse_cloudpss_table,
-                _normalize_bus_row,
-            )
+        for bus in bus_data:
+            bus_name = bus.get("name", "")
+            vm = _as_float(bus.get("voltage_pu"), 1.0)
 
-            bus_rows = [
-                _normalize_bus_row(b)
-                for b in _parse_cloudpss_table(pf_result.getBuses())
-            ]
-            for bus in bus_rows:
-                bus_name = bus.get("name", "")
-                vm = _as_float(bus.get("voltage_pu"), 1.0)
-
-                for target_bus in target_buses:
-                    if self._matches_bus_identifier(target_bus, bus_name):
-                        voltages[target_bus] = vm
-
-        except (AttributeError, TypeError):
-            pass
+            for target_bus in target_buses:
+                if self._matches_bus_identifier(target_bus, bus_name):
+                    voltages[target_bus] = vm
 
         return voltages
 
@@ -707,13 +591,7 @@ class VoltageStabilitySkill:
                 + " |"
             )
 
-        lines.extend(
-            [
-                "",
-                "## 结论",
-                "",
-            ]
-        )
+        lines.extend(["", "## 结论", ""])
 
         if data.get("collapse_point"):
             lines.append(

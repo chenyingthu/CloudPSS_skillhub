@@ -224,22 +224,33 @@ class TestContingencyAnalysisSkill:
         )
         assert line1_count == 2
 
-    def test_classify_component(self):
+    def test_discover_components_type_mapping(self):
+        """Verify _discover_components maps type strings to ComponentType correctly."""
+        from cloudpss_skills_v2.powerskill import ComponentInfo, ComponentType
+
         skill = ContingencyAnalysisSkill()
-        assert (
-            skill._classify_component({"definition": "model/CloudPSS/line"}) == "branch"
+        mock_handle = MagicMock()
+        branch_comp = ComponentInfo(
+            key="line_1",
+            name="Line1",
+            definition="model/CloudPSS/line",
+            component_type=ComponentType.BRANCH,
+            args={},
         )
-        assert (
-            skill._classify_component({"definition": "model/CloudPSS/Transformer"})
-            == "transformer"
+        mock_handle.get_components_by_type.side_effect = lambda ct: (
+            [branch_comp] if ct == ComponentType.BRANCH else []
         )
-        assert (
-            skill._classify_component({"definition": "model/CloudPSS/Generator"})
-            == "generator"
+
+        available = skill._discover_components(mock_handle, ["branch"], [])
+        assert len(available) == 1
+        assert available[0]["type"] == "branch"
+        assert available[0]["key"] == "line_1"
+
+        mock_handle.get_components_by_type.side_effect = lambda ct: []
+        available_empty = skill._discover_components(
+            mock_handle, ["nonexistent_type"], []
         )
-        assert (
-            skill._classify_component({"definition": "model/CloudPSS/Load"}) == "load"
-        )
+        assert available_empty == []
 
     def test_run_validation_failure(self):
         skill = ContingencyAnalysisSkill()
@@ -411,18 +422,20 @@ class TestVoltageStabilitySkill:
         result = skill.run({})
         assert result.status == SkillStatus.FAILED
 
-    def test_run_with_base_pf_failure(self):
+    def test_run_with_pf_failure(self):
         skill = VoltageStabilitySkill()
         mock_api, mock_result = _make_mock_api()
         mock_result.is_success = False
         mock_result.errors = ["PF failed"]
 
-        with (
-            patch(
-                "cloudpss_skills_v2.skills.voltage_stability.APIFactory"
-            ) as mock_factory,
-            patch.object(skill, "_get_base_components", return_value=([], [])),
-        ):
+        mock_handle = MagicMock()
+        mock_handle.get_components_by_type.return_value = []
+        mock_handle.clone.return_value = mock_handle
+        mock_api.get_model_handle.return_value = mock_handle
+
+        with patch(
+            "cloudpss_skills_v2.skills.voltage_stability.APIFactory"
+        ) as mock_factory:
             mock_factory.create_powerflow_api.return_value = mock_api
             result = skill.run(
                 {

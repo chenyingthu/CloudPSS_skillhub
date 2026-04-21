@@ -24,6 +24,7 @@ from cloudpss_skills_v2.powerapi.base import (
     ValidationError,
     ValidationResult,
 )
+from cloudpss_skills_v2.powerskill.model_handle import ComponentInfo, ComponentType
 
 
 def _strip_html(name: str) -> str:
@@ -168,14 +169,17 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
     - load_model: Model.fetch(rid) or Model.load(rid)
     - run_simulation: model.runPowerFlow()
     - get_result: extract buses/branches from result
+    - model manipulation: get/remove/update components, clone model
     """
 
     _model_cache: dict[str, Any]
+    _original_rid_map: dict[str, str]
 
     def __init__(self, config: Optional[EngineConfig] = None):
         super().__init__(config)
         self._model_cache = {}
         self._result_cache: dict[str, SimulationResult] = {}
+        self._original_rid_map = {}
 
     @property
     def engine_name(self) -> str:
@@ -197,6 +201,7 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
     def _do_disconnect(self) -> None:
         self._model_cache.clear()
         self._result_cache.clear()
+        self._original_rid_map.clear()
 
     def _do_load_model(self, model_id: str) -> bool:
         from cloudpss import Model
@@ -215,6 +220,7 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
             model = Model.fetch(model_id, **kwargs)
 
         self._model_cache[model_id] = model
+        self._original_rid_map[model_id] = model_id
         self._logger.info("Model loaded: %s (%s)", model.name, model.rid)
         return True
 
@@ -351,6 +357,170 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
             status=SimulationStatus.FAILED,
             errors=[f"Result not found for job_id: {job_id}"],
         )
+
+    # --- Model manipulation _do_* implementations ---
+
+    _BRANCH_DEFINITIONS = [
+        "model/CloudPSS/line",
+        "model/CloudPSS/3pline",
+        "model/CloudPSS/transformer",
+        "model/CloudPSS/3ptransformer",
+        "model/CloudPSS/TransmissionLine",
+        "model/CloudPSS/_newTransformer_3p2w",
+        "model/CloudPSS/_newTransformer_3p",
+    ]
+
+    _LOAD_DEFINITIONS = ["Load", "_newExpLoad", "_newLoad"]
+
+    _GENERATOR_DEFINITIONS = ["Generator", "Gen", "SyncGenerator", "_newGenerator"]
+
+    _TRANSFORMER_DEFINITIONS = [
+        "transformer",
+        "3ptransformer",
+        "_newTransformer_3p2w",
+        "_newTransformer_3p",
+    ]
+
+    @staticmethod
+    def _classify_component(definition: str) -> str:
+        d = str(definition)
+        d_lower = d.lower()
+
+        for branch_def in CloudPSSPowerFlowAdapter._BRANCH_DEFINITIONS:
+            if branch_def in d:
+                if any(
+                    t in d_lower
+                    for t in CloudPSSPowerFlowAdapter._TRANSFORMER_DEFINITIONS
+                ):
+                    return ComponentType.TRANSFORMER
+                return ComponentType.BRANCH
+
+        for load_def in CloudPSSPowerFlowAdapter._LOAD_DEFINITIONS:
+            if load_def in d:
+                return ComponentType.LOAD
+
+        for gen_def in CloudPSSPowerFlowAdapter._GENERATOR_DEFINITIONS:
+            if gen_def in d:
+                return ComponentType.GENERATOR
+
+        return ComponentType.OTHER
+
+    def _ensure_model_loaded(self, model_id: str) -> Any:
+        model = self._model_cache.get(model_id)
+        if model is not None:
+            return model
+        from cloudpss import Model
+
+        source = self._config.extra.get("model", {}).get("source", "cloud")
+        kwargs = {}
+        base_url = self._config.extra.get("auth", {}).get(
+            "base_url"
+        ) or self._config.extra.get("auth", {}).get("baseUrl")
+        if base_url:
+            kwargs["baseUrl"] = base_url
+        if source == "local":
+            model = Model.load(model_id)
+        else:
+            model = Model.fetch(model_id, **kwargs)
+        self._model_cache[model_id] = model
+        return model
+
+    def _do_get_components(self, model_id: str) -> list[ComponentInfo]:
+        model = self._ensure_model_loaded(model_id)
+        components = model.getAllComponents()
+        result = []
+        for comp_id, comp in components.items():
+            definition = getattr(comp, "definition", "")
+            result.append(
+                ComponentInfo(
+                    key=comp_id,
+                    name=getattr(comp, "name", getattr(comp, "label", comp_id)),
+                    definition=definition,
+                    component_type=self._classify_component(definition),
+                    args=dict(getattr(comp, "args", {}))
+                    if hasattr(comp, "args") and comp.args
+                    else None,
+                )
+            )
+        return result
+
+    def _do_get_components_by_type(
+        self, model_id: str, comp_type: str
+    ) -> list[ComponentInfo]:
+        model = self._ensure_model_loaded(model_id)
+        components = model.getAllComponents()
+        result = []
+        for comp_id, comp in components.items():
+            definition = getattr(comp, "definition", "")
+            classified = self._classify_component(definition)
+            if classified == comp_type:
+                result.append(
+                    ComponentInfo(
+                        key=comp_id,
+                        name=getattr(comp, "name", getattr(comp, "label", comp_id)),
+                        definition=definition,
+                        component_type=classified,
+                        args=dict(getattr(comp, "args", {}))
+                        if hasattr(comp, "args") and comp.args
+                        else None,
+                    )
+                )
+        return result
+
+    def _do_remove_component(self, model_id: str, component_key: str) -> bool:
+        model = self._ensure_model_loaded(model_id)
+        try:
+            if hasattr(model, "removeComponent"):
+                model.removeComponent(component_key)
+                return True
+            components = model.getAllComponents()
+            if component_key in components:
+                del components[component_key]
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _do_update_component_args(
+        self, model_id: str, component_key: str, args: dict[str, Any]
+    ) -> bool:
+        model = self._ensure_model_loaded(model_id)
+        try:
+            if hasattr(model, "updateComponent"):
+                model.updateComponent(component_key, args=args)
+                return True
+            comp = model.getComponent(component_key)
+            if hasattr(comp, "update_args"):
+                comp.update_args(args)
+                return True
+            if hasattr(comp, "args"):
+                comp.args = args
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _do_clone_model(self, model_id: str) -> str:
+        original_rid = self._original_rid_map.get(model_id, model_id)
+        from cloudpss import Model
+
+        source = self._config.extra.get("model", {}).get("source", "cloud")
+        kwargs = {}
+        base_url = self._config.extra.get("auth", {}).get(
+            "base_url"
+        ) or self._config.extra.get("auth", {}).get("baseUrl")
+        if base_url:
+            kwargs["baseUrl"] = base_url
+
+        if source == "local":
+            new_model = Model.load(original_rid)
+        else:
+            new_model = Model.fetch(original_rid, **kwargs)
+
+        clone_id = f"{original_rid}__clone_{uuid.uuid4().hex[:8]}"
+        self._model_cache[clone_id] = new_model
+        self._original_rid_map[clone_id] = original_rid
+        return clone_id
 
     def _do_validate_config(self, config: dict[str, Any]) -> ValidationResult:
         errors = []

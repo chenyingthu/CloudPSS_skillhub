@@ -16,6 +16,7 @@ from typing import Any, Optional
 import logging
 
 from cloudpss_skills_v2.powerapi import EngineAdapter, EngineConfig, SimulationResult
+from cloudpss_skills_v2.powerskill.model_handle import ModelHandle
 
 
 class SimulationAPI(ABC):
@@ -63,6 +64,20 @@ class SimulationAPI(ABC):
 
     def get_result(self, job_id: str | None = None) -> SimulationResult:
         return self._adapter.get_result(job_id)
+
+    def get_model_handle(self, model_id: str) -> ModelHandle:
+        """Get an engine-agnostic model handle for topology manipulation.
+
+        Skills use ModelHandle to query, remove, update, and clone model
+        components without depending on any specific engine SDK.
+
+        Args:
+            model_id: The model identifier (e.g., CloudPSS RID).
+
+        Returns:
+            A ModelHandle instance for this model.
+        """
+        return ModelHandle(self._adapter, model_id)
 
     def __enter__(self) -> SimulationAPI:
         self.connect()

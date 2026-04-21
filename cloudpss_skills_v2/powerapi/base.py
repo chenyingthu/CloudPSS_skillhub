@@ -10,7 +10,7 @@ Architecture:
 
 Example:
     class CloudPSSPowerFlowAdapter(EngineAdapter):
-        def connect(self) -> None:
+        def _do_connect(self) -> None:
             # CloudPSS-specific connection logic
             pass
 
@@ -291,6 +291,50 @@ class EngineAdapter(ABC):
             ValidationResult with any errors/warnings
         """
         ...
+
+    def get_components(self, model_id: str) -> list:
+        self._require_connected()
+        return self._do_get_components(model_id)
+
+    def get_components_by_type(self, model_id: str, comp_type: str) -> list:
+        self._require_connected()
+        return self._do_get_components_by_type(model_id, comp_type)
+
+    def remove_component(self, model_id: str, component_key: str) -> bool:
+        self._require_connected()
+        return self._do_remove_component(model_id, component_key)
+
+    def update_component_args(
+        self, model_id: str, component_key: str, args: dict[str, Any]
+    ) -> bool:
+        self._require_connected()
+        return self._do_update_component_args(model_id, component_key, args)
+
+    def clone_model(self, model_id: str) -> str:
+        self._require_connected()
+        return self._do_clone_model(model_id)
+
+    def _do_get_components(self, model_id: str) -> list:
+        raise NotImplementedError(f"{self.engine_name} does not support get_components")
+
+    def _do_get_components_by_type(self, model_id: str, comp_type: str) -> list:
+        all_comps = self._do_get_components(model_id)
+        return [c for c in all_comps if getattr(c, "component_type", None) == comp_type]
+
+    def _do_remove_component(self, model_id: str, component_key: str) -> bool:
+        raise NotImplementedError(
+            f"{self.engine_name} does not support remove_component"
+        )
+
+    def _do_update_component_args(
+        self, model_id: str, component_key: str, args: dict[str, Any]
+    ) -> bool:
+        raise NotImplementedError(
+            f"{self.engine_name} does not support update_component_args"
+        )
+
+    def _do_clone_model(self, model_id: str) -> str:
+        raise NotImplementedError(f"{self.engine_name} does not support clone_model")
 
     def connect(self) -> None:
         """
