@@ -1,64 +1,8 @@
-"""Cross-engine validation tests: CloudPSS (mocked) vs pandapower."""
+"""Cross-engine validation tests: pandapower adapter patterns."""
 
 import pytest
 from cloudpss_skills_v2.powerskill import Engine, PowerFlow, ModelHandle
 from cloudpss_skills_v2.powerapi import SimulationStatus
-
-
-class MockCloudPSSAdapter:
-    """Mock CloudPSS adapter that returns known results for comparison."""
-
-    def __init__(self):
-        self._connected = False
-        self._current_model = None
-
-    @property
-    def engine_name(self):
-        return "cloudpss"
-
-    def is_connected(self):
-        return self._connected
-
-    def connect(self):
-        self._connected = True
-
-    def disconnect(self):
-        self._connected = False
-
-    def load_model(self, model_id):
-        self._current_model = model_id
-        return True
-
-    def run_simulation(self, config):
-        class SimResult:
-            def __init__(self):
-                self.status = "COMPLETED"
-                self.job_id = "mock123"
-                self.data = {
-                    "buses": [
-                        {"name": "B1", "vm_pu": 1.0, "va_deg": 0.0},
-                        {"name": "B2", "vm_pu": 0.985, "va_deg": -5.0},
-                    ],
-                    "branches": [
-                        {"name": "L1", "p_from_mw": 50.0},
-                    ],
-                }
-                self.errors = []
-                self.is_success = True
-
-        return SimResult()
-
-    def get_components(self, model_id):
-        return []
-
-    def get_components_by_type(self, model_id, comp_type):
-        return []
-
-    def get_current_model_id(self):
-        return self._current_model
-
-    def get_result(self, job_id):
-        return self.run_simulation({})
 
 
 @pytest.mark.pandapower
