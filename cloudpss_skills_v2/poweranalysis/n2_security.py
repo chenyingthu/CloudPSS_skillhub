@@ -198,7 +198,7 @@ class N2SecurityAnalysis:
 
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.COMPLETED,
+                status=SkillStatus.SUCCESS,
                 data={
                     "summary": summary,
                     "results": [

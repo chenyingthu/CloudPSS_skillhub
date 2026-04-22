@@ -219,9 +219,7 @@ class TopologyCheckTool:
 
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.COMPLETED
-                if total_issues == 0
-                else SkillStatus.FAILED,
+                status=SkillStatus.SUCCESS if total_issues == 0 else SkillStatus.FAILED,
                 data=result_data,
                 logs=self.logs,
                 artifacts=self.artifacts,

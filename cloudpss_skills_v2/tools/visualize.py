@@ -243,7 +243,7 @@ class VisualizeTool:
 
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.COMPLETED,
+                status=SkillStatus.SUCCESS,
                 data=result_data,
                 logs=self.logs,
                 artifacts=self.artifacts,

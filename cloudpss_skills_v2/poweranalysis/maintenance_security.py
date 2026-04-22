@@ -187,7 +187,7 @@ class MaintenanceSecurityAnalysis:
 
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.COMPLETED,
+                status=SkillStatus.SUCCESS,
                 data=data,
                 logs=self.logs,
                 artifacts=self.artifacts,

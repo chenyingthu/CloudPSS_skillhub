@@ -216,7 +216,7 @@ class BatchPowerFlowAnalysis:
 
             return SkillResult(
                 skill_name=self.name,
-                status=SkillStatus.COMPLETED,
+                status=SkillStatus.SUCCESS,
                 data=output_data,
                 logs=logs,
                 artifacts=artifacts,
