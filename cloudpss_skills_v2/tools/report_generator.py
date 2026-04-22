@@ -192,14 +192,14 @@ class ReportGeneratorTool:
                 Artifact(
                     name="report_generator_markdown",
                     path=md_path,
-                    mime="text/markdown",
+                    type="text/markdown",
                 )
             )
             self.artifacts.append(
                 Artifact(
                     name="report_generator_html",
                     path=html_path,
-                    mime="text/html",
+                    type="text/html",
                 )
             )
 

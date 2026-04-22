@@ -3,6 +3,7 @@
 import pytest
 from cloudpss_skills_v2.powerskill import Engine, PowerFlow, ShortCircuit
 from cloudpss_skills_v2.powerapi import SimulationStatus
+from cloudpss_skills_v2.core.skill_result import SkillStatus
 from cloudpss_skills_v2.tools.topology_check import TopologyCheckTool
 from cloudpss_skills_v2.tools.visualize import VisualizeTool
 from cloudpss_skills_v2.tools.report_generator import ReportGeneratorTool
@@ -25,6 +26,8 @@ class TestSkillWorkflowPowerFlow:
         pf.adapter.connect()
         result = pf.adapter.run_simulation({"model_id": "case14"})
         assert result.status == SimulationStatus.COMPLETED
+        assert result.data is not None
+        assert len(result.data.get("buses", [])) > 0
 
 
 @pytest.mark.pandapower
@@ -42,38 +45,42 @@ class TestSkillWorkflowShortCircuit:
 
 @pytest.mark.pandapower
 class TestSkillWorkflowTopologyCheck:
-    def test_topology_tool_with_pf_result(self):
-        pf = Engine.create_powerflow(engine="pandapower")
-        handle = pf.get_model_handle("case14")
-        pf_result = pf.run_power_flow(handle)
-
+    def test_topology_tool_success(self):
         tool = TopologyCheckTool()
         result = tool.run({"model": {"rid": "case14"}})
-        assert result is not None
+        assert result.status == SkillStatus.SUCCESS
+        assert result.data is not None
+
+    def test_topology_tool_returns_valid_data(self):
+        tool = TopologyCheckTool()
+        result = tool.run({"model": {"rid": "case14"}})
+        assert result.status == SkillStatus.SUCCESS
+        assert isinstance(result.data, dict)
 
 
 @pytest.mark.pandapower
 class TestSkillWorkflowVisualize:
-    def test_visualize_tool_with_pf_result(self):
-        pf = Engine.create_powerflow(engine="pandapower")
-        handle = pf.get_model_handle("case14")
-        pf_result = pf.run_power_flow(handle)
-
+    def test_visualize_tool_success(self):
         tool = VisualizeTool()
         result = tool.run({"model": {"rid": "case14"}})
-        assert result is not None
+        assert result.status == SkillStatus.SUCCESS
+        assert result.data is not None
 
 
 @pytest.mark.pandapower
 class TestSkillWorkflowReport:
-    def test_report_tool_with_pf_result(self):
-        pf = Engine.create_powerflow(engine="pandapower")
-        handle = pf.get_model_handle("case14")
-        pf_result = pf.run_power_flow(handle)
-
+    def test_report_needs_sections(self):
         tool = ReportGeneratorTool()
         result = tool.run({"model": {"rid": "case14"}})
-        assert result is not None
+        assert result.status == SkillStatus.FAILED
+
+    def test_report_with_sections(self):
+        tool = ReportGeneratorTool()
+        result = tool.run(
+            {"model": {"rid": "case14"}, "report": {"sections": ["summary"]}}
+        )
+        assert result.status == SkillStatus.SUCCESS
+        assert result.data is not None
 
 
 @pytest.mark.pandapower
@@ -96,9 +103,10 @@ class TestSkillWorkflowChain:
 
         topology = TopologyCheckTool()
         topo_result = topology.run({"model": {"rid": "case14"}})
-        assert topo_result is not None
+        assert topo_result.status == SkillStatus.SUCCESS
+        assert topo_result.data is not None
 
-    def test_pf_then_visualize_then_report(self):
+    def test_full_chain_pf_viz_report(self):
         pf = Engine.create_powerflow(engine="pandapower")
         pf.adapter.connect()
         pf_result = pf.adapter.run_simulation({"model_id": "case14"})
@@ -106,11 +114,13 @@ class TestSkillWorkflowChain:
 
         viz = VisualizeTool()
         viz_result = viz.run({"model": {"rid": "case14"}})
-        assert viz_result is not None
+        assert viz_result.status == SkillStatus.SUCCESS
 
         report = ReportGeneratorTool()
-        report_result = report.run({"model": {"rid": "case14"}})
-        assert report_result is not None
+        report_result = report.run(
+            {"model": {"rid": "case14"}, "report": {"sections": ["summary"]}}
+        )
+        assert report_result.status == SkillStatus.SUCCESS
 
 
 @pytest.mark.pandapower
