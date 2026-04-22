@@ -38,10 +38,12 @@ _FAULT_TYPE_MAP = {
 def _ensure_sc_parameters(net) -> None:
     """Ensure IEC 60909 short circuit parameters are populated."""
     # ext_grid parameters (required for slack bus)
+    # Use reasonable defaults: 100 MVA is typical for smaller systems
+    # This affects fault current calculation: IkSS = s_sc_max_mva / (Vn_kv * sqrt(3))
     if "s_sc_max_mva" not in net.ext_grid.columns:
-        net.ext_grid["s_sc_max_mva"] = 10000
+        net.ext_grid["s_sc_max_mva"] = 100
     if "s_sc_min_mva" not in net.ext_grid.columns:
-        net.ext_grid["s_sc_min_mva"] = 8000
+        net.ext_grid["s_sc_min_mva"] = 80
     if "rx_max" not in net.ext_grid.columns:
         net.ext_grid["rx_max"] = 0.1
     if "rx_min" not in net.ext_grid.columns:

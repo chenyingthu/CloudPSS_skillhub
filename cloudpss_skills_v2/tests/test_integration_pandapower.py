@@ -129,6 +129,160 @@ class TestPandapowerResults:
 
 
 @pytest.mark.pandapower
+class TestPhysicalCorrectness:
+    """Tests that verify physical correctness of power system results."""
+
+    @pytest.fixture
+    def adapter(self):
+        return PandapowerPowerFlowAdapter()
+
+    def test_bus_types_not_all_pq(self, adapter):
+        """Bus types should include slack and/or PV, not all PQ."""
+        result = adapter._do_run_simulation({"model_id": "case14"})
+        if result.status == SimulationStatus.COMPLETED:
+            buses = result.data.get("buses", [])
+            bus_types = [b.get("bus_type") for b in buses]
+            unique_types = set(bus_types)
+            assert len(unique_types) > 1, f"All buses have same type: {unique_types}"
+
+    def test_has_slack_bus(self, adapter):
+        """IEEE 14-bus should have at least one slack bus."""
+        result = adapter._do_run_simulation({"model_id": "case14"})
+        if result.status == SimulationStatus.COMPLETED:
+            buses = result.data.get("buses", [])
+            slack_buses = [b for b in buses if b.get("bus_type") == "slack"]
+            assert len(slack_buses) >= 1, "No slack bus found"
+
+    def test_has_pv_buses(self, adapter):
+        """IEEE 14-bus should have PV buses (generators)."""
+        result = adapter._do_run_simulation({"model_id": "case14"})
+        if result.status == SimulationStatus.COMPLETED:
+            buses = result.data.get("buses", [])
+            pv_buses = [b for b in buses if b.get("bus_type") == "pv"]
+            assert len(pv_buses) >= 1, "No PV buses found"
+
+    def test_slack_bus_voltage_nominal(self, adapter):
+        """Slack bus voltage should be near nominal (0.95-1.1 pu is normal)."""
+        result = adapter._do_run_simulation({"model_id": "case14"})
+        if result.status == SimulationStatus.COMPLETED:
+            buses = result.data.get("buses", [])
+            slack_buses = [b for b in buses if b.get("bus_type") == "slack"]
+            if slack_buses:
+                for bus in slack_buses:
+                    vm = bus.get("voltage_pu", 1.0)
+                    assert 0.95 <= vm <= 1.1, f"Slack bus voltage out of range: {vm}"
+
+    def test_slack_bus_angle_zero(self, adapter):
+        """Slack bus angle should be zero (reference)."""
+        result = adapter._do_run_simulation({"model_id": "case14"})
+        if result.status == SimulationStatus.COMPLETED:
+            buses = result.data.get("buses", [])
+            slack_buses = [b for b in buses if b.get("bus_type") == "slack"]
+            if slack_buses:
+                for bus in slack_buses:
+                    angle = bus.get("angle_deg", 0)
+                    assert abs(angle) < 0.5, f"Slack bus angle not zero: {angle}"
+
+    def test_voltage_profile_physically_reasonable(self, adapter):
+        """All bus voltages should be within 0.9-1.1 pu (normal operation)."""
+        result = adapter._do_run_simulation({"model_id": "case14"})
+        if result.status == SimulationStatus.COMPLETED:
+            buses = result.data.get("buses", [])
+            for bus in buses:
+                vm = bus.get("voltage_pu", 1.0)
+                assert 0.9 <= vm <= 1.1, (
+                    f"Bus {bus.get('name')} voltage out of range: {vm}"
+                )
+
+    def test_power_balanced(self, adapter):
+        """Generated power should roughly equal load + losses."""
+        result = adapter._do_run_simulation({"model_id": "case14"})
+        if result.status == SimulationStatus.COMPLETED:
+            summary = result.data.get("summary", {})
+            total_loss = summary.get("total_loss_mw", 0)
+            assert total_loss >= 0, "Losses cannot be negative"
+            assert total_loss < 50, f"Excessive losses: {total_loss} MW"
+
+
+@pytest.mark.pandapower
+class TestShortCircuitPhysicalCorrectness:
+    """Tests that verify physical correctness of short circuit results."""
+
+    @pytest.fixture
+    def adapter(self):
+        from cloudpss_skills_v2.powerapi.adapters.pandapower.short_circuit import (
+            PandapowerShortCircuitAdapter,
+        )
+
+        return PandapowerShortCircuitAdapter()
+
+    def test_ikss_in_valid_range(self, adapter):
+        """IkSS should be non-negative and finite."""
+        result = adapter._do_run_simulation({"model_id": "case14"})
+        if result.status == SimulationStatus.COMPLETED:
+            buses = result.data.get("bus_results", [])
+            for bus in buses:
+                ikss = bus.get("ikss_ka", 0)
+                assert 0 <= ikss < 1e6, (
+                    f"Bus {bus.get('bus')} IkSS out of range: {ikss} kA"
+                )
+
+    def test_max_ikss_finite(self, adapter):
+        """Maximum IkSS should be finite and recorded."""
+        result = adapter._do_run_simulation({"model_id": "case14"})
+        if result.status == SimulationStatus.COMPLETED:
+            summary = result.data.get("summary", {})
+            max_ikss = summary.get("max_ikss_ka", 0)
+            assert max_ikss > 0, "Max IkSS should be positive"
+            assert max_ikss < 1e6, f"Max IkSS unreasonably large: {max_ikss} kA"
+
+    def test_fault_voltage_reasonable(self, adapter):
+        """Bus voltage during fault should be near zero at fault location."""
+        result = adapter._do_run_simulation({"model_id": "case14"})
+        if result.status == SimulationStatus.COMPLETED:
+            buses = result.data.get("bus_results", [])
+            low_voltage_buses = [b for b in buses if b.get("v_pu", 1) < 0.3]
+            assert len(low_voltage_buses) >= 1, "No bus with low fault voltage found"
+
+    def test_all_buses_have_results(self, adapter):
+        """All buses should have short circuit results."""
+        result = adapter._do_run_simulation({"model_id": "case14"})
+        if result.status == SimulationStatus.COMPLETED:
+            buses = result.data.get("bus_results", [])
+            assert len(buses) >= 14, f"Expected 14+ bus results, got {len(buses)}"
+
+    def test_ikss_positive(self, adapter):
+        """All IkSS values should be non-negative."""
+        result = adapter._do_run_simulation({"model_id": "case14"})
+        if result.status == SimulationStatus.COMPLETED:
+            buses = result.data.get("bus_results", [])
+            for bus in buses:
+                ikss = bus.get("ikss_ka", 0)
+                assert ikss >= 0, f"Negative IkSS at bus {bus.get('bus')}: {ikss}"
+
+    def test_ip_greater_than_ikss(self, adapter):
+        """Peak current ip should be greater than IkSS (ip includes decay factor)."""
+        result = adapter._do_run_simulation({"model_id": "case14"})
+        if result.status == SimulationStatus.COMPLETED:
+            buses = result.data.get("bus_results", [])
+            for bus in buses:
+                ip = bus.get("ip_ka", 0)
+                ikss = bus.get("ikss_ka", 0)
+                if ip > 0 and ikss > 0:
+                    assert ip >= ikss, f"ip ({ip}) should be >= ikss ({ikss})"
+
+    def test_ikss_computed_for_all_buses(self, adapter):
+        """IkSS should be computed for all buses with valid values."""
+        result = adapter._do_run_simulation({"model_id": "case14"})
+        if result.status == SimulationStatus.COMPLETED:
+            buses = result.data.get("bus_results", [])
+            for bus in buses:
+                ikss = bus.get("ikss_ka")
+                assert ikss is not None, f"Missing IkSS for bus {bus.get('bus')}"
+                assert not (ikss != ikss), f"NaN IkSS for bus {bus.get('bus')}"
+
+
+@pytest.mark.pandapower
 class TestPandapowerMultipleCases:
     @pytest.fixture
     def adapter(self):

@@ -56,8 +56,8 @@ class TestCrossEngineVoltageComparison:
 
             if result.is_success:
                 voltages = [b["vm_pu"] for b in result.data.get("buses", [])]
-                assert min(voltages) > 0.8
-                assert max(voltages) < 1.15
+                assert min(voltages) > 0.9
+                assert max(voltages) < 1.1
 
 
 @pytest.mark.pandapower

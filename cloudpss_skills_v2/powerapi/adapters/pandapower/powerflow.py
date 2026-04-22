@@ -111,6 +111,35 @@ def _load_case(case_name: str):
     return getattr(nw, case_name)()
 
 
+def _determine_bus_type(idx, net) -> str:
+    """Determine bus type based on pandapower network structure.
+
+    - Slack (ext_grid): Buses connected to external grid
+    - PV: Buses with generators but no external grid
+    - PQ: Load buses without generation
+    """
+    # Check if bus is connected to ext_grid (slack bus)
+    if hasattr(net, "ext_grid") and not net.ext_grid.empty:
+        ext_grid_buses = net.ext_grid["bus"].unique()
+        if idx in ext_grid_buses:
+            return "slack"
+
+    # Check if bus has generators (PV bus)
+    if hasattr(net, "gen") and not net.gen.empty:
+        gen_buses = net.gen["bus"].unique()
+        if idx in gen_buses:
+            return "pv"
+
+    # Check static generators
+    if hasattr(net, "sgen") and not net.sgen.empty:
+        sgen_buses = net.sgen["bus"].unique()
+        if idx in sgen_buses:
+            return "pv"
+
+    # Default: PQ (load bus)
+    return "pq"
+
+
 def _bus_row(idx, row, net) -> dict:
     vm_pu = va_degree = None
     if hasattr(net, "res_bus") and not net.res_bus.empty and idx in net.res_bus.index:
@@ -121,7 +150,7 @@ def _bus_row(idx, row, net) -> dict:
         "voltage_kv": _safe_float(row.get("vn_kv", 0)),
         "voltage_pu": vm_pu,
         "angle_deg": va_degree,
-        "bus_type": "pq",
+        "bus_type": _determine_bus_type(idx, net),
         "engine_id": idx,
     }
 
