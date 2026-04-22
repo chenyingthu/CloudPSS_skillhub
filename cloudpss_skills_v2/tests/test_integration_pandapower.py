@@ -46,10 +46,19 @@ class TestPandapowerAdapterValidation:
         result = adapter._do_validate_config({"model_id": "case14"})
         assert result.valid
 
-    @pytest.mark.skip(reason="Adapter accepts any model_id string")
-    def test_validate_invalid_case(self, adapter):
-        result = adapter._do_validate_config({"model_id": "invalid_case_xyz"})
-        assert not result.valid or result.valid
+
+@pytest.mark.pandapower
+class TestPandapowerInvalidCase:
+    @pytest.fixture
+    def adapter(self):
+        a = PandapowerPowerFlowAdapter()
+        a.connect()
+        return a
+
+    def test_invalid_case_fails_at_runtime(self, adapter):
+        result = adapter.run_simulation({"model_id": "invalid_case_xyz"})
+        assert result.status == SimulationStatus.FAILED
+        assert len(result.errors) > 0
 
 
 @pytest.mark.pandapower
