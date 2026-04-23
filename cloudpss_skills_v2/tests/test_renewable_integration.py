@@ -7,33 +7,68 @@ from cloudpss_skills_v2.poweranalysis.renewable_integration import (
 
 
 class TestRenewableIntegrationAnalysis:
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_import(self):
         assert RenewableIntegrationAnalysis is not None
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_instantiation(self):
         instance = RenewableIntegrationAnalysis()
         assert instance is not None
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_name_attribute(self):
         instance = RenewableIntegrationAnalysis()
         assert instance.name == "renewable_integration"
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_config_schema(self):
         instance = RenewableIntegrationAnalysis()
         schema = instance.config_schema
         assert schema is not None
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_empty_config(self):
         instance = RenewableIntegrationAnalysis()
         valid, errors = instance.validate({})
         assert valid is False
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_missing_rid(self):
         instance = RenewableIntegrationAnalysis()
         config = {"model": {}}
         valid, errors = instance.validate(config)
         assert valid is False
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_valid_config(self):
         instance = RenewableIntegrationAnalysis()
         config = {"model": {"rid": "test"}}
@@ -65,17 +100,32 @@ class TestRenewableIntegrationAnalysis:
         results = instance._calculate_scr_at_buses(buses, 100.0)
         assert results[0]["strength"] == "weak"
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_run_returns_skill_result(self):
         instance = RenewableIntegrationAnalysis()
         result = instance.run({"model": {"rid": "test"}})
         assert result is not None
         assert hasattr(result, "skill_name")
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_run_with_invalid_config(self):
         instance = RenewableIntegrationAnalysis()
         result = instance.run({})
         assert result.status.value == "failed" or result.status.name == "failed"
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_log_method(self):
         instance = RenewableIntegrationAnalysis()
         assert hasattr(instance, "_log")

@@ -61,9 +61,7 @@ def test_param_scan_emt():
                 except:
                     pass
 
-    if not target_comp:
-        print("✗ 未找到合适的元件")
-        return False
+    assert target_comp, "未找到可用于 EMT 参数扫描的负荷元件"
 
     # 执行参数扫描
     print(f"\n2. 执行参数扫描...")
@@ -188,7 +186,7 @@ def test_param_scan_emt():
 
     print(f"\n✓ 结果已保存: {result_file}")
 
-    return success_count > 0
+    assert success_count > 0, f"Expected at least 1 successful EMT scan, got {success_count}"
 
 
 if __name__ == "__main__":

@@ -5,33 +5,68 @@ from cloudpss_skills_v2.poweranalysis.fault_clearing_scan import (
 
 
 class TestFaultClearingScanAnalysis:
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_import(self):
         assert FaultClearingScanAnalysis is not None
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_instantiation(self):
         instance = FaultClearingScanAnalysis()
         assert instance is not None
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_name_attribute(self):
         instance = FaultClearingScanAnalysis()
         assert instance.name == "fault_clearing_scan"
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_config_schema(self):
         instance = FaultClearingScanAnalysis()
         schema = instance.config_schema
         assert schema is not None
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_empty_config(self):
         instance = FaultClearingScanAnalysis()
         valid, errors = instance.validate({})
         assert valid is False
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_missing_rid(self):
         instance = FaultClearingScanAnalysis()
         config = {"model": {}}
         valid, errors = instance.validate(config)
         assert valid is False
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_valid_config(self):
         instance = FaultClearingScanAnalysis()
         config = {"model": {"rid": "test"}}
@@ -73,17 +108,32 @@ class TestFaultClearingScanAnalysis:
         monotonic = instance._check_monotonic_degradation(results)
         assert monotonic is False
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_run_returns_skill_result(self):
         instance = FaultClearingScanAnalysis()
         result = instance.run({"model": {"rid": "test"}})
         assert result is not None
         assert hasattr(result, "skill_name")
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_run_with_invalid_config(self):
         instance = FaultClearingScanAnalysis()
         result = instance.run({})
         assert result.status.value == "failed" or result.status.name == "failed"
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_log_method(self):
         instance = FaultClearingScanAnalysis()
         assert hasattr(instance, "_log")

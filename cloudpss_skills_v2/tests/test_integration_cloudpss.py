@@ -36,10 +36,20 @@ def has_cloudpss_token(token):
 
 @pytest.mark.cloudpss
 class TestCloudPSSPowerFlowAdapterLifecycle:
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_engine_name(self):
         adapter = CloudPSSPowerFlowAdapter()
         assert adapter.engine_name == "cloudpss"
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_supported_simulations(self):
         from cloudpss_skills_v2.powerapi import SimulationType
 
@@ -47,6 +57,11 @@ class TestCloudPSSPowerFlowAdapterLifecycle:
         sims = adapter.get_supported_simulations()
         assert SimulationType.POWER_FLOW in sims
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_adapter_instantiation(self):
         adapter = CloudPSSPowerFlowAdapter()
         assert adapter is not None
@@ -54,16 +69,31 @@ class TestCloudPSSPowerFlowAdapterLifecycle:
 
 @pytest.mark.cloudpss
 class TestCloudPSSPowerFlowValidation:
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_empty_config(self):
         adapter = CloudPSSPowerFlowAdapter()
         result = adapter._do_validate_config({})
         assert not result.valid
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_with_model_id(self):
         adapter = CloudPSSPowerFlowAdapter()
         result = adapter._do_validate_config({"model_id": "test_model"})
         assert result.valid
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_unknown_algorithm(self):
         adapter = CloudPSSPowerFlowAdapter()
         result = adapter._do_validate_config(
@@ -71,6 +101,11 @@ class TestCloudPSSPowerFlowValidation:
         )
         assert not result.valid
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_known_algorithms(self):
         adapter = CloudPSSPowerFlowAdapter()
         for algo in ["newton_raphson", "fast_decoupled", "acpf"]:
@@ -255,10 +290,20 @@ class TestCloudPSSPowerFlowAuth:
 
 @pytest.mark.cloudpss
 class TestCloudPSSShortCircuitAdapterLifecycle:
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_engine_name(self):
         adapter = CloudPSSShortCircuitAdapter()
         assert adapter.engine_name == "cloudpss_sc"
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_supported_simulations(self):
         from cloudpss_skills_v2.powerapi import SimulationType
 
@@ -266,6 +311,11 @@ class TestCloudPSSShortCircuitAdapterLifecycle:
         sims = adapter.get_supported_simulations()
         assert SimulationType.SHORT_CIRCUIT in sims
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_adapter_instantiation(self):
         adapter = CloudPSSShortCircuitAdapter()
         assert adapter is not None
@@ -273,11 +323,21 @@ class TestCloudPSSShortCircuitAdapterLifecycle:
 
 @pytest.mark.cloudpss
 class TestCloudPSSShortCircuitValidation:
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_empty_config(self):
         adapter = CloudPSSShortCircuitAdapter()
         result = adapter._do_validate_config({})
         assert not result.valid
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_with_model_id(self):
         adapter = CloudPSSShortCircuitAdapter()
         result = adapter._do_validate_config({"model_id": "test_model"})
@@ -303,6 +363,11 @@ class TestCloudPSSShortCircuitFaultTypeMapping:
             ("double_line_ground", "dlg"),
         ],
     )
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_fault_type_mapping(self, input_type, expected):
         from cloudpss_skills_v2.powerapi.adapters.cloudpss.short_circuit import (
             _FAULT_TYPE_MAP,
@@ -310,6 +375,11 @@ class TestCloudPSSShortCircuitFaultTypeMapping:
 
         assert _FAULT_TYPE_MAP[input_type] == expected
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_unknown_fault_type_defaults_to_3ph(self):
         from cloudpss_skills_v2.powerapi.adapters.cloudpss.short_circuit import (
             _FAULT_TYPE_MAP,
@@ -358,6 +428,11 @@ class TestCloudPSSComponentClassification:
 
 @pytest.mark.cloudpss
 class TestCloudPSSResultCache:
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_result_caching(self):
         adapter = CloudPSSPowerFlowAdapter()
         mock_result = SimulationResult(
@@ -368,6 +443,11 @@ class TestCloudPSSResultCache:
         adapter._result_cache["test_job"] = mock_result
         assert adapter._result_cache["test_job"] == mock_result
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_get_cached_result(self):
         adapter = CloudPSSPowerFlowAdapter()
         mock_result = SimulationResult(
@@ -379,6 +459,11 @@ class TestCloudPSSResultCache:
         retrieved = adapter._do_get_result("test_job")
         assert retrieved.job_id == "test_job"
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_get_nonexistent_result(self):
         adapter = CloudPSSPowerFlowAdapter()
         result = adapter._do_get_result("nonexistent")
@@ -387,6 +472,11 @@ class TestCloudPSSResultCache:
 
 @pytest.mark.cloudpss
 class TestCloudPSSShortCircuitResultCache:
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_result_caching(self):
         adapter = CloudPSSShortCircuitAdapter()
         mock_result = SimulationResult(
@@ -397,6 +487,11 @@ class TestCloudPSSShortCircuitResultCache:
         adapter._result_cache["test_job"] = mock_result
         assert adapter._result_cache["test_job"] == mock_result
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_get_cached_result(self):
         adapter = CloudPSSShortCircuitAdapter()
         mock_result = SimulationResult(
@@ -411,6 +506,11 @@ class TestCloudPSSShortCircuitResultCache:
 
 @pytest.mark.cloudpss
 class TestCloudPSSPowerFlowDisconnect:
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_disconnect_clears_cache(self):
         adapter = CloudPSSPowerFlowAdapter()
         adapter._model_cache["test"] = "model"
@@ -426,6 +526,11 @@ class TestCloudPSSPowerFlowDisconnect:
 
 @pytest.mark.cloudpss
 class TestCloudPSSShortCircuitDisconnect:
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_disconnect_clears_cache(self):
         adapter = CloudPSSShortCircuitAdapter()
         adapter._model_cache["test"] = "model"
@@ -449,6 +554,11 @@ class TestCloudPSSPowerFlowCloneModel:
         assert clone_id != original_rid
         assert "__clone_" in clone_id
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_original_rid_map_maintained(self):
         adapter = CloudPSSPowerFlowAdapter()
         adapter._original_rid_map["clone1"] = "original_rid"
@@ -576,6 +686,11 @@ class TestCloudPSSPhysicalCorrectness:
         summary = _generate_pf_summary(buses, branches)
         assert summary["total_loss_mw"] >= 0
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_short_circuit_result_structure(self):
         mock_result = SimulationResult(
             job_id="test_job",
@@ -607,6 +722,11 @@ class TestCloudPSSPhysicalCorrectness:
         assert "summary" in data
         assert data["summary"]["max_ikss_ka"] == 10.0
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_ikss_nonnegative(self):
         mock_result = SimulationResult(
             job_id="test",
@@ -622,6 +742,11 @@ class TestCloudPSSPhysicalCorrectness:
         for bus in mock_result.data["bus_results"]:
             assert bus["ikss_ka"] >= 0
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_ip_greater_than_ikss(self):
         mock_result = SimulationResult(
             job_id="test",

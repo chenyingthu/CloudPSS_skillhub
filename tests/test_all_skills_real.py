@@ -45,17 +45,13 @@ def test_skill_config(skill_name):
     rc, out, err = run_shell_command(
         f"python -m cloudpss_skills init {skill_name} --output {config_path}"
     )
-    if "[OK]" not in out:
-        return False, "配置生成失败"
+    assert "[OK]" in out, f"配置生成失败: stdout={out!r}, stderr={err!r}, rc={rc}"
 
     # 验证配置
     rc, out, err = run_shell_command(
         f"python -m cloudpss_skills validate --config {config_path}"
     )
-    if "[OK]" in out:
-        return True, "配置验证通过"
-    else:
-        return False, "配置验证失败"
+    assert "[OK]" in out, f"配置验证失败: stdout={out!r}, stderr={err!r}, rc={rc}"
 
 
 @pytest.mark.integration

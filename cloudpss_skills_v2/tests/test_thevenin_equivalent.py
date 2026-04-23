@@ -14,24 +14,49 @@ class TestTheveninEquivalentAnalysis:
     def instance(self):
         return TheveninEquivalentAnalysis()
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_import(self):
         assert TheveninEquivalentAnalysis is not None
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_class_attributes(self):
         assert hasattr(TheveninEquivalentAnalysis, "name")
         assert TheveninEquivalentAnalysis.name == "thevenin_equivalent"
         assert hasattr(TheveninEquivalentAnalysis, "description")
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_config_schema(self):
         instance = TheveninEquivalentAnalysis()
         schema = instance.config_schema
         assert isinstance(schema, dict)
         assert "properties" in schema
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_instantiation(self):
         instance = TheveninEquivalentAnalysis()
         assert instance is not None
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_instance_attributes(self):
         instance = TheveninEquivalentAnalysis()
         assert hasattr(instance, "logs")
@@ -171,6 +196,11 @@ class TestValidate:
     def instance(self):
         return TheveninEquivalentAnalysis()
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_valid_config(self, instance):
         config = {
             "model": {"rid": "test_model"},
@@ -180,6 +210,11 @@ class TestValidate:
         assert valid is True
         assert len(errors) == 0
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_missing_model(self, instance):
         config = {
             "pcc": {"bus": "BUS1"},
@@ -188,6 +223,11 @@ class TestValidate:
         assert valid is False
         assert len(errors) > 0
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_missing_model_rid(self, instance):
         config = {
             "model": {},
@@ -197,6 +237,11 @@ class TestValidate:
         assert valid is False
         assert any("model.rid" in e for e in errors)
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_missing_pcc(self, instance):
         config = {
             "model": {"rid": "test_model"},
@@ -205,6 +250,11 @@ class TestValidate:
         assert valid is False
         assert len(errors) > 0
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_missing_pcc_bus(self, instance):
         config = {
             "model": {"rid": "test_model"},
@@ -214,16 +264,31 @@ class TestValidate:
         assert valid is False
         assert any("pcc.bus" in e for e in errors)
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_none_config(self, instance):
         valid, errors = instance.validate(None)
         assert valid is False
         assert len(errors) > 0
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_empty_config(self, instance):
         valid, errors = instance.validate({})
         assert valid is False
         assert len(errors) > 0
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_valid_with_base_mva(self, instance):
         config = {
             "model": {"rid": "test_model"},
@@ -232,6 +297,11 @@ class TestValidate:
         valid, errors = instance.validate(config)
         assert valid is True
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_valid_with_engine(self, instance):
         config = {
             "model": {"rid": "test_model"},

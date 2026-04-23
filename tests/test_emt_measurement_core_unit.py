@@ -4,6 +4,7 @@ EMT量测核心 helper - 单元测试
 """
 
 import math
+import pytest
 from unittest.mock import Mock, patch
 
 from cloudpss_skills.core.emt_measurement_core import (
@@ -254,11 +255,8 @@ class TestEnsureVoltageMeter:
         model = Mock()
         mock_find_bus.return_value = None
 
-        try:
+        with pytest.raises(ValueError, match="NONEXISTENT"):
             ensure_voltage_meter(model, "NONEXISTENT", "vac:0")
-            assert False, "Should have raised ValueError"
-        except ValueError as e:
-            assert "NONEXISTENT" in str(e)
 
     @patch("cloudpss_skills.core.emt_measurement_core.add_voltage_meter_output_chain")
     @patch("cloudpss_skills.core.emt_measurement_core.find_bus_component")

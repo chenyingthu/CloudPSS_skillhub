@@ -10,17 +10,37 @@ class TestStudyPipelineTool:
     def instance(self):
         return StudyPipelineTool()
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_import(self):
         assert StudyPipelineTool is not None
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_class_attributes(self):
         assert hasattr(StudyPipelineTool, "name")
         assert StudyPipelineTool.name == "study_pipeline"
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_instantiation(self):
         instance = StudyPipelineTool()
         assert instance is not None
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_instance_attributes(self):
         instance = StudyPipelineTool()
         assert hasattr(instance, "logs")
@@ -34,20 +54,40 @@ class TestValidate:
     def instance(self):
         return StudyPipelineTool()
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_valid_config(self, instance):
         config = {"stages": [{"skill": "test"}]}
         valid, errors = instance.validate(config)
         assert valid is True
         assert len(errors) == 0
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_none_config(self, instance):
         valid, errors = instance.validate(None)
         assert valid is True
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_empty_config(self, instance):
         valid, errors = instance.validate({})
         assert valid is True
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_with_stages(self, instance):
         config = {
             "stages": [
@@ -58,16 +98,31 @@ class TestValidate:
         valid, errors = instance.validate(config)
         assert valid is True
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_with_continue_on_failure(self, instance):
         config = {"stages": [], "continue_on_failure": True}
         valid, errors = instance.validate(config)
         assert valid is True
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_with_parallel(self, instance):
         config = {"stages": [], "parallel": False}
         valid, errors = instance.validate(config)
         assert valid is True
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_with_timeout(self, instance):
         config = {"stages": [], "timeout": 300}
         valid, errors = instance.validate(config)
@@ -79,6 +134,11 @@ class TestExpandPipeline:
     def instance(self):
         return StudyPipelineTool()
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_method_exists(self, instance):
         assert hasattr(instance, "_expand_pipeline")
 
@@ -92,6 +152,11 @@ class TestGetReadySteps:
     def instance(self):
         return StudyPipelineTool()
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_method_exists(self, instance):
         assert hasattr(instance, "_get_ready_steps")
 
@@ -107,6 +172,11 @@ class TestEvaluateCondition:
     def instance(self):
         return StudyPipelineTool()
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_method_exists(self, instance):
         assert hasattr(instance, "_evaluate_condition")
 
@@ -120,6 +190,11 @@ class TestResolveVarPath:
     def instance(self):
         return StudyPipelineTool()
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_method_exists(self, instance):
         assert hasattr(instance, "_resolve_var_path")
 
@@ -133,6 +208,11 @@ class TestResolveConfig:
     def instance(self):
         return StudyPipelineTool()
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_method_exists(self, instance):
         assert hasattr(instance, "_resolve_config")
 
@@ -146,6 +226,11 @@ class TestResolveString:
     def instance(self):
         return StudyPipelineTool()
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_method_exists(self, instance):
         assert hasattr(instance, "_resolve_string")
 
@@ -159,14 +244,29 @@ class TestRun:
     def instance(self):
         return StudyPipelineTool()
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_run_with_none_config(self, instance):
         result = instance.run(None)
         assert result.skill_name == "study_pipeline"
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_run_with_empty_config(self, instance):
         result = instance.run({})
         assert result.skill_name == "study_pipeline"
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_run_with_valid_config(self, instance):
         config = {"stages": [{"skill": "test"}]}
         result = instance.run(config)

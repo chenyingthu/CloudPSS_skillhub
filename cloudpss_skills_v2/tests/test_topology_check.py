@@ -3,38 +3,78 @@ from cloudpss_skills_v2.tools.topology_check import TopologyCheckTool
 
 
 class TestTopologyCheckTool:
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_import(self):
         assert TopologyCheckTool is not None
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_instantiation(self):
         instance = TopologyCheckTool()
         assert instance is not None
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_name_attribute(self):
         instance = TopologyCheckTool()
         assert instance.name == "topology_check"
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_description(self):
         instance = TopologyCheckTool()
         assert hasattr(instance, "description")
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_config_schema(self):
         instance = TopologyCheckTool()
         schema = instance.config_schema
         assert schema is not None
         assert schema["type"] == "object"
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_empty_config(self):
         instance = TopologyCheckTool()
         valid, errors = instance.validate({})
         assert valid is False
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_missing_rid(self):
         instance = TopologyCheckTool()
         config = {"model": {}}
         valid, errors = instance.validate(config)
         assert valid is False
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_valid_config(self):
         instance = TopologyCheckTool()
         config = {"model": {"rid": "test_model"}}
@@ -155,11 +195,21 @@ class TestTopologyCheckTool:
         isolated = instance._find_isolated_generators(buses, generators, adj)
         assert "G1" in isolated
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_run_method(self):
         instance = TopologyCheckTool()
         assert hasattr(instance, "run")
         assert callable(instance.run)
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_log_method(self):
         instance = TopologyCheckTool()
         assert hasattr(instance, "_log")

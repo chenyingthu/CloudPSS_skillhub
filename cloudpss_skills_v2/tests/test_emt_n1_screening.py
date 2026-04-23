@@ -3,37 +3,77 @@ from cloudpss_skills_v2.poweranalysis.emt_n1_screening import EmtN1ScreeningAnal
 
 
 class TestEmtN1ScreeningAnalysis:
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_import(self):
         assert EmtN1ScreeningAnalysis is not None
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_instantiation(self):
         instance = EmtN1ScreeningAnalysis()
         assert instance is not None
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_name_attribute(self):
         instance = EmtN1ScreeningAnalysis()
         assert instance.name == "emt_n1_screening"
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_description(self):
         instance = EmtN1ScreeningAnalysis()
         assert hasattr(instance, "description")
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_config_schema(self):
         instance = EmtN1ScreeningAnalysis()
         schema = instance.config_schema
         assert schema is not None
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_empty_config(self):
         instance = EmtN1ScreeningAnalysis()
         valid, errors = instance.validate({})
         assert valid is False
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_missing_rid(self):
         instance = EmtN1ScreeningAnalysis()
         config = {"model": {}}
         valid, errors = instance.validate(config)
         assert valid is False
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_valid_config(self):
         instance = EmtN1ScreeningAnalysis()
         config = {"model": {"rid": "test_model"}}
@@ -109,11 +149,21 @@ class TestEmtN1ScreeningAnalysis:
         assert digest["moderate_count"] == 1
         assert digest["normal_count"] == 1
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_run_method(self):
         instance = EmtN1ScreeningAnalysis()
         assert hasattr(instance, "run")
         assert callable(instance.run)
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_run_returns_skill_result(self):
         instance = EmtN1ScreeningAnalysis()
         result = instance.run({"model": {"rid": "test"}})
@@ -121,11 +171,21 @@ class TestEmtN1ScreeningAnalysis:
         assert hasattr(result, "skill_name")
         assert hasattr(result, "status")
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_run_with_invalid_config(self):
         instance = EmtN1ScreeningAnalysis()
         result = instance.run({})
         assert result.status.value == "failed" or result.status.name == "failed"
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_log_method(self):
         instance = EmtN1ScreeningAnalysis()
         assert hasattr(instance, "_log")

@@ -3,38 +3,78 @@ from cloudpss_skills_v2.tools.result_compare import ResultCompareTool
 
 
 class TestResultCompareTool:
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_import(self):
         assert ResultCompareTool is not None
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_instantiation(self):
         instance = ResultCompareTool()
         assert instance is not None
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_name_attribute(self):
         instance = ResultCompareTool()
         assert instance.name == "result_compare"
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_description(self):
         instance = ResultCompareTool()
         assert hasattr(instance, "description")
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_config_schema(self):
         instance = ResultCompareTool()
         schema = instance.config_schema
         assert schema is not None
         assert schema["type"] == "object"
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_empty_config(self):
         instance = ResultCompareTool()
         valid, errors = instance.validate({})
         assert valid is False
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_single_source(self):
         instance = ResultCompareTool()
         config = {"sources": [{"name": "source1"}]}
         valid, errors = instance.validate(config)
         assert valid is False
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_validate_two_sources(self):
         instance = ResultCompareTool()
         config = {"sources": [{"name": "s1"}, {"name": "s2"}]}
@@ -120,11 +160,21 @@ class TestResultCompareTool:
         comparison = instance._compare_sources(sources, ["max"])
         assert comparison["max"]["A"] == 0.0
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_run_method(self):
         instance = ResultCompareTool()
         assert hasattr(instance, "run")
         assert callable(instance.run)
 
+    @pytest.mark.smoke
+    @pytest.mark.needs_improvement(
+        reason="仅验证导入，需添加业务逻辑验证",
+        issue="https://github.com/org/repo/issues/456",
+    )
     def test_has_log_method(self):
         instance = ResultCompareTool()
         assert hasattr(instance, "_log")

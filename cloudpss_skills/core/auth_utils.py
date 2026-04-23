@@ -24,7 +24,7 @@ DEFAULT_VOLTAGE_MAX = 1.5
 # CloudPSS 服务器配置
 SERVER_URLS = {
     "public": "https://cloudpss.net/",
-    "internal": os.environ.get("CLOUDPSS_INTERNAL_URL", "https://internal.cloudpss.com"),,
+    "internal": os.environ.get("CLOUDPSS_INTERNAL_URL", "https://internal.cloudpss.com"),
 }
 
 
