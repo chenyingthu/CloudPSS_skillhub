@@ -1,164 +1,155 @@
+"""Tests for cloudpss_skills_v2.poweranalysis.renewable_integration."""
+
+from __future__ import annotations
+
 import pytest
+
+from cloudpss_skills_v2.core.skill_result import SkillStatus
 from cloudpss_skills_v2.poweranalysis.renewable_integration import (
     RenewableIntegrationAnalysis,
     classify_grid_strength,
     compute_scr,
 )
+from cloudpss_skills_v2.powerapi.base import SimulationResult, SimulationStatus
 
 
-class TestRenewableIntegrationAnalysis:
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
+class FakeAdapter:
+    engine_name: str = "fake"
+
+
+class FakeHandle:
+    pass
+
+
+class FakePowerFlow:
+    adapter: FakeAdapter = FakeAdapter()
+
+    def __init__(self) -> None:
+        self.model_rid: str = ""
+
+    def get_model_handle(self, model_rid: str) -> FakeHandle:
+        self.model_rid = model_rid
+        return FakeHandle()
+
+    def run_power_flow(self, model_handle: FakeHandle) -> SimulationResult:
+        return SimulationResult(status=SimulationStatus.COMPLETED, data={"buses": []})
+
+
+def test_classify_grid_strength_boundaries():
+    assert classify_grid_strength(3.0) == "strong"
+    assert classify_grid_strength(2.0) == "moderate"
+    assert classify_grid_strength(1.99) == "weak"
+
+
+def test_compute_scr_uses_renewable_capacity_denominator():
+    assert compute_scr(400.0, 100.0) == 4.0
+    assert compute_scr(400.0, 0.0) == 0.0
+
+
+def test_validate_requires_model_capacity_and_short_circuit_capacity():
+    skill = RenewableIntegrationAnalysis()
+
+    valid, errors = skill.validate({"model": {"rid": "case14"}, "renewable": {}})
+
+    assert valid is False
+    assert any("capacity_mw" in error for error in errors)
+    assert any("short_circuit_mva" in error for error in errors)
+
+
+def test_scr_analysis_classifies_and_checks_threshold():
+    skill = RenewableIntegrationAnalysis()
+
+    result = skill._analyze_scr(
+        {"capacity_mw": 100, "short_circuit_mva": 250}, {"min_scr": 3.0}
     )
-    def test_import(self):
-        assert RenewableIntegrationAnalysis is not None
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
+    assert result["scr"] == 2.5
+    assert result["grid_strength"] == "moderate"
+    assert result["passed"] is False
+
+
+def test_harmonic_analysis_computes_thd():
+    skill = RenewableIntegrationAnalysis()
+
+    result = skill._analyze_harmonics(
+        {"fundamental_voltage": 1.0, "orders": {"5": 0.03, "7": 0.04}, "limit_thd": 0.06}
     )
-    def test_instantiation(self):
-        instance = RenewableIntegrationAnalysis()
-        assert instance is not None
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
+    assert result["thd"] == 0.05
+    assert result["passed"] is True
+
+
+def test_lvrt_analysis_detects_low_voltage_violation():
+    skill = RenewableIntegrationAnalysis()
+
+    result = skill._analyze_lvrt(
+        {
+            "profile": [
+                {"time_s": 0.0, "voltage_pu": 1.0},
+                {"time_s": 0.1, "voltage_pu": 0.1},
+                {"time_s": 2.0, "voltage_pu": 0.92},
+            ],
+            "min_voltage_pu": 0.15,
+            "max_recovery_time_s": 1.5,
+        }
     )
-    def test_has_name_attribute(self):
-        instance = RenewableIntegrationAnalysis()
-        assert instance.name == "renewable_integration"
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
+    assert result["passed"] is False
+    assert result["minimum_voltage_observed"] == 0.1
+
+
+def test_capacity_factor_uses_series_average():
+    skill = RenewableIntegrationAnalysis()
+
+    result = skill._analyze_capacity(
+        {"capacity_mw": 100, "capacity_series_mw": [20, 30, 40, 50]},
+        {"target_capacity_factor": 0.3},
     )
-    def test_has_config_schema(self):
-        instance = RenewableIntegrationAnalysis()
-        schema = instance.config_schema
-        assert schema is not None
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
+    assert result["average_output_mw"] == 35.0
+    assert result["capacity_factor"] == 0.35
+    assert result["passed"] is True
+
+
+def test_calculate_scr_at_buses_uses_per_bus_short_circuit_capacity():
+    skill = RenewableIntegrationAnalysis()
+
+    results = skill._calculate_scr_at_buses(
+        [{"name": "B1", "sc_mva": 500}, {"name": "B2", "sc_mva": 150}], 100
     )
-    def test_validate_empty_config(self):
-        instance = RenewableIntegrationAnalysis()
-        valid, errors = instance.validate({})
-        assert valid is False
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
+    assert results[0]["scr"] == 5.0
+    assert results[0]["strength"] == "strong"
+    assert results[1]["strength"] == "weak"
+
+
+def test_run_returns_standardized_success_payload(monkeypatch: pytest.MonkeyPatch):
+    skill = RenewableIntegrationAnalysis()
+    monkeypatch.setattr(
+        "cloudpss_skills_v2.poweranalysis.renewable_integration.Engine.create_powerflow",
+        lambda engine: FakePowerFlow(),
     )
-    def test_validate_missing_rid(self):
-        instance = RenewableIntegrationAnalysis()
-        config = {"model": {}}
-        valid, errors = instance.validate(config)
-        assert valid is False
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
+    result = skill.run(skill.get_default_config())
+
+    assert result.status == SkillStatus.SUCCESS
+    assert result.data["skill_name"] == "renewable_integration"
+    assert result.data["success"] is True
+    assert result.data["results"]["scr"]["scr"] == 3.5
+    assert result.data["model_info"]["power_flow_converged"] is True
+
+
+def test_run_fails_when_thd_exceeds_limit(monkeypatch: pytest.MonkeyPatch):
+    skill = RenewableIntegrationAnalysis()
+    config = skill.get_default_config()
+    config["harmonics"]["orders"] = {"5": 0.08}
+    monkeypatch.setattr(
+        "cloudpss_skills_v2.poweranalysis.renewable_integration.Engine.create_powerflow",
+        lambda engine: FakePowerFlow(),
     )
-    def test_validate_valid_config(self):
-        instance = RenewableIntegrationAnalysis()
-        config = {"model": {"rid": "test"}}
-        valid, errors = instance.validate(config)
-        assert valid is True
 
-    def test_calculate_scr_at_buses(self):
-        instance = RenewableIntegrationAnalysis()
-        buses = [{"name": "B1", "sc_mva": 100.0}]
-        results = instance._calculate_scr_at_buses(buses, 100.0)
-        assert len(results) == 1
-        assert results[0]["scr"] == 1.0
+    result = skill.run(config)
 
-    def test_calculate_scr_strong_grid(self):
-        instance = RenewableIntegrationAnalysis()
-        buses = [{"name": "B1", "sc_mva": 500.0}]
-        results = instance._calculate_scr_at_buses(buses, 100.0)
-        assert results[0]["strength"] == "strong"
-
-    def test_calculate_scr_moderate_grid(self):
-        instance = RenewableIntegrationAnalysis()
-        buses = [{"name": "B1", "sc_mva": 250.0}]
-        results = instance._calculate_scr_at_buses(buses, 100.0)
-        assert results[0]["strength"] == "moderate"
-
-    def test_calculate_scr_weak_grid(self):
-        instance = RenewableIntegrationAnalysis()
-        buses = [{"name": "B1", "sc_mva": 100.0}]
-        results = instance._calculate_scr_at_buses(buses, 100.0)
-        assert results[0]["strength"] == "weak"
-
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
-    def test_run_returns_skill_result(self):
-        instance = RenewableIntegrationAnalysis()
-        result = instance.run({"model": {"rid": "test"}})
-        assert result is not None
-        assert hasattr(result, "skill_name")
-
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
-    def test_run_with_invalid_config(self):
-        instance = RenewableIntegrationAnalysis()
-        result = instance.run({})
-        assert result.status.value == "failed" or result.status.name == "failed"
-
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
-    def test_has_log_method(self):
-        instance = RenewableIntegrationAnalysis()
-        assert hasattr(instance, "_log")
-        assert callable(instance._log)
-
-
-class TestGridStrengthClassification:
-    def test_classify_grid_strength_strong(self):
-        assert classify_grid_strength(3.5) == "strong"
-        assert classify_grid_strength(3.0) == "strong"
-
-    def test_classify_grid_strength_moderate(self):
-        assert classify_grid_strength(2.5) == "moderate"
-        assert classify_grid_strength(2.0) == "moderate"
-
-    def test_classify_grid_strength_weak(self):
-        assert classify_grid_strength(1.5) == "weak"
-        assert classify_grid_strength(1.0) == "weak"
-
-
-class TestSCRCalculation:
-    def test_compute_scr_basic(self):
-        scr = compute_scr(100.0, 1.0, 100.0)
-        assert scr == 1.0
-
-    def test_compute_scr_high_sc(self):
-        scr = compute_scr(500.0, 1.0, 100.0)
-        assert scr == 5.0
-
-    def test_compute_scr_zero_voltage(self):
-        scr = compute_scr(100.0, 0.0, 100.0)
-        assert scr == 0.0
-
-    def test_compute_scr_zero_base(self):
-        scr = compute_scr(100.0, 1.0, 0.0)
-        assert scr == 0.0
+    assert result.status == SkillStatus.FAILED
+    assert result.data["summary"]["failed_checks"] == ["harmonics"]
+    assert result.error

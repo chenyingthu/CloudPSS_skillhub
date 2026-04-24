@@ -12,6 +12,10 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional
 
+from cloudpss_skills_v2.core.token_manager import (
+    CloudPSSAdapter,
+    build_cloudpss_adapter,
+)
 from cloudpss_skills_v2.powerapi.base import (
     EngineAdapter,
     EngineConfig,
@@ -60,6 +64,9 @@ class CloudPSSShortCircuitAdapter(EngineAdapter):
         super().__init__(config)
         self._model_cache = {}
         self._result_cache = {}
+        self._cloudpss = CloudPSSAdapter(
+            api_url=CloudPSSAdapter.resolve_api_url(self._config.extra.get("auth", {}))
+        )
 
     @property
     def engine_name(self) -> str:
@@ -69,14 +76,15 @@ class CloudPSSShortCircuitAdapter(EngineAdapter):
         return [SimulationType.SHORT_CIRCUIT]
 
     def _do_connect(self) -> None:
-        auth_token = self._config.extra.get("auth", {}).get("token")
-        if auth_token:
-            try:
-                from cloudpss import setToken
+        auth = self._config.extra.get("auth", {})
+        try:
+            self._cloudpss = CloudPSSAdapter.from_config(auth)
+        except ValueError as exc:
+            self._logger.warning("CloudPSS token setup skipped: %s", exc)
+            return
 
-                setToken(auth_token)
-            except ImportError:
-                pass
+        if not self._cloudpss.connect():
+            pass
 
     def _do_disconnect(self) -> None:
         self._model_cache.clear()
@@ -86,12 +94,7 @@ class CloudPSSShortCircuitAdapter(EngineAdapter):
         from cloudpss import Model
 
         source = self._config.extra.get("model", {}).get("source", "cloud")
-        kwargs = {}
-        base_url = self._config.extra.get("auth", {}).get(
-            "base_url"
-        ) or self._config.extra.get("auth", {}).get("baseUrl")
-        if base_url:
-            kwargs["baseUrl"] = base_url
+        kwargs = self._cloudpss.sdk_kwargs()
         if source == "local":
             model = Model.load(model_id)
         else:
@@ -106,19 +109,20 @@ class CloudPSSShortCircuitAdapter(EngineAdapter):
                 status=SimulationStatus.FAILED, errors=["No model_id provided"]
             )
 
-        self._setup_auth(config)
+        try:
+            cloudpss = self._setup_auth(config)
+        except ValueError as e:
+            return SimulationResult(
+                status=SimulationStatus.FAILED,
+                errors=[f"CloudPSS authentication failed: {e}"],
+            )
 
         model = self._model_cache.get(model_id)
         if model is None:
             try:
                 from cloudpss import Model
 
-                kwargs = {}
-                base_url = config.get("auth", {}).get("base_url") or config.get(
-                    "auth", {}
-                ).get("baseUrl")
-                if base_url:
-                    kwargs["baseUrl"] = base_url
+                kwargs = cloudpss.sdk_kwargs()
                 source = config.get("source", "cloud")
                 if source == "local":
                     model = Model.load(model_id)
@@ -157,12 +161,7 @@ class CloudPSSShortCircuitAdapter(EngineAdapter):
         timeout = config.get("timeout", 300)
 
         try:
-            kwargs = {}
-            base_url = config.get("auth", {}).get("base_url") or config.get(
-                "auth", {}
-            ).get("baseUrl")
-            if base_url:
-                kwargs["baseUrl"] = base_url
+            kwargs = cloudpss.sdk_kwargs()
 
             job = model.runEMT(**kwargs)
 
@@ -210,7 +209,7 @@ class CloudPSSShortCircuitAdapter(EngineAdapter):
             bus_voltages = self._extract_bus_voltages(emt_result)
 
             result_data = {
-                "model_name": model.name if hasattr(model, "name") else model_id,
+                "model_name": getattr(model, "name", model_id),
                 "model_rid": model.rid if hasattr(model, "rid") else model_id,
                 "job_id": getattr(job, "id", job_id),
                 "fault_type": fault_type,
@@ -264,34 +263,12 @@ class CloudPSSShortCircuitAdapter(EngineAdapter):
             )
         return ValidationResult(valid=len(errors) == 0, errors=errors)
 
-    def _setup_auth(self, config: dict) -> None:
-        import os
-        from pathlib import Path
+    def _setup_auth(self, config: dict[str, Any]) -> CloudPSSAdapter:
+        return build_cloudpss_adapter(config)
 
-        auth = config.get("auth", {})
-        token = auth.get("token")
-        base_url = auth.get("base_url") or auth.get("baseUrl")
-        if base_url:
-            os.environ["CLOUDPSS_API_URL"] = base_url
-        elif auth.get("server") == "internal":
-            os.environ.setdefault("CLOUDPSS_API_URL", "https://internal.cloudpss.com")
-        if not token:
-            for fallback in [".cloudpss_token", ".cloudpss_token_internal"]:
-                p = Path(fallback)
-                if p.exists():
-                    token = p.read_text().strip()
-                    break
-        if token:
-            try:
-                from cloudpss import setToken
-
-                setToken(token)
-            except ImportError:
-                pass
-
-    def _extract_fault_currents(self, emt_result) -> list[dict]:
+    def _extract_fault_currents(self, emt_result: Any) -> list[dict[str, Any]]:
         """Extract fault current magnitudes from EMT waveform data."""
-        currents = []
+        currents: list[dict[str, Any]] = []
         try:
             plots = list(emt_result.getPlots())
             for i, plot in enumerate(plots):
@@ -312,9 +289,9 @@ class CloudPSSShortCircuitAdapter(EngineAdapter):
             pass
         return currents
 
-    def _extract_bus_voltages(self, emt_result) -> list[dict]:
+    def _extract_bus_voltages(self, emt_result: Any) -> list[dict[str, Any]]:
         """Extract bus voltage magnitudes from EMT waveform data."""
-        voltages = []
+        voltages: list[dict[str, Any]] = []
         try:
             plots = list(emt_result.getPlots())
             for i, plot in enumerate(plots):

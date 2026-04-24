@@ -15,6 +15,10 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional
 
+from cloudpss_skills_v2.core.token_manager import (
+    CloudPSSAdapter,
+    build_cloudpss_adapter,
+)
 from cloudpss_skills_v2.powerapi.base import (
     EngineAdapter,
     EngineConfig,
@@ -66,8 +70,8 @@ _BRANCH_KEY_MAP = {
 }
 
 
-def _normalize_bus_row(raw: dict) -> dict:
-    result = {}
+def _normalize_bus_row(raw: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
     for k, v in raw.items():
         mapped = _BUS_KEY_MAP.get(k)
         if mapped:
@@ -81,8 +85,8 @@ def _normalize_bus_row(raw: dict) -> dict:
     return result
 
 
-def _normalize_branch_row(raw: dict) -> dict:
-    result = {}
+def _normalize_branch_row(raw: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
     for k, v in raw.items():
         mapped = _BRANCH_KEY_MAP.get(k)
         if mapped:
@@ -97,7 +101,7 @@ def _normalize_branch_row(raw: dict) -> dict:
     return result
 
 
-def _parse_cloudpss_table(table) -> list[dict]:
+def _parse_cloudpss_table(table: Any) -> list[dict[str, Any]]:
     """Parse CloudPSS SDK table format (columnar) into row dicts."""
     if table is None:
         return []
@@ -112,7 +116,7 @@ def _parse_cloudpss_table(table) -> list[dict]:
             n_rows = len(columns[0].get("data", []))
             rows = []
             for i in range(n_rows):
-                row = {}
+                row: dict[str, Any] = {}
                 for col in columns:
                     clean_name = _strip_html(col["name"])
                     row[clean_name] = col["data"][i]
@@ -125,39 +129,10 @@ def _parse_cloudpss_table(table) -> list[dict]:
     return []
 
 
-def _setup_auth(config: dict) -> None:
-    """Set up CloudPSS authentication from config dict."""
-    import os
-    from pathlib import Path
+def _setup_auth(config: dict[str, Any]) -> CloudPSSAdapter:
+    """Set up CloudPSS authentication without modifying global environment."""
 
-    auth = config.get("auth", {})
-    token = auth.get("token")
-
-    base_url = auth.get("base_url") or auth.get("baseUrl")
-    if base_url:
-        os.environ["CLOUDPSS_API_URL"] = base_url
-    elif auth.get("server") == "internal":
-        os.environ.setdefault("CLOUDPSS_API_URL", "https://internal.cloudpss.com")
-
-    if not token:
-        token_file = auth.get("token_file", ".cloudpss_token")
-        token_path = Path(token_file)
-        if token_path.exists():
-            token = token_path.read_text().strip()
-        else:
-            for fallback in [".cloudpss_token", ".cloudpss_token_internal"]:
-                p = Path(fallback)
-                if p.exists():
-                    token = p.read_text().strip()
-                    break
-
-    if token:
-        try:
-            from cloudpss import setToken
-
-            setToken(token)
-        except ImportError:
-            pass
+    return build_cloudpss_adapter(config)
 
 
 class CloudPSSPowerFlowAdapter(EngineAdapter):
@@ -180,6 +155,9 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
         self._model_cache = {}
         self._result_cache: dict[str, SimulationResult] = {}
         self._original_rid_map = {}
+        self._cloudpss = CloudPSSAdapter(
+            api_url=CloudPSSAdapter.resolve_api_url(self._config.extra.get("auth", {}))
+        )
 
     @property
     def engine_name(self) -> str:
@@ -189,14 +167,15 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
         return [SimulationType.POWER_FLOW]
 
     def _do_connect(self) -> None:
-        auth_token = self._config.extra.get("auth", {}).get("token")
-        if auth_token:
-            try:
-                from cloudpss import setToken
+        auth = self._config.extra.get("auth", {})
+        try:
+            self._cloudpss = CloudPSSAdapter.from_config(auth)
+        except ValueError as exc:
+            self._logger.warning("CloudPSS token setup skipped: %s", exc)
+            return
 
-                setToken(auth_token)
-            except ImportError:
-                self._logger.warning("cloudpss SDK not installed; skipping token setup")
+        if not self._cloudpss.connect():
+            self._logger.warning("cloudpss SDK not installed; skipping token setup")
 
     def _do_disconnect(self) -> None:
         self._model_cache.clear()
@@ -207,12 +186,7 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
         from cloudpss import Model
 
         source = self._config.extra.get("model", {}).get("source", "cloud")
-        kwargs = {}
-        base_url = self._config.extra.get("auth", {}).get(
-            "base_url"
-        ) or self._config.extra.get("auth", {}).get("baseUrl")
-        if base_url:
-            kwargs["baseUrl"] = base_url
+        kwargs = self._cloudpss.sdk_kwargs()
 
         if source == "local":
             model = Model.load(model_id)
@@ -221,7 +195,11 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
 
         self._model_cache[model_id] = model
         self._original_rid_map[model_id] = model_id
-        self._logger.info("Model loaded: %s (%s)", model.name, model.rid)
+        self._logger.info(
+            "Model loaded: %s (%s)",
+            getattr(model, "name", model_id),
+            getattr(model, "rid", model_id),
+        )
         return True
 
     def _do_run_simulation(self, config: dict[str, Any]) -> SimulationResult:
@@ -232,17 +210,18 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
                 errors=["No model_id provided"],
             )
 
-        _setup_auth(config)
+        try:
+            cloudpss = _setup_auth(config)
+        except ValueError as e:
+            return SimulationResult(
+                status=SimulationStatus.FAILED,
+                errors=[f"CloudPSS authentication failed: {e}"],
+            )
 
         model = self._model_cache.get(model_id)
         if model is None:
             source = config.get("source", "cloud")
-            kwargs = {}
-            base_url = config.get("auth", {}).get("base_url") or config.get(
-                "auth", {}
-            ).get("baseUrl")
-            if base_url:
-                kwargs["baseUrl"] = base_url
+            kwargs = cloudpss.sdk_kwargs()
             try:
                 from cloudpss import Model
 
@@ -261,12 +240,7 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
         started = datetime.now()
 
         try:
-            kwargs = {}
-            base_url = config.get("auth", {}).get("base_url") or config.get(
-                "auth", {}
-            ).get("baseUrl")
-            if base_url:
-                kwargs["baseUrl"] = base_url
+            kwargs = cloudpss.sdk_kwargs()
 
             job = model.runPowerFlow(**kwargs)
 
@@ -274,6 +248,7 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
             poll_interval = 2
             waited = 0
 
+            sdk_status = 0
             while waited < max_wait:
                 sdk_status = job.status()
                 if sdk_status == 1:  # DONE
@@ -317,7 +292,7 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
             summary = _generate_pf_summary(normalized_buses, normalized_branches)
 
             result_data = {
-                "model": model.name if hasattr(model, "name") else model_id,
+                "model": getattr(model, "name", model_id),
                 "model_rid": model.rid if hasattr(model, "rid") else model_id,
                 "job_id": getattr(job, "id", job_id),
                 "converged": True,
@@ -412,12 +387,7 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
         from cloudpss import Model
 
         source = self._config.extra.get("model", {}).get("source", "cloud")
-        kwargs = {}
-        base_url = self._config.extra.get("auth", {}).get(
-            "base_url"
-        ) or self._config.extra.get("auth", {}).get("baseUrl")
-        if base_url:
-            kwargs["baseUrl"] = base_url
+        kwargs = self._cloudpss.sdk_kwargs()
         if source == "local":
             model = Model.load(model_id)
         else:
@@ -505,12 +475,7 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
         from cloudpss import Model
 
         source = self._config.extra.get("model", {}).get("source", "cloud")
-        kwargs = {}
-        base_url = self._config.extra.get("auth", {}).get(
-            "base_url"
-        ) or self._config.extra.get("auth", {}).get("baseUrl")
-        if base_url:
-            kwargs["baseUrl"] = base_url
+        kwargs = self._cloudpss.sdk_kwargs()
 
         if source == "local":
             new_model = Model.load(original_rid)
@@ -539,7 +504,9 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
         return ValidationResult(valid=len(errors) == 0, errors=errors)
 
 
-def _generate_pf_summary(bus_rows: list[dict], branch_rows: list[dict]) -> dict:
+def _generate_pf_summary(
+    bus_rows: list[dict[str, Any]], branch_rows: list[dict[str, Any]]
+) -> dict[str, Any]:
     """Generate power flow summary statistics from normalized result rows."""
     total_p_gen = 0.0
     total_q_gen = 0.0

@@ -9,14 +9,15 @@ Implements the EngineAdapter ABC for the CloudPSS platform, handling:
 
 from __future__ import annotations
 
-import csv
-import json
 import time
 import uuid
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Optional
 
+from cloudpss_skills_v2.core.token_manager import (
+    CloudPSSAdapter,
+    build_cloudpss_adapter,
+)
 from cloudpss_skills_v2.powerapi.base import (
     EngineAdapter,
     EngineConfig,
@@ -46,6 +47,9 @@ class CloudPSSEMTAdapter(EngineAdapter):
         super().__init__(config)
         self._model_cache = {}
         self._result_cache = {}
+        self._cloudpss = CloudPSSAdapter(
+            api_url=CloudPSSAdapter.resolve_api_url(self._config.extra.get("auth", {}))
+        )
 
     @property
     def engine_name(self) -> str:
@@ -55,14 +59,15 @@ class CloudPSSEMTAdapter(EngineAdapter):
         return [SimulationType.EMT]
 
     def _do_connect(self) -> None:
-        auth_token = self._config.extra.get("auth", {}).get("token")
-        if auth_token:
-            try:
-                from cloudpss import setToken
+        auth = self._config.extra.get("auth", {})
+        try:
+            self._cloudpss = CloudPSSAdapter.from_config(auth)
+        except ValueError as exc:
+            self._logger.warning("CloudPSS token setup skipped: %s", exc)
+            return
 
-                setToken(auth_token)
-            except ImportError:
-                self._logger.warning("cloudpss SDK not installed; skipping token setup")
+        if not self._cloudpss.connect():
+            self._logger.warning("cloudpss SDK not installed; skipping token setup")
 
     def _do_disconnect(self) -> None:
         self._model_cache.clear()
@@ -72,12 +77,7 @@ class CloudPSSEMTAdapter(EngineAdapter):
         from cloudpss import Model
 
         source = self._config.extra.get("model", {}).get("source", "cloud")
-        kwargs = {}
-        base_url = self._config.extra.get("auth", {}).get(
-            "base_url"
-        ) or self._config.extra.get("auth", {}).get("baseUrl")
-        if base_url:
-            kwargs["baseUrl"] = base_url
+        kwargs = self._cloudpss.sdk_kwargs()
 
         if source == "local":
             model = Model.load(model_id)
@@ -85,7 +85,11 @@ class CloudPSSEMTAdapter(EngineAdapter):
             model = Model.fetch(model_id, **kwargs)
 
         self._model_cache[model_id] = model
-        self._logger.info("Model loaded: %s (%s)", model.name, model.rid)
+        self._logger.info(
+            "Model loaded: %s (%s)",
+            getattr(model, "name", model_id),
+            getattr(model, "rid", model_id),
+        )
         return True
 
     def _do_run_simulation(self, config: dict[str, Any]) -> SimulationResult:
@@ -96,17 +100,18 @@ class CloudPSSEMTAdapter(EngineAdapter):
                 errors=["No model_id provided"],
             )
 
-        self._setup_auth(config)
+        try:
+            cloudpss = self._setup_auth(config)
+        except ValueError as e:
+            return SimulationResult(
+                status=SimulationStatus.FAILED,
+                errors=[f"CloudPSS authentication failed: {e}"],
+            )
 
         model = self._model_cache.get(model_id)
         if model is None:
             source = config.get("source", "cloud")
-            kwargs = {}
-            base_url = config.get("auth", {}).get("base_url") or config.get(
-                "auth", {}
-            ).get("baseUrl")
-            if base_url:
-                kwargs["baseUrl"] = base_url
+            kwargs = cloudpss.sdk_kwargs()
             try:
                 from cloudpss import Model
 
@@ -136,16 +141,13 @@ class CloudPSSEMTAdapter(EngineAdapter):
         timeout = config.get("timeout", 300)
 
         try:
-            kwargs = {}
-            base_url = config.get("auth", {}).get("base_url") or config.get(
-                "auth", {}
-            ).get("baseUrl")
-            if base_url:
-                kwargs["baseUrl"] = base_url
+            kwargs = cloudpss.sdk_kwargs()
 
             # Check EMT topology first
             try:
                 topology = model.fetchTopology(implementType="emtp")
+                if topology is None:
+                    raise AttributeError("fetchTopology returned None")
                 topology_data = topology.toJSON()
                 component_count = len(topology_data.get("components", {}))
                 self._logger.info(
@@ -204,7 +206,7 @@ class CloudPSSEMTAdapter(EngineAdapter):
             plots_data = self._extract_plot_data(emt_result)
 
             result_data = {
-                "model_name": model.name if hasattr(model, "name") else model_id,
+                "model_name": getattr(model, "name", model_id),
                 "model_rid": model.rid if hasattr(model, "rid") else model_id,
                 "job_id": getattr(job, "id", job_id),
                 "plot_count": len(plots_data),
@@ -260,41 +262,12 @@ class CloudPSSEMTAdapter(EngineAdapter):
             )
         return ValidationResult(valid=len(errors) == 0, errors=errors)
 
-    def _setup_auth(self, config: dict) -> None:
-        """Set up CloudPSS authentication from config dict."""
-        import os
-        from pathlib import Path
+    def _setup_auth(self, config: dict[str, Any]) -> CloudPSSAdapter:
+        """Set up CloudPSS authentication without modifying global environment."""
 
-        auth = config.get("auth", {})
-        token = auth.get("token")
+        return build_cloudpss_adapter(config)
 
-        base_url = auth.get("base_url") or auth.get("baseUrl")
-        if base_url:
-            os.environ["CLOUDPSS_API_URL"] = base_url
-        elif auth.get("server") == "internal":
-            os.environ.setdefault("CLOUDPSS_API_URL", "https://internal.cloudpss.com")
-
-        if not token:
-            token_file = auth.get("token_file", ".cloudpss_token")
-            token_path = Path(token_file)
-            if token_path.exists():
-                token = token_path.read_text().strip()
-            else:
-                for fallback in [".cloudpss_token", ".cloudpss_token_internal"]:
-                    p = Path(fallback)
-                    if p.exists():
-                        token = p.read_text().strip()
-                        break
-
-        if token:
-            try:
-                from cloudpss import setToken
-
-                setToken(token)
-            except ImportError:
-                pass
-
-    def _apply_fault_parameters(self, model, fault_config: dict) -> Any:
+    def _apply_fault_parameters(self, model: Any, fault_config: dict[str, Any]) -> Any:
         """Adjust fault component parameters (fs/fe) on the model."""
         FAULT_DEFINITION = "model/CloudPSS/_newFaultResistor_3p"
         try:
@@ -365,9 +338,9 @@ class CloudPSSEMTAdapter(EngineAdapter):
 
         return model
 
-    def _extract_plot_data(self, emt_result) -> list[dict]:
+    def _extract_plot_data(self, emt_result: Any) -> list[dict[str, Any]]:
         """Extract plot metadata and channel data from EMT result."""
-        plots = []
+        plots: list[dict[str, Any]] = []
         try:
             raw_plots = list(emt_result.getPlots())
             for i, plot in enumerate(raw_plots):

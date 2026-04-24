@@ -429,7 +429,13 @@ class DisturbanceSeveritySkill(SkillBase):
         # 设置 API URL
         if base_url:
             os.environ["CLOUDPSS_API_URL"] = base_url
-        elif server == "internal":        else:        if not token and auth.get("token_file"):
+        elif server == "internal":
+            os.environ["CLOUDPSS_API_URL"] = "https://internal.cloudpss.com"
+        else:
+            os.environ["CLOUDPSS_API_URL"] = "https://cloudpss.net"
+
+        # 从文件读取 token（如果未提供）
+        if not token and auth.get("token_file"):
             try:
                 with open(auth["token_file"], "r") as f:
                     token = f.read().strip()

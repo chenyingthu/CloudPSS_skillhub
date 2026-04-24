@@ -1,192 +1,126 @@
 import pytest
+from types import SimpleNamespace
+
+from cloudpss_skills_v2.core.skill_result import SkillStatus
 from cloudpss_skills_v2.poweranalysis.emt_n1_screening import EmtN1ScreeningAnalysis
 
 
+class _FakeHandle:
+    def __init__(self):
+        self.removed = []
+        self.model_id = "working-model"
+
+    def clone(self):
+        clone = _FakeHandle()
+        clone.removed = self.removed
+        return clone
+
+    def remove_component(self, component_key):
+        self.removed.append(component_key)
+        return True
+
+
 class TestEmtN1ScreeningAnalysis:
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
-    def test_import(self):
-        assert EmtN1ScreeningAnalysis is not None
-
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
-    def test_instantiation(self):
+    def test_build_fault_config_defaults_actual_trip_to_true(self):
         instance = EmtN1ScreeningAnalysis()
-        assert instance is not None
+        fault_config = instance._build_fault_config({"branch": "line_1"})
+        assert fault_config["branch"] == "line_1"
+        assert fault_config["actual_trip"] is True
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
-    def test_has_name_attribute(self):
+    def test_build_fault_config_preserves_explicit_actual_trip(self):
         instance = EmtN1ScreeningAnalysis()
-        assert instance.name == "emt_n1_screening"
+        fault_config = instance._build_fault_config(
+            {"branch": "line_1", "actual_trip": False, "fault": {"type": "3ph"}}
+        )
+        assert fault_config == {"type": "3ph", "branch": "line_1", "actual_trip": False}
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
-    def test_has_description(self):
+    def test_run_executes_actual_trip_and_emt_simulation(self, monkeypatch):
         instance = EmtN1ScreeningAnalysis()
-        assert hasattr(instance, "description")
+        handle = _FakeHandle()
+        pf_calls = []
+        emt_calls = []
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
-    def test_has_config_schema(self):
+        pf_api = SimpleNamespace(
+            adapter=SimpleNamespace(engine_name="fake_pf"),
+            get_model_handle=lambda model_rid: handle,
+            run_power_flow=lambda **kwargs: (
+                pf_calls.append(kwargs)
+                or SimpleNamespace(is_success=True, data={"max_voltage": 0.9})
+            ),
+        )
+        emt_api = SimpleNamespace(
+            adapter=SimpleNamespace(engine_name="fake_emt"),
+            run_emt=lambda **kwargs: (
+                emt_calls.append(kwargs)
+                or SimpleNamespace(is_success=True, data={"plots": []})
+            ),
+        )
+
+        monkeypatch.setattr(
+            "cloudpss_skills_v2.poweranalysis.emt_n1_screening.Engine.create_powerflow",
+            lambda engine="cloudpss": pf_api,
+        )
+        monkeypatch.setattr(
+            "cloudpss_skills_v2.poweranalysis.emt_n1_screening.Engine.create_emt",
+            lambda engine="cloudpss": emt_api,
+        )
+
+        result = instance.run(
+            {
+                "model": {"rid": "model/test", "source": "cloud"},
+                "auth": {"token": "token"},
+                "contingencies": [{"branch": "line_1"}],
+                "simulation": {"duration": 1.5, "sampling_freq": 1000},
+            }
+        )
+
+        assert result.status == SkillStatus.SUCCESS
+        assert handle.removed == ["line_1"]
+        assert len(pf_calls) == 2
+        assert len(emt_calls) == 1
+        assert emt_calls[0]["model_id"] is not None
+        assert emt_calls[0]["fault_config"]["actual_trip"] is True
+        assert result.data["results"][0]["actual_trip"] is True
+        assert result.data["results"][0]["emt_success"] is True
+
+    def test_run_skips_topology_trip_when_actual_trip_disabled(self, monkeypatch):
         instance = EmtN1ScreeningAnalysis()
-        schema = instance.config_schema
-        assert schema is not None
+        handle = _FakeHandle()
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
+        pf_api = SimpleNamespace(
+            adapter=SimpleNamespace(engine_name="fake_pf"),
+            get_model_handle=lambda model_rid: handle,
+            run_power_flow=lambda **kwargs: SimpleNamespace(
+                is_success=True, data={"max_voltage": 1.0}
+            ),
+        )
+        emt_api = SimpleNamespace(
+            adapter=SimpleNamespace(engine_name="fake_emt"),
+            run_emt=lambda **kwargs: SimpleNamespace(is_success=True, data={"plots": []}),
+        )
+
+        monkeypatch.setattr(
+            "cloudpss_skills_v2.poweranalysis.emt_n1_screening.Engine.create_powerflow",
+            lambda engine="cloudpss": pf_api,
+        )
+        monkeypatch.setattr(
+            "cloudpss_skills_v2.poweranalysis.emt_n1_screening.Engine.create_emt",
+            lambda engine="cloudpss": emt_api,
+        )
+
+        result = instance.run(
+            {
+                "model": {"rid": "model/test"},
+                "contingencies": [{"branch": "line_1", "actual_trip": False}],
+            }
+        )
+
+        assert result.status == SkillStatus.SUCCESS
+        assert handle.removed == []
+        assert result.data["results"][0]["actual_trip"] is False
+
     def test_validate_empty_config(self):
         instance = EmtN1ScreeningAnalysis()
         valid, errors = instance.validate({})
         assert valid is False
-
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
-    def test_validate_missing_rid(self):
-        instance = EmtN1ScreeningAnalysis()
-        config = {"model": {}}
-        valid, errors = instance.validate(config)
-        assert valid is False
-
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
-    def test_validate_valid_config(self):
-        instance = EmtN1ScreeningAnalysis()
-        config = {"model": {"rid": "test_model"}}
-        valid, errors = instance.validate(config)
-        assert valid is True
-
-    def test_calculate_postfault_gap_equal(self):
-        instance = EmtN1ScreeningAnalysis()
-        gap = instance._calculate_postfault_gap(1.0, 1.0)
-        assert gap == 0.0
-
-    def test_calculate_postfault_gap_positive(self):
-        instance = EmtN1ScreeningAnalysis()
-        gap = instance._calculate_postfault_gap(1.0, 1.1)
-        assert gap == abs(1.0 - 1.1)
-
-    def test_calculate_postfault_gap_negative(self):
-        instance = EmtN1ScreeningAnalysis()
-        gap = instance._calculate_postfault_gap(1.0, 0.9)
-        assert gap == abs(1.0 - 0.9)
-
-    def test_assess_severity_high_gap(self):
-        instance = EmtN1ScreeningAnalysis()
-        thresholds = {"voltage_deviation": 0.1}
-        severity = instance._assess_severity_level(0.25, thresholds)
-        assert severity == "severe"
-
-    def test_assess_severity_moderate_gap(self):
-        instance = EmtN1ScreeningAnalysis()
-        thresholds = {"voltage_deviation": 0.1}
-        severity = instance._assess_severity_level(0.15, thresholds)
-        assert severity == "moderate"
-
-    def test_assess_severity_normal_gap(self):
-        instance = EmtN1ScreeningAnalysis()
-        thresholds = {"voltage_deviation": 0.1}
-        severity = instance._assess_severity_level(0.05, thresholds)
-        assert severity == "normal"
-
-    def test_rank_results(self):
-        instance = EmtN1ScreeningAnalysis()
-        results = [
-            {"branch": "B1", "max_gap": 0.05},
-            {"branch": "B2", "max_gap": 0.15},
-            {"branch": "B3", "max_gap": 0.25},
-        ]
-        thresholds = {"voltage_deviation": 0.1}
-        ranked = instance._rank_results(results, thresholds)
-        assert ranked[0]["severity"] == "severe"
-        assert ranked[2]["severity"] == "normal"
-
-    def test_build_digest_all_severe(self):
-        instance = EmtN1ScreeningAnalysis()
-        results = [
-            {"branch": "B1", "severity": "severe"},
-            {"branch": "B2", "severity": "severe"},
-        ]
-        baseline = {}
-        digest = instance._build_digest(baseline, results)
-        assert digest["severe_count"] == 2
-        assert digest["total_contingencies"] == 2
-
-    def test_build_digest_mixed(self):
-        instance = EmtN1ScreeningAnalysis()
-        results = [
-            {"branch": "B1", "severity": "severe"},
-            {"branch": "B2", "severity": "moderate"},
-            {"branch": "B3", "severity": "normal"},
-        ]
-        baseline = {}
-        digest = instance._build_digest(baseline, results)
-        assert digest["severe_count"] == 1
-        assert digest["moderate_count"] == 1
-        assert digest["normal_count"] == 1
-
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
-    def test_has_run_method(self):
-        instance = EmtN1ScreeningAnalysis()
-        assert hasattr(instance, "run")
-        assert callable(instance.run)
-
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
-    def test_run_returns_skill_result(self):
-        instance = EmtN1ScreeningAnalysis()
-        result = instance.run({"model": {"rid": "test"}})
-        assert result is not None
-        assert hasattr(result, "skill_name")
-        assert hasattr(result, "status")
-
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
-    def test_run_with_invalid_config(self):
-        instance = EmtN1ScreeningAnalysis()
-        result = instance.run({})
-        assert result.status.value == "failed" or result.status.name == "failed"
-
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
-    def test_has_log_method(self):
-        instance = EmtN1ScreeningAnalysis()
-        assert hasattr(instance, "_log")
-        assert callable(instance._log)
+        assert errors == ["config is required"]

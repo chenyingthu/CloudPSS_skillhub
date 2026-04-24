@@ -45,6 +45,61 @@
 - **自动新能源识别**：从模型拓扑自动识别新能源组件
 - **综合评估报告**：生成包含结论、建议和限制的完整报告
 
+## v2 实现说明
+
+`cloudpss_skills_v2/poweranalysis/renewable_integration.py` 当前按以下 P2 范围实现：
+
+- `SCR = S_sc / P_renewable` 计算，并输出 `strong / moderate / weak` 电网强度分类
+- 基于输入谐波谱计算 THD，并按 `harmonics.limit_thd` 进行限值判断
+- 基于电压跌落时序 `lvrt.profile[]` 评估最小电压与恢复时间
+- 基于有功出力序列 `renewable.capacity_series_mw[]` 计算容量因子
+- 调用 v2 PowerFlow API 以验证与 CloudPSS / pandapower 的接线链路
+
+当前 v2 版本不声称完成完整 EMT 并网合规认证；LVRT 判据是基于输入电压曲线做标准化离线校核，适合作为工程筛查与单元测试基线。
+
+### v2 配置补充示例
+
+```yaml
+skill: renewable_integration
+engine: pandapower
+model:
+  rid: case14
+renewable:
+  type: pv
+  point_of_interconnection: bus_1
+  capacity_mw: 100
+  short_circuit_mva: 350
+  capacity_series_mw: [40, 55, 20, 75]
+harmonics:
+  fundamental_voltage: 1.0
+  orders:
+    "5": 0.03
+    "7": 0.02
+    "11": 0.01
+  limit_thd: 0.05
+lvrt:
+  profile:
+    - time_s: 0.0
+      voltage_pu: 1.0
+    - time_s: 0.15
+      voltage_pu: 0.2
+    - time_s: 0.8
+      voltage_pu: 0.92
+  min_voltage_pu: 0.15
+  max_recovery_time_s: 1.5
+analysis:
+  min_scr: 2.0
+  target_capacity_factor: 0.25
+```
+
+### v2 标准输出重点
+
+- `data.results.scr`：短路容量、SCR 和电网强度
+- `data.results.harmonics`：谐波谱、THD 和限值判断
+- `data.results.lvrt`：最小电压、恢复时间和是否通过
+- `data.results.capacity`：平均出力与容量因子
+- `data.summary.failed_checks[]`：未通过项，便于上层流程直接消费
+
 ## 快速开始
 
 ### 3.1 CLI方式（推荐）

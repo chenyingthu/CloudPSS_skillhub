@@ -1,35 +1,59 @@
 """Tests for cloudpss_skills_v2.tools.model_builder."""
-import pytest
+
 from cloudpss_skills_v2.tools.model_builder import ModelBuilderTool
 
 
 class TestModelBuilderTool:
+    def test_scalar_coercion(self):
+        tool = ModelBuilderTool()
+        assert tool._coerce_scalar_value("5", "int") == 5
+        assert tool._coerce_scalar_value("1.5", "float") == 1.5
+        assert tool._coerce_scalar_value("true", "bool") is True
+        assert tool._coerce_scalar_value(123, "string") == "123"
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
-    def test_import(self):
-        """Smoke test: module and class can be imported."""
-        assert ModelBuilderTool is not None
+    def test_lookup_helpers(self):
+        tool = ModelBuilderTool()
+        assert tool._normalize_lookup_value(" Bus-1 ") == "bus_1"
+        assert tool._first_present({"a": None, "b": 2}, ["a", "b"]) == 2
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
-    def test_instantiation(self):
-        """Smoke test: class can be instantiated."""
-        instance = ModelBuilderTool()
-        assert instance is not None
+    def test_validate_operations(self):
+        tool = ModelBuilderTool()
+        valid, errors = tool.validate({"base_model": {}, "operations": [{"action": "add"}]})
+        assert valid is False
+        assert "component is required for add" in errors[0]
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
-    def test_has_name_attribute(self):
-        """Smoke test: instance has expected attributes."""
-        instance = ModelBuilderTool()
-        assert hasattr(instance, 'name') or hasattr(instance, 'run')
+    def test_run_add_modify_delete_components(self):
+        tool = ModelBuilderTool()
+        config = {
+            "base_model": {"components": [{"id": "bus1", "name": "Bus1", "parameters": {"kv": 110}}]},
+            "operations": [
+                {
+                    "action": "add",
+                    "component": {"id": "gen1", "name": "Gen1", "parameters": {"p_set": "100", "enabled": "true"}},
+                    "schema": {"p_set": "float", "enabled": "bool"},
+                },
+                {
+                    "action": "modify",
+                    "id": "gen1",
+                    "updates": {"parameters": {"p_set": "120", "enabled": "false"}},
+                    "schema": {"p_set": "float", "enabled": "bool"},
+                },
+                {"action": "delete", "id": "bus1"},
+            ],
+        }
+        result = tool.run(config)
+
+        assert result.status.value == "success"
+        components = result.data["model"]["components"]
+        assert len(components) == 1
+        assert components[0]["id"] == "gen1"
+        assert components[0]["parameters"]["p_set"] == 120.0
+        assert components[0]["parameters"]["enabled"] is False
+        assert result.metrics["operation_count"] == 3
+
+    def test_run_fails_when_target_missing(self):
+        tool = ModelBuilderTool()
+        result = tool.run({"base_model": {"components": []}, "operations": [{"action": "delete", "id": "missing"}]})
+        assert result.status.value == "failed"
+        assert result.error is not None
+        assert "not found" in result.error

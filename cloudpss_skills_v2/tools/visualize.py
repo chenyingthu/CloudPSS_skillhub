@@ -5,12 +5,16 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import logging
 import os
 import tempfile
 from datetime import datetime
-from typing import Any
+from pathlib import Path
+from typing import Any, Mapping
+
+import h5py
 
 # Use non-interactive backend for headless environments
 import matplotlib
@@ -26,6 +30,58 @@ from cloudpss_skills_v2.core.skill_result import (
 from cloudpss_skills_v2.powerskill import Engine
 
 logger = logging.getLogger(__name__)
+
+ALLOWED_DATA_EXTENSIONS = {".csv", ".json", ".h5", ".hdf5"}
+
+
+def _allowed_data_roots() -> list[Path]:
+    return [
+        Path("/data").resolve(),
+        Path("/results").resolve(),
+        (Path.home() / "cloudpss_data").resolve(),
+    ]
+
+
+def validate_data_path(user_input: str) -> Path:
+    """
+    验证并规范化用户输入的数据文件路径。
+
+    安全要求：
+    1. 必须是绝对路径
+    2. 必须在允许的目录内
+    3. 必须是文件（不是目录）
+    4. 必须是 .csv, .json, .h5, .hdf5 格式
+    5. 文件必须存在
+    """
+    if not user_input.strip():
+        raise ValueError("Data file path must be a non-empty string")
+
+    raw_path = Path(user_input.strip())
+    if not raw_path.is_absolute():
+        raise ValueError("Data file path must be an absolute path")
+
+    path = raw_path.resolve(strict=False)
+    allowed_roots = _allowed_data_roots()
+
+    if not any(path.is_relative_to(root) for root in allowed_roots):
+        allowed_root_text = ", ".join(str(root) for root in allowed_roots)
+        raise ValueError(
+            f"Data file path '{path}' is outside allowed directories: {allowed_root_text}"
+        )
+
+    if not path.exists():
+        raise ValueError(f"Data file path does not exist: {raw_path}")
+
+    if not path.is_file():
+        raise ValueError(f"Data file path must point to a file: {path}")
+
+    if path.suffix.lower() not in ALLOWED_DATA_EXTENSIONS:
+        allowed = ", ".join(sorted(ALLOWED_DATA_EXTENSIONS))
+        raise ValueError(
+            f"Unsupported data file extension '{path.suffix}'. Allowed: {allowed}"
+        )
+
+    return path
 
 
 class VisualizeTool:
@@ -76,7 +132,7 @@ class VisualizeTool:
         )
         getattr(logger, level.lower(), logger.info)(message)
 
-    def validate(self, config: dict | None) -> tuple[bool, list[str]]:
+    def validate(self, config: dict[str, Any] | None) -> tuple[bool, list[str]]:
         errors = []
         if not config:
             errors.append("config is required")
@@ -85,7 +141,7 @@ class VisualizeTool:
             errors.append("model.rid is required")
         return (len(errors) == 0, errors)
 
-    def _load_data(self, config: dict) -> dict:
+    def _load_data(self, config: dict[str, Any]) -> dict[str, Any]:
         """Load data from config or result."""
         if config.get("data") is not None:
             return config["data"]
@@ -95,16 +151,62 @@ class VisualizeTool:
             return result
 
         source = config.get("source") or {}
+        if not isinstance(source, Mapping):
+            raise ValueError("source must be an object")
         if source.get("data") is not None:
             return source["data"]
         if source.get("data_file") is not None:
-            path = source["data_file"]
-            with open(path, "r") as f:
-                return json.load(f)
+            data_file = source["data_file"]
+            if not isinstance(data_file, str):
+                raise ValueError("source.data_file must be a string")
+            return self._load_data_file(data_file)
 
         return {}
 
-    def _plot_time_series(self, data: dict, out_dir: str) -> dict[str, str]:
+    def _load_data_file(self, user_input: str) -> dict[str, Any]:
+        """Load structured data from an approved local file."""
+        path = validate_data_path(user_input)
+        suffix = path.suffix.lower()
+
+        try:
+            if suffix == ".json":
+                with path.open("r", encoding="utf-8") as handle:
+                    data = json.load(handle)
+            elif suffix == ".csv":
+                with path.open("r", encoding="utf-8", newline="") as handle:
+                    data = {"rows": list(csv.DictReader(handle))}
+            elif suffix in {".h5", ".hdf5"}:
+                data = self._read_hdf5_file(path)
+            else:
+                raise ValueError(f"Unsupported data file extension '{suffix}'")
+        except (ValueError, OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"Failed to load data file '{path}': {exc}") from exc
+
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"Data file '{path}' must contain a top-level object or mapping"
+            )
+
+        return data
+
+    def _read_hdf5_file(self, path: Path) -> dict[str, Any]:
+        """Convert a simple HDF5 file into a nested dictionary."""
+
+        def _convert_hdf5_node(node: h5py.Group | h5py.Dataset) -> Any:
+            if isinstance(node, h5py.Dataset):
+                value = node[()]
+                if hasattr(value, "tolist"):
+                    value = value.tolist()
+                if isinstance(value, bytes):
+                    return value.decode("utf-8")
+                return value
+
+            return {name: _convert_hdf5_node(child) for name, child in node.items()}
+
+        with h5py.File(path, "r") as handle:
+            return {name: _convert_hdf5_node(child) for name, child in handle.items()}
+
+    def _plot_time_series(self, data: dict[str, Any], out_dir: str) -> dict[str, str]:
         """Plot time series data."""
         times = data.get("time") or data.get("timestamps") or []
         values = data.get("series") or data.get("values") or []
@@ -131,7 +233,7 @@ class VisualizeTool:
         self._log("INFO", f"Time series plot saved to {paths}")
         return paths
 
-    def _plot_bus_voltages(self, data: dict, out_dir: str) -> dict[str, str]:
+    def _plot_bus_voltages(self, data: dict[str, Any], out_dir: str) -> dict[str, str]:
         """Plot bus voltages as bar chart."""
         voltages = data.get("bus_voltages") or data.get("voltages")
         if not isinstance(voltages, dict) or not voltages:
@@ -162,7 +264,7 @@ class VisualizeTool:
         self._log("INFO", f"Bus voltages plot saved to {paths}")
         return paths
 
-    def _plot_branch_flows(self, data: dict, out_dir: str) -> dict[str, str]:
+    def _plot_branch_flows(self, data: dict[str, Any], out_dir: str) -> dict[str, str]:
         """Plot branch power flows."""
         flows = data.get("branch_flows") or data.get("flows")
         if not isinstance(flows, dict) or not flows:
@@ -189,7 +291,7 @@ class VisualizeTool:
         self._log("INFO", f"Branch flows plot saved to {paths}")
         return paths
 
-    def run(self, config: dict | None) -> SkillResult:
+    def run(self, config: dict[str, Any] | None) -> SkillResult:
         start_time = datetime.now()
         if config is None:
             config = {}
@@ -233,7 +335,7 @@ class VisualizeTool:
                                 Artifact(
                                     name=f"{plot_type}.{ext}",
                                     path=path,
-                                    mime=f"image/{ext}",
+                                    type=f"image/{ext}",
                                 )
                             )
 
@@ -263,4 +365,4 @@ class VisualizeTool:
             )
 
 
-__all__ = ["VisualizeTool"]
+__all__ = ["VisualizeTool", "validate_data_path"]

@@ -277,6 +277,9 @@ class LossAnalysis:
             self._save_output(result_data, output_config)
 
             self._log("INFO", "网损分析完成")
+            summary: dict[str, Any] = self._generate_summary()
+            result_data["summary"] = summary
+
             return SkillResult(
                 skill_name=self.name,
                 status=SkillStatus.SUCCESS,
@@ -284,7 +287,7 @@ class LossAnalysis:
                 artifacts=self.artifacts,
                 logs=self.logs,
                 metrics={
-                    "total_loss_mw": result_data["summary"]["total_loss_mw"],
+                    "total_loss_mw": summary.get("total_loss_mw", 0.0),
                     "branch_count": len(self.branch_losses),
                     "transformer_count": len(self.transformer_losses),
                 },
@@ -309,17 +312,22 @@ class LossAnalysis:
                 end_time=datetime.now(),
             )
 
-    def _calculate_line_losses(self, branches: list[dict]) -> None:
+    def _first_present_value(self, row: dict[str, Any], *keys: str) -> Any:
+        for key in keys:
+            value = row.get(key)
+            if value is not None:
+                return value
+        return None
+
+    def _calculate_line_losses(self, branches: list[dict[str, Any]]) -> None:
         for branch in branches:
             p_loss = _as_float(
-                branch.get("power_loss_mw")
-                or branch.get("Ploss")
-                or branch.get("P_loss")
+                self._first_present_value(branch, "power_loss_mw", "Ploss", "P_loss")
             )
             q_loss = _as_float(
-                branch.get("reactive_loss_mvar")
-                or branch.get("Qloss")
-                or branch.get("Q_loss")
+                self._first_present_value(
+                    branch, "reactive_loss_mvar", "Qloss", "Q_loss"
+                )
             )
 
             if p_loss < 0.001 and q_loss < 0.001:
@@ -328,7 +336,7 @@ class LossAnalysis:
             branch_name = branch.get("name", "Unknown")
             from_bus = branch.get("from_bus", branch.get("From bus", ""))
             to_bus = branch.get("to_bus", branch.get("To bus", ""))
-            i_ka = _as_float(branch.get("current_ka") or branch.get("I"), 0)
+            i_ka = _as_float(self._first_present_value(branch, "current_ka", "I"), 0)
             loading_pct = _as_float(branch.get("loading_pct"), 0)
 
             self.branch_losses.append(
@@ -347,7 +355,7 @@ class LossAnalysis:
 
     def _calculate_transformer_losses(
         self,
-        branches: list[dict],
+        branches: list[dict[str, Any]],
         model_rid: str,
         api: PowerFlow,
     ) -> None:
@@ -366,14 +374,12 @@ class LossAnalysis:
                 continue
 
             p_loss = _as_float(
-                branch.get("power_loss_mw")
-                or branch.get("Ploss")
-                or branch.get("P_loss")
+                self._first_present_value(branch, "power_loss_mw", "Ploss", "P_loss")
             )
             q_loss = _as_float(
-                branch.get("reactive_loss_mvar")
-                or branch.get("Qloss")
-                or branch.get("Q_loss")
+                self._first_present_value(
+                    branch, "reactive_loss_mvar", "Qloss", "Q_loss"
+                )
             )
             label = branch.get("name", branch_id)
             from_bus = branch.get("from_bus", branch.get("From bus", ""))
@@ -397,8 +403,8 @@ class LossAnalysis:
         )
 
     def _calculate_loss_sensitivity(
-        self, buses: list[dict], branches: list[dict]
-    ) -> dict:
+        self, buses: list[dict[str, Any]], branches: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         sensitivities = []
         total_loss = sum(bl.p_loss_mw for bl in self.branch_losses)
 
@@ -413,9 +419,7 @@ class LossAnalysis:
 
         for branch in branches:
             p_loss = _as_float(
-                branch.get("power_loss_mw")
-                or branch.get("Ploss")
-                or branch.get("P_loss")
+                self._first_present_value(branch, "power_loss_mw", "Ploss", "P_loss")
             )
             if p_loss <= 0:
                 continue
@@ -459,7 +463,7 @@ class LossAnalysis:
             "note": "基于潮流结果的近似估算，精确灵敏度需进行扰动分析",
         }
 
-    def _generate_optimization_suggestions(self) -> dict:
+    def _generate_optimization_suggestions(self) -> dict[str, Any]:
         total_loss = sum(bl.p_loss_mw for bl in self.branch_losses) + sum(
             tl.total_loss_mw for tl in self.transformer_losses
         )
@@ -490,7 +494,7 @@ class LossAnalysis:
             "suggestions": suggestions,
         }
 
-    def _generate_summary(self) -> dict:
+    def _generate_summary(self) -> dict[str, Any]:
         total_branch_loss = sum(bl.p_loss_mw for bl in self.branch_losses)
         total_transformer_loss = sum(tl.total_loss_mw for tl in self.transformer_losses)
         total_loss = total_branch_loss + total_transformer_loss
@@ -511,7 +515,7 @@ class LossAnalysis:
             ],
         }
 
-    def _branch_to_dict(self, bl: BranchLoss) -> dict:
+    def _branch_to_dict(self, bl: BranchLoss) -> dict[str, Any]:
         return {
             "branch_id": bl.branch_id,
             "from_bus": bl.from_bus,
@@ -522,7 +526,7 @@ class LossAnalysis:
             "loading_percent": round(bl.loading_percent, 2),
         }
 
-    def _transformer_to_dict(self, tl: TransformerLoss) -> dict:
+    def _transformer_to_dict(self, tl: TransformerLoss) -> dict[str, Any]:
         return {
             "transformer_id": tl.transformer_id,
             "hv_bus": tl.hv_bus,
@@ -538,7 +542,9 @@ class LossAnalysis:
             "breakdown_verified": tl.breakdown_verified,
         }
 
-    def _save_output(self, result_data: dict, output_config: dict) -> None:
+    def _save_output(
+        self, result_data: dict[str, Any], output_config: dict[str, Any]
+    ) -> None:
         output_format = output_config.get("format", "json")
         output_path = Path(output_config.get("path", "./results/"))
         prefix = output_config.get("prefix", "loss_analysis")

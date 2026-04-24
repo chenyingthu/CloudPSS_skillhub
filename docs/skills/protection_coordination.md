@@ -46,6 +46,60 @@
 - **故障场景仿真**：分析特定故障下保护动作
 - **TCC曲线生成**：生成时间-电流配合曲线数据
 
+## v2 实现说明
+
+`cloudpss_skills_v2/poweranalysis/protection_coordination.py` 当前按以下可验证范围实现：
+
+- 基于 `relays[]` 输入计算过流继电器启动电流、时间拨盘和动作时限
+- 基于 IEC inverse / very inverse / extremely inverse 曲线生成 TCC 点列
+- 基于 `coordination_pairs[]` 校核主后备配合时间裕度，默认要求 `0.3s`
+- 基于 `analysis.zones[]` 校核距离保护区段 reach 是否落在容差范围内
+- 调用 v2 `Engine.create_powerflow(...).get_model_handle(...).run_power_flow(...)`，确保与 CloudPSS / pandapower PowerFlow API 的接线有效
+
+当前 v2 版本不会声称自动识别完整二次保护系统，也不会伪造云端保护装置详情；若未提供 `relays[]`，会仅从可获取的支路组件生成最小分析集合。
+
+### v2 配置补充示例
+
+```yaml
+skill: protection_coordination
+engine: pandapower
+model:
+  rid: case14
+relays:
+  - id: R1
+    type: overcurrent
+    location: feeder_a
+    load_current: 200
+    fault_current: 3000
+    time_dial: 0.10
+  - id: R2
+    type: overcurrent
+    location: feeder_backup
+    load_current: 220
+    fault_current: 3000
+    time_dial: 0.50
+coordination_pairs:
+  - primary: R1
+    backup: R2
+analysis:
+  min_coordination_margin_s: 0.3
+  curve_multiples: [2, 5, 10, 20]
+  zones:
+    - relay: R1
+      zone: 1
+      reach_percent: 80
+      expected_reach_percent: 80
+      tolerance_percent: 10
+```
+
+### v2 标准输出重点
+
+- `data.skill_name / execution_id / timestamp / success / message`
+- `data.settings[]`：每个继电器的标准化整定结果
+- `data.coordination_results[]`：主后备动作时间与裕度
+- `data.tcc_curves[]`：可直接用于画 TCC 曲线的点列
+- `data.zone_validation[]`：保护分区 reach 校核结果
+
 ## 快速开始
 
 ### 3.1 CLI方式（推荐）

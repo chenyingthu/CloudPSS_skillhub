@@ -255,9 +255,6 @@ class N1SecurityAnalysis:
                         t_violations = self._check_thermal_violations(
                             branch_data, thermal_threshold
                         )
-                        case_violations = self._check_voltage_violations(
-                            bus_data, voltage_threshold
-                        )
                         case_violations.extend(t_violations)
 
                     has_violations = len(case_violations) > 0
@@ -379,7 +376,7 @@ class N1SecurityAnalysis:
             )
 
     def _check_voltage_violations(
-        self, bus_data: list[dict], threshold: float
+        self, bus_data: list[dict[str, Any]], threshold: float
     ) -> list[ViolationRecord]:
         violations = []
         lower_limit = 1.0 - threshold
@@ -418,7 +415,7 @@ class N1SecurityAnalysis:
         return violations
 
     def _check_thermal_violations(
-        self, branch_data: list[dict], threshold: float
+        self, branch_data: list[dict[str, Any]], threshold: float
     ) -> list[ViolationRecord]:
         violations = []
         for branch in branch_data:
@@ -446,7 +443,9 @@ class N1SecurityAnalysis:
                 )
         return violations
 
-    def _summarize_violations(self, violations: list[dict]) -> dict[str, Any]:
+    def _summarize_violations(
+        self, violations: list[dict[str, Any]]
+    ) -> dict[str, Any] | None:
         if not violations:
             return None
 
@@ -478,7 +477,9 @@ class N1SecurityAnalysis:
             "messages": [v.get("message", "") for v in violations if v.get("message")],
         }
 
-    def _save_output(self, result_data: dict, output_config: dict) -> None:
+    def _save_output(
+        self, result_data: dict[str, Any], output_config: dict[str, Any]
+    ) -> None:
         output_path = Path(output_config.get("path", "./results/"))
         prefix = output_config.get("prefix", "n1_security")
         use_timestamp = output_config.get("timestamp", True)

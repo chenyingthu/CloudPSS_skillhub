@@ -768,6 +768,62 @@ grep -rn "for.*in.*:" -A 5 cloudpss_skills_v2/poweranalysis/ --include="*.py" | 
 
 **执行**: 将这些搜索结果纳入修复范围
 
+**2026-04-23 扫描结果（cleanup/phase-1-remove-empty-tests 分支）**:
+
+| 模式 | 扫描范围 | 结果摘要 | 需要立即修复 |
+|------|----------|----------|--------------|
+| 数值误判 (`if not x:`) | `poweranalysis/`, `powerapi/` | 命中较多，但大多数是配置/列表判空；确认 1 个已知真缺陷 (`loss_analysis.py:314-323`) 与 3 个需跟踪的并发/认证判空点 | **是（部分）** |
+| 结果字段错配 (`result[...] = ...`) | `poweranalysis/`, `powerapi/` | `poweranalysis/contingency_analysis.py` 命中 9 处，当前未发现字段名错配；`powerapi/adapters/cloudpss/powerflow.py` 中 6 处为字段标准化映射，属正常逻辑 | 否 |
+| 循环内覆盖集合 | `poweranalysis/`, `powerapi/` | 确认 1 个已知真缺陷：`poweranalysis/n1_security.py:254-261` 中 `case_violations` 被重新赋值，覆盖前序电压违规收集 | **是** |
+| 路径遍历 | `poweranalysis/`, `powerapi/` | 未发现 `open(user_input)` / `Path(user_input)` 直接消费用户输入的模式；但 `token_file` 路径读取缺少约束，建议作为低优先级安全加固 | 否 |
+| 硬编码凭据 | `poweranalysis/`, `powerapi/` | 未发现硬编码 `password/token/api_key` 常量；命中的 `token = auth.get(...)` 为运行时配置读取 | 否 |
+| `eval` / `exec` | `poweranalysis/`, `powerapi/` | 未发现 | 否 |
+| 并发/环境竞争 | `poweranalysis/`, `powerapi/` | 确认 3 处高风险：`powerapi/adapters/cloudpss/{powerflow,short_circuit,emt}.py` 在 `_setup_auth()` 中写入 `os.environ["CLOUDPSS_API_URL"]`，与 Phase 2 安全目标冲突 | **是** |
+| 类型混淆 (`isinstance(x, bool)`) | `poweranalysis/`, `powerapi/` | 未发现 | 否 |
+
+**已确认的真缺陷 / Critical issues**:
+
+1. **聚合覆盖缺陷（P0）**  
+   - 文件: `cloudpss_skills_v2/poweranalysis/n1_security.py:254-261`  
+   - 问题: `case_violations` 已先 `extend(v_violations)`，随后又被 `case_violations = self._check_voltage_violations(...)` 覆盖，导致前序聚合结果丢失。  
+   - 风险: N-1 安全校核结果漏报违规，属于核心分析错误。  
+   - Fix ticket: `P2-SCAN-001` - 改为仅追加热稳定违规，不得重新赋值；补充回归测试覆盖“同时存在电压与热稳定违规”场景。
+
+2. **故障筛查未实际施加扰动（P0）**  
+   - 文件: `cloudpss_skills_v2/poweranalysis/emt_n1_screening.py:149-159`  
+   - 问题: 循环中对每个 contingency 直接重复执行 `api.run_power_flow(model_handle=handle)`，未对模型做 branch trip / actual fault 注入，导致结果并非 N-1 后故障结果。  
+   - 风险: EMT N-1 screening 产出“伪分析结果”，业务含义错误。  
+   - Fix ticket: `P2-SCAN-002` - 为每个 contingency 生成独立扰动模型并执行真实故障/切除逻辑；增加基线与故障后差异断言。
+
+3. **0.0 数值误判（P0）**  
+   - 文件: `cloudpss_skills_v2/poweranalysis/loss_analysis.py:314-323`  
+   - 问题: `branch.get("power_loss_mw") or branch.get("Ploss") or ...` 会把合法的 `0.0` 当作假值，误回退到其他字段。  
+   - 风险: 线路/变压器损耗计算错误，尤其在零损耗/边界场景下会污染结果。  
+   - Fix ticket: `P2-SCAN-003` - 使用 `is None` 链式判空辅助函数替代 `or` 回退；补充 0.0 边界测试。
+
+4. **全局环境变量竞争（P0 / Security）**  
+   - 文件:  
+     - `cloudpss_skills_v2/powerapi/adapters/cloudpss/powerflow.py:136-140`  
+     - `cloudpss_skills_v2/powerapi/adapters/cloudpss/short_circuit.py:273-277`  
+     - `cloudpss_skills_v2/powerapi/adapters/cloudpss/emt.py:271-275`  
+   - 问题: `_setup_auth()` 通过 `os.environ["CLOUDPSS_API_URL"] = base_url` 切换服务地址，这是进程级全局状态；并发调用不同 server/base_url 时会互相污染。  
+   - 风险: 请求串线、跨租户访问错误、并发测试失败；与 Phase 2 “禁止继续使用 `os.environ` + `threading.local()` 错误组合” 的约束直接冲突。  
+   - Fix ticket: `P2-SCAN-004` - 优先改为 SDK 显式传递 `baseUrl`；若 SDK 无法完全覆盖，采用进程隔离，不允许在共享进程内覆写全局环境变量。
+
+**已检查但暂未判定为缺陷的命中**:
+
+- `poweranalysis/contingency_analysis.py:305-307, 481, 523-566` 的 `result[...] = ...` 为状态/摘要字段写回，未见字段名错配。  
+- `powerapi/adapters/cloudpss/powerflow.py:69-97` 的 `result[...] = ...` 为总线/支路字段标准化映射，逻辑正常。  
+- 多数 `if not config / if not valid / if not contingencies / if not target_buses` 属于配置、列表、校验结果判空，不属于 `0.0` 误判。  
+- `token_file = auth.get("token_file", ".cloudpss_token")` 相关读取未直接暴露为用户输入拼接型路径遍历，但后续仍建议限制为受信目录或显式校验文件类型。
+
+**建议修复顺序**:
+
+1. 先修 `P2-SCAN-004`（并发/安全基线）  
+2. 再修 `P2-SCAN-001` / `P2-SCAN-002`（分析逻辑正确性）  
+3. 最后修 `P2-SCAN-003`（数值边界正确性）  
+4. 修复后补跑：`pytest tests/test_n1_security.py tests/test_emt_n1_screening.py tests/test_concurrent_adapter.py -v`
+
 ---
 
 ### Phase 2 里程碑检查点

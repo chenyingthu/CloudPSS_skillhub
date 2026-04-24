@@ -9,6 +9,7 @@ These tests verify the CloudPSS API adapter handles:
 
 import pytest
 from cloudpss_skills_v2.powerapi import SimulationResult, SimulationStatus
+from cloudpss_skills_v2.core.token_manager import CloudPSSAdapter
 from cloudpss_skills_v2.powerapi.adapters.cloudpss import CloudPSSPowerFlowAdapter
 from cloudpss_skills_v2.powerapi.adapters.cloudpss.short_circuit import (
     CloudPSSShortCircuitAdapter,
@@ -275,17 +276,145 @@ class TestCloudPSSPowerFlowResultStructure:
 
 @pytest.mark.cloudpss
 class TestCloudPSSPowerFlowAuth:
-    def test_setup_auth_with_token(self):
+    def test_setup_auth_with_token(self, monkeypatch):
         from cloudpss_skills_v2.powerapi.adapters.cloudpss.powerflow import _setup_auth
 
-        _setup_auth(
+        monkeypatch.delenv("CLOUDPSS_API_URL", raising=False)
+
+        adapter = _setup_auth(
             {"auth": {"token": "test_token", "base_url": "https://test.cloudpss.com"}}
         )
 
-    def test_setup_auth_internal_server(self):
+        assert isinstance(adapter, CloudPSSAdapter)
+        assert adapter.token == "test_token"
+        assert adapter.api_url == "https://test.cloudpss.com"
+        assert "CLOUDPSS_API_URL" not in __import__("os").environ
+
+    def test_setup_auth_internal_server(self, monkeypatch):
         from cloudpss_skills_v2.powerapi.adapters.cloudpss.powerflow import _setup_auth
 
-        _setup_auth({"auth": {"server": "internal"}})
+        monkeypatch.delenv("CLOUDPSS_API_URL", raising=False)
+
+        adapter = _setup_auth({"auth": {"token": "internal_token", "server": "internal"}})
+
+        assert adapter.api_url == "https://internal.cloudpss.com"
+        assert "CLOUDPSS_API_URL" not in __import__("os").environ
+
+
+@pytest.mark.cloudpss
+class TestCloudPSSConcurrentAdapterSafety:
+    def test_cloudpss_adapter_resolves_isolated_base_urls(self):
+        adapter = CloudPSSAdapter(token="token-a", api_url="https://custom.cloudpss.com")
+
+        assert adapter.sdk_kwargs() == {"baseUrl": "https://custom.cloudpss.com"}
+
+    def test_cloudpss_adapter_omits_default_base_url(self):
+        adapter = CloudPSSAdapter(token="token-a")
+
+        assert adapter.sdk_kwargs() == {}
+
+    def test_concurrent_setup_auth_does_not_touch_global_env(self, monkeypatch):
+        import os
+        from concurrent.futures import ThreadPoolExecutor
+
+        from cloudpss_skills_v2.powerapi.adapters.cloudpss.powerflow import _setup_auth
+
+        monkeypatch.delenv("CLOUDPSS_API_URL", raising=False)
+
+        configs = [
+            {
+                "auth": {
+                    "token": f"token-{index:02d}-value",
+                    "base_url": f"https://server-{index}.cloudpss.test",
+                }
+            }
+            for index in range(6)
+        ]
+
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            adapters = list(executor.map(_setup_auth, configs))
+
+        assert [adapter.api_url for adapter in adapters] == [
+            f"https://server-{index}.cloudpss.test" for index in range(6)
+        ]
+        assert [adapter.token for adapter in adapters] == [
+            f"token-{index:02d}-value" for index in range(6)
+        ]
+        assert "CLOUDPSS_API_URL" not in os.environ
+
+    def test_powerflow_adapter_passes_per_call_base_url_without_env(self, monkeypatch):
+        import os
+
+        monkeypatch.delenv("CLOUDPSS_API_URL", raising=False)
+
+        captured_fetch_kwargs = []
+        captured_run_kwargs = []
+
+        class FakeJob:
+            id = "job-1"
+
+            def status(self):
+                return 1
+
+            @property
+            def result(self):
+                class FakeResult:
+                    def getBuses(self):
+                        return []
+
+                    def getBranches(self):
+                        return []
+
+                return FakeResult()
+
+        class FakeModel:
+            name = "demo"
+            rid = "rid/demo"
+
+            def runPowerFlow(self, **kwargs):
+                captured_run_kwargs.append(kwargs)
+                return FakeJob()
+
+        class FakeCloudPSSModel:
+            @staticmethod
+            def fetch(model_id, **kwargs):
+                captured_fetch_kwargs.append((model_id, kwargs))
+                return FakeModel()
+
+            @staticmethod
+            def load(model_id):
+                raise AssertionError("load should not be used in this test")
+
+        class FakeCloudPSSModule:
+            Model = FakeCloudPSSModel
+
+            @staticmethod
+            def setToken(token):
+                return None
+
+        import sys
+
+        monkeypatch.setitem(sys.modules, "cloudpss", FakeCloudPSSModule)
+
+        adapter = CloudPSSPowerFlowAdapter()
+        adapter._connected = True
+
+        result = adapter._do_run_simulation(
+            {
+                "model_id": "model/demo",
+                "auth": {
+                    "token": "token-01-value",
+                    "base_url": "https://isolated.cloudpss.test",
+                },
+            }
+        )
+
+        assert result.status == SimulationStatus.COMPLETED
+        assert captured_fetch_kwargs == [
+            ("model/demo", {"baseUrl": "https://isolated.cloudpss.test"})
+        ]
+        assert captured_run_kwargs == [{"baseUrl": "https://isolated.cloudpss.test"}]
+        assert "CLOUDPSS_API_URL" not in os.environ
 
 
 @pytest.mark.cloudpss
@@ -806,6 +935,7 @@ class TestCloudPSSRealAPI:
         job = model.runPowerFlow()
 
         max_wait = 120
+        status = 0
         waited = 0
         while waited < max_wait:
             status = job.status()
