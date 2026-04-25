@@ -14,6 +14,7 @@ from typing import Any, Optional
 
 from cloudpss_skills_v2.core.token_manager import (
     CloudPSSAdapter,
+    TokenManager,
     build_cloudpss_adapter,
 )
 from cloudpss_skills_v2.powerapi.base import (
@@ -59,14 +60,19 @@ class CloudPSSShortCircuitAdapter(EngineAdapter):
 
     _model_cache: dict[str, Any]
     _result_cache: dict[str, SimulationResult]
+    _cloud_pss_adapter: CloudPSSAdapter
 
     def __init__(self, config: Optional[EngineConfig] = None):
         super().__init__(config)
         self._model_cache = {}
         self._result_cache = {}
-        self._cloudpss = CloudPSSAdapter(
-            api_url=CloudPSSAdapter.resolve_api_url(self._config.extra.get("auth", {}))
-        )
+        
+        # Build SDK with proper base_url
+        auth = self._config.extra or {}
+        base_url = self._config.base_url
+        token = TokenManager.get_token(auth)
+        
+        self._cloud_pss_adapter = CloudPSSAdapter(token=token, api_url=base_url)
 
     @property
     def engine_name(self) -> str:
@@ -76,14 +82,13 @@ class CloudPSSShortCircuitAdapter(EngineAdapter):
         return [SimulationType.SHORT_CIRCUIT]
 
     def _do_connect(self) -> None:
-        auth = self._config.extra.get("auth", {})
-        try:
-            self._cloudpss = CloudPSSAdapter.from_config(auth)
-        except ValueError as exc:
-            self._logger.warning("CloudPSS token setup skipped: %s", exc)
-            return
+        auth = self._config.extra or {}
+        base_url = self._config.base_url
+        token = TokenManager.get_token(auth)
+        
+        self._cloud_pss_adapter = CloudPSSAdapter(token=token, api_url=base_url)
 
-        if not self._cloudpss.connect():
+        if not self._cloud_pss_adapter.connect():
             pass
 
     def _do_disconnect(self) -> None:
@@ -94,7 +99,7 @@ class CloudPSSShortCircuitAdapter(EngineAdapter):
         from cloudpss import Model
 
         source = self._config.extra.get("model", {}).get("source", "cloud")
-        kwargs = self._cloudpss.sdk_kwargs()
+        kwargs = self._cloud_pss_adapter.sdk_kwargs()
         if source == "local":
             model = Model.load(model_id)
         else:
@@ -109,13 +114,7 @@ class CloudPSSShortCircuitAdapter(EngineAdapter):
                 status=SimulationStatus.FAILED, errors=["No model_id provided"]
             )
 
-        try:
-            cloudpss = self._setup_auth(config)
-        except ValueError as e:
-            return SimulationResult(
-                status=SimulationStatus.FAILED,
-                errors=[f"CloudPSS authentication failed: {e}"],
-            )
+        cloudpss = self._cloud_pss_adapter
 
         model = self._model_cache.get(model_id)
         if model is None:

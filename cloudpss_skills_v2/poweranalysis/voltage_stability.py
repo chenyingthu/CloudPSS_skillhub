@@ -149,7 +149,12 @@ class VoltageStabilityAnalysis:
 
     def _get_api(self, config: dict[str, Any]) -> PowerFlow:
         engine = config.get("engine", "cloudpss")
-        return Engine.create_powerflow(engine=engine)
+        auth = config.get("auth", {})
+        return Engine.create_powerflow_for_skill(
+            engine=engine,
+            base_url=auth.get("base_url"),
+            auth=auth,
+        )
 
     def validate(self, config: dict[str, Any]) -> tuple[bool, list[str]]:
         errors = []

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any
 
@@ -10,6 +11,7 @@ from cloudpss_skills_v2.core.skill_result import (
     SkillResult,
     SkillStatus,
 )
+from cloudpss_skills_v2.base import AnalysisBase as NewAnalysisBase
 from cloudpss_skills_v2.powerskill import Engine, ModelHandle, ComponentType
 
 logger = logging.getLogger(__name__)
@@ -24,7 +26,7 @@ def _as_float(value, default=0.0) -> float:
         return default
 
 
-class AnalysisBase:
+class AnalysisBase(ABC):
     name: str = ""
     description: str = ""
 
@@ -109,5 +111,17 @@ class AnalysisBase:
             end_time=datetime.now(),
         )
 
+    @abstractmethod
     def run(self, config: dict[str, Any]) -> SkillResult:
-        raise NotImplementedError
+        """执行分析
+        
+        Args:
+            config: 配置字典
+            
+        Returns:
+            SkillResult 结果对象
+            
+        Raises:
+            NotImplementedError: 子类必须实现此方法
+        """
+        raise NotImplementedError("子类必须实现 run() 方法")

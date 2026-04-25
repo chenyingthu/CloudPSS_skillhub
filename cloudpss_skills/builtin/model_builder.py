@@ -1100,7 +1100,11 @@ class ModelBuilderSkill(SkillBase):
         # 设置 API URL
         if base_url:
             os.environ["CLOUDPSS_API_URL"] = base_url
-        elif server == "internal":        else:        if not token and auth.get("token_file"):
+        elif server == "internal":
+            os.environ["CLOUDPSS_API_URL"] = "https://internal.cloudpss.net/"
+
+        # 从 token_file 读取 token
+        if not token and auth.get("token_file"):
             try:
                 with open(auth["token_file"], "r") as f:
                     token = f.read().strip()

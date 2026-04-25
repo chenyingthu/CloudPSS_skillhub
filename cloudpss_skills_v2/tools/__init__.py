@@ -10,9 +10,7 @@ from cloudpss_skills_v2.tools.auto_loop_breaker import AutoLoopBreakerTool
 from cloudpss_skills_v2.tools.topology_check import TopologyCheckTool
 from cloudpss_skills_v2.tools.model_builder import ModelBuilderTool
 from cloudpss_skills_v2.tools.model_hub import ModelHubTool
-from cloudpss_skills_v2.tools.model_parameter_extractor import (
-    ModelParameterExtractorTool,
-)
+from cloudpss_skills_v2.tools.model_parameter_extractor import ModelParameterExtractorTool
 from cloudpss_skills_v2.tools.component_catalog import ComponentCatalogTool
 from cloudpss_skills_v2.tools.batch_task_manager import BatchTaskManagerTool
 from cloudpss_skills_v2.tools.config_batch_runner import ConfigBatchRunnerTool

@@ -206,13 +206,17 @@ class ContingencyAnalysis:
 
         try:
             engine = config.get("engine", "cloudpss")
-            api = Engine.create_powerflow(engine=engine)
+            auth = config.get("auth", {})
+            api = Engine.create_powerflow_for_skill(
+                engine=engine,
+                base_url=auth.get("base_url"),
+                auth=auth,
+            )
             self._log("INFO", f"使用引擎: {api.adapter.engine_name}")
 
             model_config = config["model"]
             model_rid = model_config["rid"]
             source = model_config.get("source", "cloud")
-            auth = config.get("auth", {})
 
             contingency_config = config.get("contingency", {})
             analysis_config = config.get("analysis", {})

@@ -964,16 +964,31 @@ class NetworkSummary:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> NetworkSummary:
+        total_gen_data = data.get("total_generation", {})
+        total_load_data = data.get("total_load", {})
+        voltage_range = data.get("voltage_range", {})
+        if isinstance(total_gen_data, dict):
+            total_gen = total_gen_data.get("p_mw", 0.0)
+            total_gen_mvar = total_gen_data.get("q_mvar", 0.0)
+        else:
+            total_gen = float(total_gen_data) if total_gen_data else 0.0
+            total_gen_mvar = 0.0
+        if isinstance(total_load_data, dict):
+            total_load = total_load_data.get("p_mw", 0.0)
+            total_load_mvar = total_load_data.get("q_mvar", 0.0)
+        else:
+            total_load = float(total_load_data) if total_load_data else 0.0
+            total_load_mvar = 0.0
         return cls(
             bus_count=int(data.get("bus_count", 0)),
             branch_count=int(data.get("branch_count", 0)),
             generator_count=int(data.get("generator_count", 0)),
             load_count=int(data.get("load_count", 0)),
-            total_generation_mw=float(data.get("total_generation_mw", 0.0)),
-            total_load_mw=float(data.get("total_load_mw", 0.0)),
+            total_generation_mw=float(total_gen),
+            total_load_mw=float(total_load),
             total_loss_mw=float(data.get("total_loss_mw", 0.0)),
-            min_voltage_pu=_optional_float(data.get("min_voltage_pu")),
-            max_voltage_pu=_optional_float(data.get("max_voltage_pu")),
+            min_voltage_pu=_optional_float(voltage_range.get("min_pu") if isinstance(voltage_range, dict) else data.get("min_voltage_pu")),
+            max_voltage_pu=_optional_float(voltage_range.get("max_pu") if isinstance(voltage_range, dict) else data.get("max_voltage_pu")),
             max_loading_pct=_optional_float(data.get("max_loading_pct")),
             converged=data.get("converged"),
         )

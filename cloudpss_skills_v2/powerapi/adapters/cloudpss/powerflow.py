@@ -109,6 +109,48 @@ def _parse_cloudpss_table(table: Any) -> list[dict[str, Any]]:
         raw_data = table
         if hasattr(table, "toJSON"):
             raw_data = table.toJSON()
+        if isinstance(raw_data, list) and len(raw_data) > 0:
+            first = raw_data[0]
+            if isinstance(first, dict):
+                is_component = (
+                    first.get("type") == "table"
+                    or (
+                        "data" in first
+                        and isinstance(first.get("data"), dict)
+                        and "columns" in first.get("data")
+                    )
+                    or (
+                        "key" in first
+                        and "version" in first
+                    )
+                )
+                if not is_component:
+                    return raw_data
+            raw_data = first
+        if isinstance(raw_data, dict):
+            if "data" in raw_data and isinstance(raw_data["data"], dict):
+                columns = raw_data["data"].get("columns", [])
+            elif raw_data.get("type") == "table":
+                columns = raw_data.get("data", {}).get("columns", [])
+            else:
+                columns = []
+            if columns:
+                n_rows = len(columns[0].get("data", []))
+                rows = []
+                for i in range(n_rows):
+                    row = {}
+                    for col in columns:
+                        clean_name = _strip_html(str(col.get("name", "")))
+                        row[clean_name] = col.get("data", [None])[i] if i < len(col.get("data", [])) else None
+                    rows.append(row)
+                return rows
+    except (KeyError, TypeError, AttributeError):
+        pass
+    return []
+    try:
+        raw_data = table
+        if hasattr(table, "toJSON"):
+            raw_data = table.toJSON()
         if isinstance(raw_data, dict) and "data" in raw_data:
             columns = raw_data["data"].get("columns", [])
             if not columns:
@@ -122,8 +164,10 @@ def _parse_cloudpss_table(table: Any) -> list[dict[str, Any]]:
                     row[clean_name] = col["data"][i]
                 rows.append(row)
             return rows
-        if isinstance(raw_data, list):
-            return raw_data
+        if isinstance(raw_data, list) and len(raw_data) > 0:
+            if all(isinstance(item, dict) for item in raw_data):
+                return raw_data
+            raw_data = raw_data[0]
     except (KeyError, TypeError, AttributeError):
         pass
     return []
@@ -168,6 +212,9 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
 
     def _do_connect(self) -> None:
         auth = self._config.extra.get("auth", {})
+        base_url = self._config.base_url or auth.get("base_url") or auth.get("baseUrl")
+        if base_url:
+            auth = {**auth, "base_url": base_url}
         try:
             self._cloudpss = CloudPSSAdapter.from_config(auth)
         except ValueError as exc:
@@ -210,12 +257,13 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
                 errors=["No model_id provided"],
             )
 
-        try:
-            cloudpss = _setup_auth(config)
-        except ValueError as e:
-            return SimulationResult(
-                status=SimulationStatus.FAILED,
-                errors=[f"CloudPSS authentication failed: {e}"],
+        cloudpss = self._cloudpss
+        per_call_auth = config.get("auth") or {}
+        per_call_base_url = per_call_auth.get("base_url") or per_call_auth.get("baseUrl")
+        if per_call_base_url:
+            cloudpss = CloudPSSAdapter(
+                token=self._cloudpss.token,
+                api_url=per_call_base_url,
             )
 
         model = self._model_cache.get(model_id)
@@ -539,19 +587,12 @@ def _generate_pf_summary(
         total_loss += p_loss
 
     return {
-        "total_generation": {
-            "p_mw": round(total_p_gen, 2),
-            "q_mvar": round(total_q_gen, 2),
-        },
-        "total_load": {
-            "p_mw": round(total_p_load, 2),
-            "q_mvar": round(total_q_load, 2),
-        },
+        "bus_count": len(bus_rows),
+        "branch_count": len(branch_rows),
+        "total_generation": {"p_mw": round(total_p_gen, 2), "q_mvar": round(total_q_gen, 2)},
+        "total_load": {"p_mw": round(total_p_load, 2), "q_mvar": round(total_q_load, 2)},
         "total_loss_mw": round(total_loss, 4),
-        "voltage_range": {
-            "min_pu": round(min_voltage, 4),
-            "max_pu": round(max_voltage, 4),
-        },
+        "voltage_range": {"min_pu": round(min_voltage, 4), "max_pu": round(max_voltage, 4)},
     }
 
 

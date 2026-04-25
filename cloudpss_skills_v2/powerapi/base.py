@@ -159,6 +159,7 @@ class EngineConfig:
 
     engine_name: str = ""
     endpoint: str = ""
+    base_url: str = ""
     timeout: int = 300
     max_retries: int = 3
     retry_delay: float = 1.0

@@ -16,6 +16,7 @@ from typing import Any, Optional
 
 from cloudpss_skills_v2.core.token_manager import (
     CloudPSSAdapter,
+    TokenManager,
     build_cloudpss_adapter,
 )
 from cloudpss_skills_v2.powerapi.base import (
@@ -47,9 +48,12 @@ class CloudPSSEMTAdapter(EngineAdapter):
         super().__init__(config)
         self._model_cache = {}
         self._result_cache = {}
-        self._cloudpss = CloudPSSAdapter(
-            api_url=CloudPSSAdapter.resolve_api_url(self._config.extra.get("auth", {}))
-        )
+        
+        auth = self._config.extra or {}
+        base_url = self._config.base_url
+        token = TokenManager.get_token(auth)
+        
+        self._cloudpss = CloudPSSAdapter(token=token, api_url=base_url)
 
     @property
     def engine_name(self) -> str:
@@ -59,12 +63,11 @@ class CloudPSSEMTAdapter(EngineAdapter):
         return [SimulationType.EMT]
 
     def _do_connect(self) -> None:
-        auth = self._config.extra.get("auth", {})
-        try:
-            self._cloudpss = CloudPSSAdapter.from_config(auth)
-        except ValueError as exc:
-            self._logger.warning("CloudPSS token setup skipped: %s", exc)
-            return
+        auth = self._config.extra or {}
+        base_url = self._config.base_url
+        token = TokenManager.get_token(auth)
+        
+        self._cloudpss = CloudPSSAdapter(token=token, api_url=base_url)
 
         if not self._cloudpss.connect():
             self._logger.warning("cloudpss SDK not installed; skipping token setup")
@@ -100,13 +103,7 @@ class CloudPSSEMTAdapter(EngineAdapter):
                 errors=["No model_id provided"],
             )
 
-        try:
-            cloudpss = self._setup_auth(config)
-        except ValueError as e:
-            return SimulationResult(
-                status=SimulationStatus.FAILED,
-                errors=[f"CloudPSS authentication failed: {e}"],
-            )
+        cloudpss = self._cloudpss
 
         model = self._model_cache.get(model_id)
         if model is None:
@@ -142,10 +139,13 @@ class CloudPSSEMTAdapter(EngineAdapter):
 
         try:
             kwargs = cloudpss.sdk_kwargs()
+            self._logger.info(f"EMT kwargs: {kwargs}")
 
             # Check EMT topology first
             try:
-                topology = model.fetchTopology(implementType="emtp")
+                self._logger.info(f"Fetching topology...")
+                topology = model.fetchTopology(implementType="emtp", **kwargs)
+                self._logger.info(f"Topology: {topology}")
                 if topology is None:
                     raise AttributeError("fetchTopology returned None")
                 topology_data = topology.toJSON()
@@ -270,8 +270,9 @@ class CloudPSSEMTAdapter(EngineAdapter):
     def _apply_fault_parameters(self, model: Any, fault_config: dict[str, Any]) -> Any:
         """Adjust fault component parameters (fs/fe) on the model."""
         FAULT_DEFINITION = "model/CloudPSS/_newFaultResistor_3p"
+        kwargs = self._cloudpss.sdk_kwargs()
         try:
-            components = model.getAllComponents()
+            components = model.getAllComponents(**kwargs)
             fault_comp = None
             for comp_id, comp in components.items():
                 definition = getattr(comp, "definition", "")
@@ -297,8 +298,8 @@ class CloudPSSEMTAdapter(EngineAdapter):
             from cloudpss_skills_v2.powerapi.adapters.cloudpss._component_utils import (
                 update_component_args,
             )
-
-            update_component_args(model, fault_comp.id, args)
+            sdk_kwargs = self._cloudpss.sdk_kwargs()
+            update_component_args(model, fault_comp.id, args, sdk_kwargs)
         except Exception as e:
             self._logger.warning("Failed to apply fault parameters: %s", e)
 
@@ -307,8 +308,9 @@ class CloudPSSEMTAdapter(EngineAdapter):
     def _set_sampling_freq(self, model, sampling_freq: int) -> Any:
         """Adjust measurement channel sampling frequency on the model."""
         CHANNEL_DEFINITION = "model/CloudPSS/_newChannel"
+        kwargs = self._cloudpss.sdk_kwargs()
         try:
-            components = model.getAllComponents()
+            components = model.getAllComponents(**kwargs)
             channels = []
             for comp_id, comp in components.items():
                 definition = getattr(comp, "definition", "")
@@ -327,8 +329,8 @@ class CloudPSSEMTAdapter(EngineAdapter):
                 from cloudpss_skills_v2.powerapi.adapters.cloudpss._component_utils import (
                     update_component_args,
                 )
-
-                update_component_args(model, channel.id, args)
+                sdk_kwargs = self._cloudpss.sdk_kwargs()
+                update_component_args(model, channel.id, args, sdk_kwargs)
 
             self._logger.info(
                 "Set sampling freq %dHz on %d channels", sampling_freq, len(channels)
