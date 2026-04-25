@@ -89,7 +89,12 @@ class AnalysisBase(ABC):
 
     def _get_api(self, config: dict[str, Any]):
         engine = config.get("engine", "cloudpss")
-        return Engine.create_powerflow(engine=engine)
+        auth = config.get("auth", {})
+        return Engine.create_powerflow_for_skill(
+            engine=engine,
+            base_url=auth.get("base_url"),
+            auth=auth,
+        )
 
     def _get_handle(self, config: dict[str, Any], api=None):
         model_rid = config.get("model", {}).get("rid", "")

@@ -147,8 +147,17 @@ class EmtN1ScreeningAnalysis:
 
         try:
             engine = config.get("engine", "cloudpss")
-            pf_api = Engine.create_powerflow(engine=engine)
-            emt_api = Engine.create_emt(engine=engine)
+            auth = config.get("auth", {})
+            pf_api = Engine.create_powerflow_for_skill(
+                engine=engine,
+                base_url=auth.get("base_url"),
+                auth=auth,
+            )
+            emt_api = Engine.create_emt_for_skill(
+                engine=engine,
+                base_url=auth.get("base_url"),
+                auth=auth,
+            )
             self._log(
                 "INFO",
                 f"Using engines: PF={pf_api.adapter.engine_name}, EMT={emt_api.adapter.engine_name}",

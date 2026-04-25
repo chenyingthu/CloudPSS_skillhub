@@ -176,7 +176,12 @@ class BatchPowerFlowAnalysis:
 
         try:
             engine = config.get("engine", "cloudpss")
-            api = Engine.create_powerflow(engine=engine)
+            auth = config.get("auth", {})
+            api = Engine.create_powerflow_for_skill(
+                engine=engine,
+                base_url=auth.get("base_url"),
+                auth=auth,
+            )
             self._log("INFO", f"Using engine: {api.adapter.engine_name}")
 
             models = config.get("models", [])
