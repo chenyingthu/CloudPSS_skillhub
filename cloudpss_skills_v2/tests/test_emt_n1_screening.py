@@ -57,12 +57,12 @@ class TestEmtN1ScreeningAnalysis:
         )
 
         monkeypatch.setattr(
-            "cloudpss_skills_v2.poweranalysis.emt_n1_screening.Engine.create_powerflow",
-            lambda engine="cloudpss": pf_api,
+            "cloudpss_skills_v2.poweranalysis.emt_n1_screening.Engine.create_powerflow_for_skill",
+            lambda engine="cloudpss", **kwargs: pf_api,
         )
         monkeypatch.setattr(
-            "cloudpss_skills_v2.poweranalysis.emt_n1_screening.Engine.create_emt",
-            lambda engine="cloudpss": emt_api,
+            "cloudpss_skills_v2.poweranalysis.emt_n1_screening.Engine.create_emt_for_skill",
+            lambda engine="cloudpss", **kwargs: emt_api,
         )
 
         result = instance.run(
@@ -100,12 +100,12 @@ class TestEmtN1ScreeningAnalysis:
         )
 
         monkeypatch.setattr(
-            "cloudpss_skills_v2.poweranalysis.emt_n1_screening.Engine.create_powerflow",
-            lambda engine="cloudpss": pf_api,
+            "cloudpss_skills_v2.poweranalysis.emt_n1_screening.Engine.create_powerflow_for_skill",
+            lambda engine="cloudpss", **kwargs: pf_api,
         )
         monkeypatch.setattr(
-            "cloudpss_skills_v2.poweranalysis.emt_n1_screening.Engine.create_emt",
-            lambda engine="cloudpss": emt_api,
+            "cloudpss_skills_v2.poweranalysis.emt_n1_screening.Engine.create_emt_for_skill",
+            lambda engine="cloudpss", **kwargs: emt_api,
         )
 
         result = instance.run(

@@ -43,8 +43,8 @@ class TestN1SecurityAnalysis:
         )
 
         monkeypatch.setattr(
-            "cloudpss_skills_v2.poweranalysis.n1_security.Engine.create_powerflow",
-            lambda engine="cloudpss": fake_api,
+            "cloudpss_skills_v2.poweranalysis.n1_security.Engine.create_powerflow_for_skill",
+            lambda engine="cloudpss", **kwargs: fake_api,
         )
         monkeypatch.setattr(
             skill,
