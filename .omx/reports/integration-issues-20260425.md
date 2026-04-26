@@ -81,6 +81,7 @@
 | RUN-043 | `python -m compileall -q cloudpss_skills_v2` | PASS | Package compiles after dynamic/stability contract changes. |
 | RUN-044 | `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py` | PASS | 48 passed in 31.63s; all registered skill paths still run. |
 | RUN-045 | `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs` | PASS | 848 passed, 0 skipped in 189.52s; full v2 suite passed after correctness contract changes. |
+| RUN-046 | `python -m compileall -q cloudpss_skills_v2 && python -m pytest -q cloudpss_skills_v2/tests/test_integration_quality_gate.py`; `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py`; `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs` | PASS | Post-push recheck on current HEAD: compile + quality gate passed (`2 passed`); registry matrix passed (`48 passed`); full v2 suite passed (`848 passed, 0 skipped in 189.46s`). |
 
 ## Remaining External/Design Items
 
