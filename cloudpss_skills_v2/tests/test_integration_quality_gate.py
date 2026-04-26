@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import cloudpss_skills_v2  # noqa: F401 - populate registry
@@ -94,3 +95,25 @@ def test_trusted_golden_cases_carry_source_or_derivation_metadata():
                 missing.append(f"{case_name}: reference.sources[{idx}].url_or_derivation")
 
     assert missing == []
+
+
+def test_golden_config_artifacts_do_not_claim_unverified_engine_support():
+    golden_config_dir = Path(__file__).parent / "golden_configs"
+    violations: list[str] = []
+
+    for path in sorted(golden_config_dir.glob("*.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        capability = data.get("capability")
+        if not isinstance(capability, dict):
+            violations.append(f"{path.name}: missing capability")
+            continue
+        if capability.get("skill_runnable") is not True:
+            violations.append(f"{path.name}: skill_runnable must be true")
+        if capability.get("engine_runnable") is not False:
+            violations.append(f"{path.name}: engine_runnable must remain false until a real engine benchmark exists")
+        if capability.get("engine_claim") != "none":
+            violations.append(f"{path.name}: engine_claim must be none")
+        if not capability.get("engine_notes"):
+            violations.append(f"{path.name}: engine_notes is required")
+
+    assert violations == []

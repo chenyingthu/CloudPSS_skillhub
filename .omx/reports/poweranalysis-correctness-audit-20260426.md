@@ -69,6 +69,27 @@ Covered source-backed cases:
 | Reactive compensation sizing | Explicit Q-V sensitivity derivation | Screening approximation only; not a full compensation design optimization. |
 | Renewable integration | SCR, THD, LVRT-threshold, and capacity-factor formulas | Verifies configured metrics from explicit inputs; does not certify grid-code compliance. |
 
+## Golden Config Artifacts
+
+Reusable JSON config artifacts now exist under `cloudpss_skills_v2/tests/golden_configs/`:
+
+| File | Case | Runnable Scope |
+| --- | --- | --- |
+| `two_bus_pv_model.workflow.json` | model_builder -> model_validator workflow | Skill workflow only; not an engine network case. |
+| `thevenin_weak_grid.skill.json` | Thevenin/SCR formula input | Skill config only; golden values come from explicit `z_th_pu`. |
+| `power_quality_balanced_harmonic.skill.json` | THD/unbalance explicit measurements | Skill config only; golden values come from explicit measurement data. |
+| `protection_iec_standard_inverse.skill.json` | IEC inverse-time relay setting | Skill config only; golden values come from explicit relay settings. |
+| `reactive_compensation_weak_bus.skill.json` | Weak-bus compensation sizing | Skill config only; golden values come from explicit weak-bus parameters. |
+| `renewable_integration_passing.skill.json` | SCR/THD/LVRT/capacity-factor checks | Skill config only; golden values come from explicit renewable, harmonic, LVRT, and capacity-series inputs. |
+
+Every artifact currently declares:
+
+- `skill_runnable: true`
+- `engine_runnable: false`
+- `engine_claim: none`
+
+This is deliberate. These are reusable skill-level golden configs, not CloudPSS or pandapower benchmark cases. Future engine-runnable golden cases must add a real CloudPSS or pandapower model artifact plus a dedicated engine verification test before setting `engine_runnable: true`.
+
 ## Verification
 
 - `python -m pytest -q cloudpss_skills_v2/tests/test_frequency_response.py cloudpss_skills_v2/tests/test_disturbance_severity.py cloudpss_skills_v2/tests/test_transient_stability.py cloudpss_skills_v2/tests/test_small_signal_stability.py cloudpss_skills_v2/tests/test_emt_fault_study.py`
@@ -99,3 +120,9 @@ Covered source-backed cases:
   - PASS: 48 passed.
 - `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
   - PASS: 875 passed, 0 skipped after adding source-backed golden-case provenance.
+- `python -m compileall -q cloudpss_skills_v2 && python -m pytest -q cloudpss_skills_v2/tests/test_golden_config_artifacts.py cloudpss_skills_v2/tests/test_golden_trusted_analysis_cases.py cloudpss_skills_v2/tests/test_integration_quality_gate.py cloudpss_skills_v2/tests/test_model_validator.py`
+  - PASS: compile plus 23 targeted tests passed.
+- `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py`
+  - PASS: 48 passed.
+- `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
+  - PASS: 880 passed, 0 skipped after adding explicit golden config artifacts and capability gates.

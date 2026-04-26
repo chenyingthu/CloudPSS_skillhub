@@ -1,0 +1,27 @@
+{
+  "case_id": "thevenin_weak_grid",
+  "description": "Formula-derived Thevenin/SCR case using explicit supplied Zth.",
+  "capability": {
+    "skill_runnable": true,
+    "engine_runnable": false,
+    "engine_claim": "none",
+    "engine_notes": "The pandapower adapter may be touched by the skill, but the golden SCC/SCR values are calculated from explicit z_th_pu, not derived from a pandapower short-circuit study."
+  },
+  "skill": "thevenin_equivalent",
+  "config": {
+    "skill": "thevenin_equivalent",
+    "engine": "pandapower",
+    "model": {"rid": "case14", "source": "local"},
+    "pcc": {"bus": "bus:0", "base_mva": 100.0},
+    "equivalent": {
+      "z_th_pu": {"real": 0.03, "imag": 0.04},
+      "voltage_kv": 110.0,
+      "source": "explicit_thevenin_impedance"
+    }
+  },
+  "expected": {
+    "z_th_magnitude": 0.05,
+    "short_circuit_capacity_mva": 2000.0,
+    "short_circuit_ratio": 20.0
+  }
+}

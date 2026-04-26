@@ -1,0 +1,44 @@
+{
+  "case_id": "renewable_integration_passing",
+  "description": "Formula-derived renewable integration case for SCR, THD, LVRT threshold, and capacity factor.",
+  "capability": {
+    "skill_runnable": true,
+    "engine_runnable": false,
+    "engine_claim": "none",
+    "engine_notes": "The pandapower adapter may be touched by the skill, but golden SCR, THD, LVRT, and capacity-factor values are calculated from explicit inputs, not from an engine renewable integration study."
+  },
+  "skill": "renewable_integration",
+  "config": {
+    "skill": "renewable_integration",
+    "engine": "pandapower",
+    "model": {"rid": "case14", "source": "local"},
+    "renewable": {
+      "type": "pv",
+      "capacity_mw": 50.0,
+      "short_circuit_mva": 200.0,
+      "point_of_interconnection": "bus_pcc",
+      "capacity_series_mw": [25.0, 30.0, 20.0, 35.0]
+    },
+    "harmonics": {
+      "fundamental_voltage": 1.0,
+      "orders": {"5": 0.03, "7": 0.04},
+      "limit_thd": 0.06
+    },
+    "lvrt": {
+      "profile": [
+        {"time_s": 0.0, "voltage_pu": 1.0},
+        {"time_s": 0.1, "voltage_pu": 0.2},
+        {"time_s": 0.8, "voltage_pu": 0.92}
+      ],
+      "min_voltage_pu": 0.15,
+      "max_recovery_time_s": 1.5
+    },
+    "analysis": {"min_scr": 3.0, "target_capacity_factor": 0.5}
+  },
+  "expected": {
+    "scr": 4.0,
+    "thd": 0.05,
+    "capacity_factor": 0.55,
+    "overall_passed": true
+  }
+}

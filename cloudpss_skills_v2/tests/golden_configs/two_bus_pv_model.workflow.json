@@ -1,0 +1,59 @@
+{
+  "case_id": "two_bus_pv_model",
+  "description": "Two-bus PV structural workflow for model_builder then model_validator.",
+  "capability": {
+    "skill_runnable": true,
+    "engine_runnable": false,
+    "engine_claim": "none",
+    "engine_notes": "This workflow validates an in-memory model dictionary only. It is not a CloudPSS or pandapower network case."
+  },
+  "workflow": [
+    {
+      "skill": "model_builder",
+      "config": {
+        "base_model": {
+          "rid": "golden/two_bus_pv",
+          "components": [
+            {"id": "bus_source", "type": "bus", "parameters": {"vn_kv": 110}},
+            {"id": "bus_pcc", "type": "bus", "parameters": {"vn_kv": 110}},
+            {
+              "id": "line_source_pcc",
+              "type": "line",
+              "from_bus": "bus_source",
+              "to_bus": "bus_pcc",
+              "parameters": {"length_km": 10.0, "r_ohm": 1.0, "x_ohm": 5.0}
+            }
+          ]
+        },
+        "operations": [
+          {
+            "action": "add",
+            "component": {
+              "id": "pv_pcc",
+              "type": "pv",
+              "bus": "bus_pcc",
+              "parameters": {"p_mw": "50.0"}
+            },
+            "schema": {"p_mw": "float"}
+          }
+        ]
+      }
+    },
+    {
+      "skill": "model_validator",
+      "model_from_step": "model_builder",
+      "config": {
+        "validation": {"phases": ["structure", "topology", "parameters"]},
+        "expectations": {
+          "components_present": ["pv_pcc"],
+          "component_count": 4
+        },
+        "component_requirements": {"pv_pcc": ["p_mw"]}
+      }
+    }
+  ],
+  "expected": {
+    "validation_status": "pass",
+    "component_count": 4
+  }
+}

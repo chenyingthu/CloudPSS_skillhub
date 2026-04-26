@@ -1,0 +1,33 @@
+{
+  "case_id": "protection_iec_standard_inverse",
+  "description": "Formula-derived IEC standard inverse overcurrent relay setting case.",
+  "capability": {
+    "skill_runnable": true,
+    "engine_runnable": false,
+    "engine_claim": "none",
+    "engine_notes": "The pandapower adapter may be touched by the skill, but relay pickup and operating time are calculated from explicit relay settings, not from an engine protection simulation."
+  },
+  "skill": "protection_coordination",
+  "config": {
+    "skill": "protection_coordination",
+    "engine": "pandapower",
+    "model": {"rid": "case14", "source": "local"},
+    "relays": [
+      {
+        "id": "R1",
+        "load_current": 200.0,
+        "fault_current": 3000.0,
+        "time_dial": 0.1,
+        "curve_type": "iec_standard_inverse"
+      }
+    ],
+    "analysis": {
+      "load_multiplier": 1.25,
+      "fault_current_safety_factor": 0.5
+    }
+  },
+  "expected": {
+    "pickup_current": 250.0,
+    "operating_time_s": 0.2748
+  }
+}

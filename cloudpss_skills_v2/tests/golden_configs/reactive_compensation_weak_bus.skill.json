@@ -1,0 +1,26 @@
+{
+  "case_id": "reactive_compensation_weak_bus",
+  "description": "Formula-derived weak-bus reactive compensation screening case.",
+  "capability": {
+    "skill_runnable": true,
+    "engine_runnable": false,
+    "engine_claim": "none",
+    "engine_notes": "This skill config does not invoke CloudPSS or pandapower. It sizes compensation from explicit weak-bus SCR, voltage, and reactance."
+  },
+  "skill": "reactive_compensation_design",
+  "config": {
+    "skill": "reactive_compensation_design",
+    "model": {"rid": "golden/two_bus_pv", "source": "inline"},
+    "weak_buses": [
+      {"bus": "bus_pcc", "scr": 2.5, "voltage_pu": 0.92, "x_pu": 0.25}
+    ],
+    "compensation": {
+      "device_type": "sync_compensator",
+      "max_capacity_mvar": 100.0
+    }
+  },
+  "expected": {
+    "required_q_mvar": 0.29,
+    "recommended_size_mvar": 0.29
+  }
+}
