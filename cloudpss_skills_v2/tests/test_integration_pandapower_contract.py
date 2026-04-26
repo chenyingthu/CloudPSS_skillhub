@@ -1,13 +1,18 @@
-"""Cross-engine validation tests: pandapower adapter patterns."""
+"""Pandapower adapter contract tests.
+
+This suite intentionally covers the local pandapower adapter only. Live
+CloudPSS parity belongs in local-server integration tests that target
+http://166.111.60.76:50001.
+"""
 
 import pytest
-from cloudpss_skills_v2.powerskill import Engine, PowerFlow, ModelHandle
+from cloudpss_skills_v2.powerskill import Engine
 from cloudpss_skills_v2.powerapi import SimulationStatus
 
 
 @pytest.mark.pandapower
-class TestCrossEngineConsistency:
-    def test_engine_creation_both_engines(self):
+class TestPandapowerAdapterConsistency:
+    def test_engine_creation(self):
         pf_pandapower = Engine.create_powerflow(engine="pandapower")
         assert pf_pandapower is not None
         assert pf_pandapower.adapter.engine_name == "pandapower"
@@ -35,7 +40,7 @@ class TestCrossEngineConsistency:
 
 
 @pytest.mark.pandapower
-class TestCrossEngineVoltageComparison:
+class TestPandapowerVoltageContract:
     @pytest.fixture
     def pf(self):
         return Engine.create_powerflow(engine="pandapower")
@@ -61,7 +66,7 @@ class TestCrossEngineVoltageComparison:
 
 
 @pytest.mark.pandapower
-class TestCrossEngineModelHandle:
+class TestPandapowerModelHandle:
     def test_model_handle_interface_consistent(self):
         pf = Engine.create_powerflow(engine="pandapower")
         handle = pf.get_model_handle("case14")
@@ -84,7 +89,7 @@ class TestCrossEngineModelHandle:
 
 
 @pytest.mark.pandapower
-class TestCrossEngineValidationConfig:
+class TestPandapowerValidationConfig:
     def test_pandapower_validate_method(self):
         pf = Engine.create_powerflow(engine="pandapower")
         valid = pf.adapter.validate_config({"model_id": "case14"})
@@ -97,7 +102,7 @@ class TestCrossEngineValidationConfig:
 
 
 @pytest.mark.pandapower
-class TestCrossEngineErrorHandling:
+class TestPandapowerErrorHandling:
     def test_invalid_model_fails(self):
         pf = Engine.create_powerflow(engine="pandapower")
         pf.adapter.connect()

@@ -55,6 +55,20 @@ class DisturbanceSeverityAnalysis:
             },
         }
 
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "engine": "pandapower",
+            "auth": {"token": "local-pandapower-token"},
+            "model": {"rid": "case14", "source": "local"},
+            "simulation": {"fault_time": 4.0, "fault_duration": 0.1},
+            "analysis": {
+                "pre_fault_window": 0.5,
+                "si_interval": 0.0,
+                "si_window": 0.5,
+            },
+        }
+
     def __init__(self):
         self.logs = []
         self.artifacts = []

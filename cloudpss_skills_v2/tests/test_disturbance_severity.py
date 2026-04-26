@@ -19,11 +19,18 @@ class TestDisturbanceSeverityAnalysis:
 
     def test_has_config_schema(self):
         instance = DisturbanceSeverityAnalysis()
-        if hasattr(instance, "config_schema"):
-            schema = instance.config_schema
-            assert schema is not None
-        else:
-            pytest.skip("config_schema not available on this skill instance")
+        schema = instance.config_schema
+        assert isinstance(schema, dict)
+        assert "simulation" in schema["properties"]
+
+    def test_get_default_config_is_valid(self):
+        instance = DisturbanceSeverityAnalysis()
+        config = instance.get_default_config()
+        valid, errors = instance.validate(config)
+        assert valid, errors
+        assert config["engine"] == "pandapower"
+        assert config["model"]["rid"] == "case14"
+        assert config["simulation"]["fault_time"] == 4.0
 
     def test_validate_empty_config(self):
         instance = DisturbanceSeverityAnalysis()

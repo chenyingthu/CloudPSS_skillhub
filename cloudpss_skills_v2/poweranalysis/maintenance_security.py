@@ -62,6 +62,23 @@ class MaintenanceSecurityAnalysis:
             },
         }
 
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "engine": "pandapower",
+            "auth": {"token": "local-pandapower-token"},
+            "model": {"rid": "case14", "source": "local"},
+            "maintenance": {
+                "branch_id": "line:0",
+                "description": "Default N-1 branch outage",
+                "duration_hours": 8,
+            },
+            "analysis": {
+                "voltage_threshold": 0.05,
+                "thermal_threshold": 1.0,
+            },
+        }
+
     def __init__(self):
         self.logs = []
         self.artifacts = []

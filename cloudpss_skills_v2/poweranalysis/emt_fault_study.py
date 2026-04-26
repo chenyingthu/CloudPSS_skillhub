@@ -29,6 +29,16 @@ class EmtFaultStudyAnalysis:
             },
         }
 
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "model": {"rid": "case14", "source": "local"},
+            "scenarios": {
+                "baseline": {"enabled": True, "voltage_deviation": 0.3},
+                "delayed_clear": {"enabled": True, "voltage_deviation": 0.5},
+                "mild_fault": {"enabled": True, "voltage_deviation": 0.15},
+            },
+        }
+
     def validate(self, config: dict[str, Any] | None = None) -> tuple[bool, list[str]]:
         errors: list[str] = []
         if not isinstance(config, dict):

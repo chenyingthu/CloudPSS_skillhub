@@ -62,6 +62,21 @@ class N2SecurityAnalysis:
             },
         }
 
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "engine": "pandapower",
+            "auth": {"token": "local-pandapower-token"},
+            "model": {"rid": "case14", "source": "local"},
+            "analysis": {
+                "branches": ["line:0", "line:1"],
+                "check_voltage": True,
+                "voltage_threshold": 0.05,
+                "thermal_threshold": 1.0,
+                "max_scenarios": 1,
+            },
+        }
+
     def __init__(self):
         self.logs = []
         self.artifacts = []

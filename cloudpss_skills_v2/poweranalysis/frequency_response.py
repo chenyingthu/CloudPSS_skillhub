@@ -54,6 +54,15 @@ class FrequencyResponseAnalysis:
             },
         }
 
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "engine": "pandapower",
+            "auth": {"token": "local-pandapower-token"},
+            "model": {"rid": "case14", "source": "local"},
+            "disturbance": {"type": "step_load_change", "magnitude": 0.05},
+        }
+
     def __init__(self):
         self.logs = []
         self.artifacts = []

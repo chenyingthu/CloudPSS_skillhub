@@ -19,11 +19,18 @@ class TestFrequencyResponseAnalysis:
 
     def test_has_config_schema(self):
         instance = FrequencyResponseAnalysis()
-        if hasattr(instance, "config_schema"):
-            schema = instance.config_schema
-            assert schema is not None
-        else:
-            pytest.skip("config_schema not available on this skill instance")
+        schema = instance.config_schema
+        assert isinstance(schema, dict)
+        assert "disturbance" in schema["properties"]
+
+    def test_get_default_config_is_valid(self):
+        instance = FrequencyResponseAnalysis()
+        config = instance.get_default_config()
+        valid, errors = instance.validate(config)
+        assert valid, errors
+        assert config["engine"] == "pandapower"
+        assert config["model"]["rid"] == "case14"
+        assert config["disturbance"]["type"] == "step_load_change"
 
     def test_validate_empty_config(self):
         instance = FrequencyResponseAnalysis()

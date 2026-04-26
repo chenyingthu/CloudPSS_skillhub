@@ -13,7 +13,7 @@
 | --- | --- | --- | --- | --- | --- |
 | INT-000 | integration-suite | TEST_DEFECT | FIXED | Many files named `test_integration_*` contained `smoke` / `needs_improvement` markers and weak assertions. | Removed all weak markers from v2 tests, added a quality gate preventing marker return, and kept strict registry/live integration gates. |
 | INT-001 | `test_integration_datalib.py` | TEST_DEFECT | FIXED | File name said integration, but tests only imported/instantiated `BusData`. | Replaced with real pandapower `case14` result conversion checks for `BusData`, `BranchData`, and `NetworkSummary`. |
-| INT-002 | `test_integration_cross_engine.py` | DEFERRED_DESIGN | OPEN | Cross-engine suite exercises pandapower interface invariants; public CloudPSS comparison is outside the current requested target. | Revisit only if a future requirement asks for public/internal multi-server comparison. |
+| INT-002 | `test_integration_pandapower_contract.py` | TEST_SCOPE | FIXED | Former `test_integration_cross_engine.py` name implied multi-engine parity, but the suite only exercises pandapower adapter contracts and public CloudPSS is outside the requested target. | Renamed and documented the suite as pandapower-only; live CloudPSS coverage remains in local-server tests for `166.111.60.76:50001`. |
 | INT-003 | CloudPSS live env | TEST_SCOPE | FIXED | User clarified public CloudPSS should not be tested; only `166.111.60.76` is in scope. | Test fixtures now force `.cloudpss_token_internal` and `http://166.111.60.76:50001`, ignoring public endpoint environment variables. |
 | INT-004 | CloudPSS endpoint selection | TEST_SCOPE | FIXED | Public/internal endpoint probes were irrelevant to the clarified target. | Local server `http://166.111.60.76:50001` is the only live CloudPSS integration target for this suite. |
 | INT-005 | `test_integration_poweranalysis.py` | TEST_DEFECT | FIXED | Original full file timed out at 120s; replaced with bounded local-server tests for N-1, voltage stability, and contingency paths. Retest RUN-012 passed. | Keep expanding poweranalysis module matrix beyond the initial live subset. |
@@ -28,6 +28,8 @@
 | INT-014 | poweranalysis module tests | TEST_DEFECT | FIXED | Second-pass review found several high-risk skills still had shallow import/config tests instead of business invariants. | Added real pandapower N-1 contingency, voltage stability PV scan, short-circuit capacity, and EMT N-1 ranking/digest assertions; RUN-029 and RUN-033 passed. |
 | INT-015 | `ShortCircuitAnalysis` peak-current normalization | CODE_DEFECT | FIXED | Real pandapower `bus_results` can contain positive `ikss_ka` with `ip_ka == 0`, causing analysis to report zero peak current while capacity was positive. | Fall back peak current to `ikss_ka` when `ip_ka` is absent/non-positive; tests now require `peak_current >= steady_current > 0`. |
 | INT-016 | weak test labels | TEST_DEFECT | FIXED | Old generated unit files still contained `Smoke test` docstrings even after pytest markers were removed. | Removed weak docstring labels and expanded quality gate to reject weak test labels, not just markers. |
+| INT-017 | default config and schema skip branches | TEST_DEFECT | FIXED | Full-suite `-rs` showed 3 skips because some skill tests allowed missing `get_default_config()`, and follow-up scan found additional schema/default skip branches. | Added validated defaults for `emt_fault_study`, `maintenance_security`, `n2_security`, `frequency_response`, `disturbance_severity`; fixed `orthogonal_sensitivity`'s invalid default config; removed non-live skip branches. |
+| INT-018 | `libs/component_registry.py` | CODE_DEFECT | FIXED | File contained only empty function stubs and had no references in v2 code, tests, or docs. | Deleted the unused stub module instead of preserving a misleading API surface. |
 
 ## Test Runs
 
@@ -66,10 +68,17 @@
 | RUN-031 | `python -m pytest -q cloudpss_skills_v2/tests/test_integration_quality_gate.py` | PASS | 2 passed; quality gate rejects weak pytest markers and weak test-label docstrings. |
 | RUN-032 | `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py` | PASS | 48 passed in 30.07s; all registered skills ran, including live-only local CloudPSS EMT entries on `http://166.111.60.76:50001`. |
 | RUN-033 | `timeout 600s python -m pytest -q cloudpss_skills_v2/tests` | PASS | 837 passed, 3 skipped in 189.90s; full v2 suite passed after deep assertion expansion. |
+| RUN-034 | `python -m pytest -q cloudpss_skills_v2/tests/test_emt_fault_study.py cloudpss_skills_v2/tests/test_maintenance_security.py cloudpss_skills_v2/tests/test_n2_security.py` | PASS | 12 passed; former skipped default-config checks now validate concrete defaults. |
+| RUN-035 | `python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py -k 'emt_fault_study or maintenance_security or n2_security'` | PASS | 3 passed, 45 deselected; default-config cleanup did not break registered runnable paths. |
+| RUN-036 | `python -m pytest -q cloudpss_skills_v2/tests/test_emt_fault_study.py cloudpss_skills_v2/tests/test_maintenance_security.py cloudpss_skills_v2/tests/test_n2_security.py cloudpss_skills_v2/tests/test_orthogonal_sensitivity.py cloudpss_skills_v2/tests/test_frequency_response.py cloudpss_skills_v2/tests/test_disturbance_severity.py` | PASS | 54 passed; all formerly optional schema/default assertions are now mandatory. |
+| RUN-037 | `python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py -k 'emt_fault_study or maintenance_security or n2_security or orthogonal_sensitivity or frequency_response or disturbance_severity'` | PASS | 6 passed, 42 deselected; cleaned defaults still run through the registered integration matrix. |
+| RUN-038 | `python -m compileall -q cloudpss_skills_v2` | PASS | Full package compilation succeeded after deleting the unused component registry stub and default-config cleanup. |
+| RUN-039 | `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py` | PASS | 48 passed in 27.66s; registered skill matrix still covers all skills including local CloudPSS live-only entries. |
+| RUN-040 | `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs` | PASS | 842 passed, 0 skipped in 189.98s; no non-live skip branches remain in the v2 test suite on this environment. |
 
 ## Remaining External/Design Items
 
 - Public CloudPSS and `https://internal.cloudpss.com` are not tested in this campaign by explicit user scope.
-- `test_integration_cross_engine.py` remains a pandapower interface-invariant suite, not a multi-server numerical comparison.
+- `test_integration_pandapower_contract.py` is explicitly a pandapower interface-invariant suite, not a multi-server numerical comparison.
 - No weak `smoke` / `needs_improvement` pytest markers or weak `Smoke test` labels remain in `cloudpss_skills_v2/tests`; the quality gate prevents reintroduction.
 - In ordinary CI/dev environments without the private local CloudPSS token/server route, only the two live-only EMT registry-matrix cases should skip; the rest of the matrix remains mandatory.

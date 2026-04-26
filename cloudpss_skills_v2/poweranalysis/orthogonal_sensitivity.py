@@ -122,9 +122,12 @@ class OrthogonalSensitivityAnalysis:
     def get_default_config(self) -> dict[str, Any]:
         return {
             "skill": self.name,
-            "model": {"rid": "", "source": "cloud"},
-            "parameters": [],
-            "target": {"metric": "", "objective": "maximize"},
+            "model": {"rid": "case14", "source": "local"},
+            "parameters": [
+                {"name": "load_scale", "levels": [0.95, 1.05]},
+                {"name": "gen_scale", "levels": [0.98, 1.02]},
+            ],
+            "target": {"metric": "voltage", "objective": "maximize"},
             "design": {"table_type": "auto"},
         }
 
