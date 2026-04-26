@@ -406,6 +406,35 @@ class TestCloudPSSShortCircuitAdapterLifecycle:
         adapter = CloudPSSShortCircuitAdapter()
         assert adapter is not None
 
+    def test_adapter_reads_nested_auth_from_engine_config(self):
+        adapter = CloudPSSShortCircuitAdapter(
+            EngineConfig(
+                engine_name="cloudpss_sc",
+                base_url="",
+                extra={
+                    "auth": {
+                        "token": "token-1234567890",
+                        "base_url": "http://166.111.60.76:50001",
+                    }
+                },
+            )
+        )
+
+        assert adapter._cloud_pss_adapter.token == "token-1234567890"
+        assert adapter._cloud_pss_adapter.api_url == "http://166.111.60.76:50001"
+
+    def test_adapter_keeps_flat_auth_compatibility(self):
+        adapter = CloudPSSShortCircuitAdapter(
+            EngineConfig(
+                engine_name="cloudpss_sc",
+                base_url="http://166.111.60.76:50001",
+                extra={"token": "token-1234567890"},
+            )
+        )
+
+        assert adapter._cloud_pss_adapter.token == "token-1234567890"
+        assert adapter._cloud_pss_adapter.api_url == "http://166.111.60.76:50001"
+
 
 @pytest.mark.cloudpss
 class TestCloudPSSShortCircuitValidation:

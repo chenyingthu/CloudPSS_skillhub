@@ -48,6 +48,15 @@ _FAULT_TYPE_MAP = {
 }
 
 
+def _resolve_auth(config: EngineConfig) -> dict[str, Any]:
+    auth = config.extra.get("auth", config.extra) or {}
+    return auth if isinstance(auth, dict) else {}
+
+
+def _resolve_base_url(config: EngineConfig, auth: dict[str, Any]) -> str:
+    return config.base_url or auth.get("base_url") or auth.get("baseUrl") or ""
+
+
 class CloudPSSShortCircuitAdapter(EngineAdapter):
     """
     CloudPSS engine adapter for short circuit analysis via EMT.
@@ -67,9 +76,8 @@ class CloudPSSShortCircuitAdapter(EngineAdapter):
         self._model_cache = {}
         self._result_cache = {}
         
-        # Build SDK with proper base_url
-        auth = self._config.extra or {}
-        base_url = self._config.base_url
+        auth = _resolve_auth(self._config)
+        base_url = _resolve_base_url(self._config, auth)
         token = TokenManager.get_token(auth)
         
         self._cloud_pss_adapter = CloudPSSAdapter(token=token, api_url=base_url)
@@ -82,8 +90,8 @@ class CloudPSSShortCircuitAdapter(EngineAdapter):
         return [SimulationType.SHORT_CIRCUIT]
 
     def _do_connect(self) -> None:
-        auth = self._config.extra or {}
-        base_url = self._config.base_url
+        auth = _resolve_auth(self._config)
+        base_url = _resolve_base_url(self._config, auth)
         token = TokenManager.get_token(auth)
         
         self._cloud_pss_adapter = CloudPSSAdapter(token=token, api_url=base_url)

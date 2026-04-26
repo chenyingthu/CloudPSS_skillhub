@@ -7,8 +7,11 @@ cases and inline data count as integration inputs; import-only checks do not.
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
+import socket
 from typing import Any
+from urllib.parse import urlparse
 
 import pytest
 
@@ -18,6 +21,8 @@ from cloudpss_skills_v2.core import SkillResult, SkillStatus
 
 
 TMP_ROOT = Path("/tmp/cloudpss_skill_matrix")
+LOCAL_CLOUDPSS_BASE_URL = "http://166.111.60.76:50001"
+LIVE_CLOUDPSS_SKILLS = {"emt_n1_screening", "emt_simulation"}
 
 
 def _waveform_data() -> dict[str, Any]:
@@ -67,8 +72,35 @@ def _live_auth() -> dict[str, str]:
     token_path = Path(".cloudpss_token_internal")
     return {
         "token": token_path.read_text().strip() if token_path.exists() else "",
-        "base_url": "http://166.111.60.76:50001",
+        "base_url": LOCAL_CLOUDPSS_BASE_URL,
     }
+
+
+@lru_cache(maxsize=1)
+def _live_cloudpss_skip_reason() -> str | None:
+    token_path = Path(".cloudpss_token_internal")
+    if not token_path.exists() or not token_path.read_text().strip():
+        return "local CloudPSS token .cloudpss_token_internal is unavailable"
+
+    parsed = urlparse(LOCAL_CLOUDPSS_BASE_URL)
+    host = parsed.hostname
+    port = parsed.port
+    if not host or not port:
+        return f"invalid local CloudPSS base URL: {LOCAL_CLOUDPSS_BASE_URL}"
+
+    try:
+        with socket.create_connection((host, port), timeout=3):
+            return None
+    except OSError as exc:
+        return f"local CloudPSS server {LOCAL_CLOUDPSS_BASE_URL} is unreachable: {exc}"
+
+
+def _require_live_cloudpss(skill_name: str) -> None:
+    if skill_name not in LIVE_CLOUDPSS_SKILLS:
+        return
+    reason = _live_cloudpss_skip_reason()
+    if reason:
+        pytest.skip(reason)
 
 
 def _artifact_paths(result: SkillResult) -> list[Path]:
@@ -435,6 +467,8 @@ EXPECTED_KEYS: dict[str, tuple[str, ...]] = {
 @pytest.mark.integration
 @pytest.mark.parametrize("skill_name", sorted(SkillRegistry.list_all()))
 def test_registered_skill_runs_real_minimal_integration(skill_name: str, tmp_path: Path):
+    _require_live_cloudpss(skill_name)
+
     skill_class = SkillRegistry.get(skill_name)
     assert skill_class is not None, f"{skill_name} is registered without a class"
 
