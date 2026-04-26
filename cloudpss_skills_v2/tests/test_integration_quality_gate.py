@@ -117,3 +117,29 @@ def test_golden_config_artifacts_do_not_claim_unverified_engine_support():
             violations.append(f"{path.name}: engine_notes is required")
 
     assert violations == []
+
+
+def test_engine_golden_cases_require_engine_artifacts_and_expected_results():
+    engine_case_dir = Path(__file__).parent / "golden_engine_cases"
+    violations: list[str] = []
+
+    for path in sorted(engine_case_dir.glob("*.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        capability = data.get("capability")
+        if not isinstance(capability, dict):
+            violations.append(f"{path.name}: missing capability")
+            continue
+        if capability.get("engine_runnable") is not True:
+            violations.append(f"{path.name}: engine_runnable must be true")
+        if capability.get("engine") != "pandapower":
+            violations.append(f"{path.name}: only pandapower engine cases are currently supported")
+        if not data.get("model"):
+            violations.append(f"{path.name}: model artifact is required")
+        expected = data.get("expected")
+        if not isinstance(expected, dict):
+            violations.append(f"{path.name}: expected results are required")
+            continue
+        if not expected.get("power_flow") or not expected.get("short_circuit"):
+            violations.append(f"{path.name}: power_flow and short_circuit expected results are required")
+
+    assert violations == []

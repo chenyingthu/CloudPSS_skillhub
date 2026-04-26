@@ -1,0 +1,85 @@
+{
+  "case_id": "pandapower_two_bus_radial",
+  "description": "Two-bus radial pandapower benchmark with one external grid, one line, and one load.",
+  "capability": {
+    "skill_runnable": false,
+    "engine_runnable": true,
+    "engine": "pandapower",
+    "engine_claim": "pandapower_powerflow_and_short_circuit",
+    "engine_notes": "The test builds a pandapower net from this repository artifact and runs the pandapower power-flow and IEC 60909 short-circuit adapters."
+  },
+  "model": {
+    "format": "pandapower_network_spec_v1",
+    "sn_mva": 100.0,
+    "buses": [
+      {"id": "source", "name": "Source", "vn_kv": 110.0},
+      {"id": "load", "name": "Load", "vn_kv": 110.0}
+    ],
+    "external_grids": [
+      {
+        "bus": "source",
+        "name": "Grid",
+        "vm_pu": 1.02,
+        "va_degree": 0.0,
+        "s_sc_max_mva": 2000.0,
+        "s_sc_min_mva": 1500.0,
+        "rx_max": 0.1,
+        "rx_min": 0.1
+      }
+    ],
+    "lines": [
+      {
+        "from_bus": "source",
+        "to_bus": "load",
+        "name": "Line",
+        "length_km": 10.0,
+        "r_ohm_per_km": 0.05,
+        "x_ohm_per_km": 0.4,
+        "c_nf_per_km": 0.0,
+        "max_i_ka": 1.0
+      }
+    ],
+    "loads": [
+      {"bus": "load", "name": "Load", "p_mw": 50.0, "q_mvar": 20.0}
+    ]
+  },
+  "power_flow_config": {
+    "model_id": "pandapower_two_bus_radial",
+    "algorithm": "newton_raphson",
+    "tolerance": 1e-8,
+    "max_iterations": 20
+  },
+  "short_circuit_config": {
+    "model_id": "pandapower_two_bus_radial",
+    "fault_type": "3ph"
+  },
+  "expected": {
+    "power_flow": {
+      "converged": true,
+      "bus_count": 2,
+      "branch_count": 1,
+      "source_bus_voltage_pu": 1.02,
+      "load_bus_voltage_pu": 1.011301,
+      "load_bus_angle_degree": -0.872222,
+      "line_loading_percent": 27.948931,
+      "line_loss_mw": 0.117171,
+      "grid_p_mw": 50.117171,
+      "grid_q_mvar": 20.937371
+    },
+    "short_circuit": {
+      "standard": "IEC 60909",
+      "fault_type": "3ph",
+      "bus_count": 2,
+      "max_ikss_ka": 10.497278,
+      "source_bus_ikss_ka": 10.497278,
+      "load_bus_ikss_ka": 6.537857
+    }
+  },
+  "tolerances": {
+    "voltage_pu": 1e-6,
+    "angle_degree": 1e-6,
+    "power_mw": 1e-6,
+    "current_ka": 1e-6,
+    "percent": 1e-6
+  }
+}

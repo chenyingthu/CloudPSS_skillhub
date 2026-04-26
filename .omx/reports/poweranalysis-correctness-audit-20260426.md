@@ -90,6 +90,16 @@ Every artifact currently declares:
 
 This is deliberate. These are reusable skill-level golden configs, not CloudPSS or pandapower benchmark cases. Future engine-runnable golden cases must add a real CloudPSS or pandapower model artifact plus a dedicated engine verification test before setting `engine_runnable: true`.
 
+## Engine-Runnable Golden Benchmarks
+
+The first true engine-runnable golden benchmark now exists under `cloudpss_skills_v2/tests/golden_engine_cases/`:
+
+| File | Engine | Coverage | Expected Outputs |
+| --- | --- | --- | --- |
+| `pandapower_two_bus_radial.json` | pandapower | Builds a two-bus radial net from the JSON artifact, then runs the pandapower power-flow and IEC 60909 short-circuit adapters. | Source/load bus voltages, load-bus angle, line loading/loss, grid P/Q, max/source/load short-circuit currents. |
+
+This benchmark is intentionally local pandapower only. It does not claim CloudPSS equivalence and does not depend on the `166.111.60.76` live server.
+
 ## Verification
 
 - `python -m pytest -q cloudpss_skills_v2/tests/test_frequency_response.py cloudpss_skills_v2/tests/test_disturbance_severity.py cloudpss_skills_v2/tests/test_transient_stability.py cloudpss_skills_v2/tests/test_small_signal_stability.py cloudpss_skills_v2/tests/test_emt_fault_study.py`
@@ -126,3 +136,9 @@ This is deliberate. These are reusable skill-level golden configs, not CloudPSS 
   - PASS: 48 passed.
 - `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
   - PASS: 880 passed, 0 skipped after adding explicit golden config artifacts and capability gates.
+- `python -m compileall -q cloudpss_skills_v2 && python -m pytest -q cloudpss_skills_v2/tests/test_golden_engine_cases.py cloudpss_skills_v2/tests/test_golden_config_artifacts.py cloudpss_skills_v2/tests/test_golden_trusted_analysis_cases.py cloudpss_skills_v2/tests/test_integration_quality_gate.py cloudpss_skills_v2/tests/test_model_validator.py`
+  - PASS: compile plus 27 targeted tests passed.
+- `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py`
+  - PASS: 48 passed.
+- `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
+  - PASS: 884 passed, 0 skipped after adding the first pandapower engine-runnable golden benchmark.
