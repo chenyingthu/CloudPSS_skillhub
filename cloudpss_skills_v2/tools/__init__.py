@@ -9,6 +9,7 @@ from cloudpss_skills_v2.tools.auto_channel_setup import AutoChannelSetupTool
 from cloudpss_skills_v2.tools.auto_loop_breaker import AutoLoopBreakerTool
 from cloudpss_skills_v2.tools.topology_check import TopologyCheckTool
 from cloudpss_skills_v2.tools.model_builder import ModelBuilderTool
+from cloudpss_skills_v2.tools.model_validator import ModelValidatorTool
 from cloudpss_skills_v2.tools.model_hub import ModelHubTool
 from cloudpss_skills_v2.tools.model_parameter_extractor import ModelParameterExtractorTool
 from cloudpss_skills_v2.tools.component_catalog import ComponentCatalogTool
@@ -28,6 +29,7 @@ __all__ = [
     "AutoLoopBreakerTool",
     "TopologyCheckTool",
     "ModelBuilderTool",
+    "ModelValidatorTool",
     "ModelHubTool",
     "ModelParameterExtractorTool",
     "ComponentCatalogTool",

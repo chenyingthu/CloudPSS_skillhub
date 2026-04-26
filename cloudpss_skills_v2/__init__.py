@@ -125,7 +125,7 @@ from cloudpss_skills_v2.tools import (
     VisualizeTool, CompareVisualizationTool, ResultCompareTool,
     ReportGeneratorTool, AutoChannelSetupTool, AutoLoopBreakerTool,
     TopologyCheckTool, ModelBuilderTool, ModelHubTool,
-    ModelParameterExtractorTool, ComponentCatalogTool,
+    ModelValidatorTool, ModelParameterExtractorTool, ComponentCatalogTool,
     BatchTaskManagerTool, ConfigBatchRunnerTool, StudyPipelineTool,
 )
 
@@ -141,19 +141,19 @@ SkillRegistry.register("auto_channel_setup", "tool", AutoChannelSetupTool, "自�
 SkillRegistry.register("auto_loop_breaker", "tool", AutoLoopBreakerTool, "自动解环")
 SkillRegistry.register("topology_check", "tool", TopologyCheckTool, "拓扑检查")
 SkillRegistry.register("model_builder", "tool", ModelBuilderTool, "模型构建")
+SkillRegistry.register("model_validator", "tool", ModelValidatorTool, "模型验证")
 SkillRegistry.register("model_hub", "tool", ModelHubTool, "算例中心")
 SkillRegistry.register("model_parameter_extractor", "tool", ModelParameterExtractorTool, "参数提取")
 SkillRegistry.register("component_catalog", "tool", ComponentCatalogTool, "组件目录")
 SkillRegistry.register("batch_task_manager", "tool", BatchTaskManagerTool, "批处理任务管理")
 SkillRegistry.register("config_batch_runner", "tool", ConfigBatchRunnerTool, "配置批量运行")
 SkillRegistry.register("study_pipeline", "tool", StudyPipelineTool, "研究流水线")
-SkillRegistry.register("model_validator", "tool", ModelBuilderTool, "模型验证")
 
 __all__.extend([
     "HDF5ExportTool", "ComtradeExportTool", "WaveformExportTool",
     "VisualizeTool", "CompareVisualizationTool", "ResultCompareTool",
     "ReportGeneratorTool", "AutoChannelSetupTool", "AutoLoopBreakerTool",
-    "TopologyCheckTool", "ModelBuilderTool", "ModelHubTool",
+    "TopologyCheckTool", "ModelBuilderTool", "ModelValidatorTool", "ModelHubTool",
     "ModelParameterExtractorTool", "ComponentCatalogTool",
     "BatchTaskManagerTool", "ConfigBatchRunnerTool", "StudyPipelineTool",
 ])

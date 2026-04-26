@@ -432,13 +432,31 @@ def _config_for(skill_name: str, tmp_path: Path) -> dict[str, Any]:
             ],
         },
         "model_validator": {
-            "base_model": {"components": []},
-            "operations": [
-                {
-                    "action": "add",
-                    "component": {"id": "bus1", "type": "bus"},
-                }
-            ],
+            "model": {
+                "rid": "inline/two_bus_pv",
+                "components": [
+                    {"id": "bus1", "type": "bus", "parameters": {"vn_kv": 110}},
+                    {"id": "bus2", "type": "bus", "parameters": {"vn_kv": 110}},
+                    {
+                        "id": "line12",
+                        "type": "line",
+                        "from_bus": "bus1",
+                        "to_bus": "bus2",
+                        "parameters": {"length_km": 10},
+                    },
+                    {
+                        "id": "pv_bus2",
+                        "type": "pv",
+                        "bus": "bus2",
+                        "parameters": {"p_mw": 50},
+                    },
+                ],
+            },
+            "validation": {"phases": ["structure", "topology", "parameters"]},
+            "expectations": {
+                "components_present": ["pv_bus2"],
+                "component_count": 4,
+            },
         },
         "model_hub": {
             "action": "list",
@@ -507,6 +525,7 @@ EXPECTED_KEYS: dict[str, tuple[str, ...]] = {
     "report_generator": ("markdown_path", "html_path"),
     "auto_loop_breaker": ("break_nodes", "loop_free"),
     "model_parameter_extractor": ("groups", "component_count"),
+    "model_validator": ("status", "phases", "issues"),
 }
 
 

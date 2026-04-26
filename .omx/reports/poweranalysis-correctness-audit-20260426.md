@@ -46,7 +46,7 @@ Date: 2026-04-26
 2. Connect `thevenin_equivalent`, `fault_clearing_scan`, and `transient_stability_margin` directly to CloudPSS/pandapower short-circuit or EMT/time-domain result adapters where possible, so callers do not need to supply intermediate values manually.
 3. Validate protection coordination curves and margins against known IEC/IEEE examples.
 4. Validate renewable integration, reactive compensation, and orthogonal sensitivity formulas against known engineering cases and document their standards basis.
-5. Extend the trusted-analysis quality gate beyond known forbidden snippets, preferably with per-skill metadata assertions.
+5. Use the new `model_builder` -> `model_validator` local chain to construct trusted inline cases before promoting them to live CloudPSS/pandapower golden-case validation.
 
 ## Verification
 
@@ -62,3 +62,7 @@ Date: 2026-04-26
   - PASS: 48 passed.
 - `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
   - PASS: 860 passed, 0 skipped.
+- `python -m pytest -q cloudpss_skills_v2/tests/test_integration_quality_gate.py cloudpss_skills_v2/tests/test_model_builder.py cloudpss_skills_v2/tests/test_model_validator.py`
+  - PASS: 15 passed.
+- `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
+  - PASS: 867 passed, 0 skipped after adding the real local `model_validator` gate.

@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import cloudpss_skills_v2  # noqa: F401 - populate registry
+from cloudpss_skills_v2 import SkillRegistry
+from cloudpss_skills_v2.tools.model_validator import ModelValidatorTool
+
 
 def test_no_weak_test_labels_remain():
     tests_root = Path(__file__).parent
@@ -57,3 +61,7 @@ def test_trusted_analysis_rejects_hidden_synthetic_physical_data():
                 offenders.append(f"{path.relative_to(project_root)}: {snippet}")
 
     assert offenders == []
+
+
+def test_model_validator_is_registered_as_real_validator():
+    assert SkillRegistry.get("model_validator") is ModelValidatorTool
