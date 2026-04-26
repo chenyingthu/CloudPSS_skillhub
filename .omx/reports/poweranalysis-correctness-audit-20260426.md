@@ -47,6 +47,7 @@ Date: 2026-04-26
 3. Validate protection coordination curves and margins against known IEC/IEEE examples.
 4. Validate renewable integration, reactive compensation, and orthogonal sensitivity formulas against known engineering cases and document their standards basis.
 5. Use the new `model_builder` -> `model_validator` local chain to construct trusted inline cases before promoting them to live CloudPSS/pandapower golden-case validation.
+6. Extend the first local golden-case lane with literature-backed IEEE/IEC cases for protection, power quality, renewable integration, and compensation sizing.
 
 ## Verification
 
@@ -66,3 +67,7 @@ Date: 2026-04-26
   - PASS: 15 passed.
 - `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
   - PASS: 867 passed, 0 skipped after adding the real local `model_validator` gate.
+- `python -m pytest -q cloudpss_skills_v2/tests/test_integration_quality_gate.py cloudpss_skills_v2/tests/test_golden_trusted_analysis_cases.py cloudpss_skills_v2/tests/test_model_validator.py`
+  - PASS: 16 passed.
+- `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
+  - PASS: 873 passed, 0 skipped after adding the first deterministic local golden cases.

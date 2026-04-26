@@ -160,7 +160,7 @@ class ModelValidatorTool:
             issues.append({"type": "islands", "islands": islands})
 
         for component in components:
-            if not self._is_type(component, GENERATOR_TYPE_HINTS):
+            if not self._type_has_hint(component, GENERATOR_TYPE_HINTS):
                 continue
             targets = self._connection_targets(component)
             if not any(target in bus_ids for target in targets):
@@ -209,7 +209,7 @@ class ModelValidatorTool:
             comp_type = self._component_type(component)
             required = list(requirements.get(comp_id, [])) + list(requirements.get(comp_type, []))
 
-            if self._is_type(component, RENEWABLE_TYPE_HINTS):
+            if self._type_has_hint(component, RENEWABLE_TYPE_HINTS):
                 required.extend(["p_mw"])
                 if not self._pins(component) and not component.get("bus"):
                     issues.append({"type": "renewable_missing_connection", "component": comp_id})
