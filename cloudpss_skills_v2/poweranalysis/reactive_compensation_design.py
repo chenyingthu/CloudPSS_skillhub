@@ -58,6 +58,21 @@ class ReactiveCompensationDesignAnalysis:
             errors.append("model.rid is required")
         if not config.get("weak_buses") and not config.get("vsi_result", {}).get("weak_buses"):
             errors.append("Either weak_buses or vsi_result.weak_buses is required")
+        for idx, bus in enumerate(self._extract_weak_buses(config) if isinstance(config, dict) else []):
+            if not isinstance(bus, dict):
+                errors.append(f"weak_buses[{idx}] must be an object")
+                continue
+            for key in ("scr", "voltage_pu", "x_pu"):
+                if key not in bus:
+                    errors.append(f"weak_buses[{idx}].{key} is required")
+                    continue
+                try:
+                    value = float(bus[key])
+                except (TypeError, ValueError):
+                    errors.append(f"weak_buses[{idx}].{key} must be numeric")
+                    continue
+                if key == "x_pu" and value <= 0:
+                    errors.append(f"weak_buses[{idx}].{key} must be positive")
         return len(errors) == 0, errors
 
     def _calculate_q_required(self, delta_v_pu=None, v_pu=None, x_pu=0.2):
@@ -121,10 +136,11 @@ class ReactiveCompensationDesignAnalysis:
         recommendations = []
         for bus in self._extract_weak_buses(config)[:5]:
             bus_name = self._bus_name(bus)
-            scr = self._bus_value(bus, "scr", 3.0)
-            voltage_pu = self._bus_value(bus, "voltage_pu", 0.94)
+            scr = self._bus_value(bus, "scr", 0.0)
+            voltage_pu = self._bus_value(bus, "voltage_pu", 0.0)
+            x_pu = self._bus_value(bus, "x_pu", 0.0)
             weakness = self._assess_weakness(scr, voltage_pu)
-            q_required = self._calculate_q_required(1.0 - voltage_pu, voltage_pu, x_pu=0.2)
+            q_required = self._calculate_q_required(1.0 - voltage_pu, voltage_pu, x_pu=x_pu)
             q_size = min(self._estimate_compensation_size(q_required, device_type), max_capacity)
             recommendations.append(
                 {
@@ -132,6 +148,7 @@ class ReactiveCompensationDesignAnalysis:
                     "weakness": weakness,
                     "scr": round(scr, 2),
                     "voltage_pu": round(voltage_pu, 4),
+                    "x_pu": round(x_pu, 4),
                     "required_q_mvar": round(q_required, 2),
                     "recommended_size_mvar": round(q_size, 2),
                     "device_type": device_type,
@@ -144,6 +161,13 @@ class ReactiveCompensationDesignAnalysis:
             "weak_bus_count": len(recommendations),
             "compensation_recommendations": recommendations,
             "total_recommended_capacity_mvar": round(total_capacity, 2),
+            "data_source": "weak_buses",
+            "confidence_level": "formula_derived_from_explicit_input",
+            "validation_status": "explicit_weak_bus_measurements_required",
+            "assumptions": [
+                "weak_buses entries provide SCR, voltage_pu, and x_pu from a trusted upstream study",
+                "required reactive power uses a simplified delta-V over Thevenin-reactance formula",
+            ],
         }
         return SkillResult(
             skill_name=self.name,

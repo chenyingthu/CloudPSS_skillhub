@@ -34,21 +34,38 @@ class TestFaultClearingScanAnalysis:
 
     def test_validate_valid_config(self):
         instance = FaultClearingScanAnalysis()
-        config = {"model": {"rid": "test"}}
+        config = {
+            "model": {"rid": "test"},
+            "stability_results": [{"clearing_time": 0.1, "stable": True}],
+        }
         valid, errors = instance.validate(config)
         assert valid is True
 
+    def test_requires_explicit_stability_results(self):
+        instance = FaultClearingScanAnalysis()
+        valid, errors = instance.validate({"model": {"rid": "test"}})
+        assert valid is False
+        assert any("stability_results" in error for error in errors)
+
     def test_compute_scan_results(self):
         instance = FaultClearingScanAnalysis()
-        ct_values = [0.05, 0.1, 0.15]
-        results = instance._compute_scan_results(ct_values, "bus1", "3ph")
+        stability_results = [
+            {"clearing_time": 0.05, "stable": True},
+            {"clearing_time": 0.1, "stable": True},
+            {"clearing_time": 0.15, "stable": False},
+        ]
+        results = instance._compute_scan_results(stability_results, "bus1", "3ph")
         assert len(results) == 3
         assert results[0]["clearing_time"] == 0.05
 
     def test_compute_scan_results_stability_check(self):
         instance = FaultClearingScanAnalysis()
-        ct_values = [0.05, 0.1, 0.15]
-        results = instance._compute_scan_results(ct_values, "bus1", "3ph")
+        stability_results = [
+            {"clearing_time": 0.05, "stable": True, "critical": False},
+            {"clearing_time": 0.1, "stable": True, "critical": True},
+            {"clearing_time": 0.15, "stable": False},
+        ]
+        results = instance._compute_scan_results(stability_results, "bus1", "3ph")
         assert results[0]["stable"] is True
         assert results[1]["critical"] is True
         assert results[2]["stable"] is False
@@ -75,7 +92,12 @@ class TestFaultClearingScanAnalysis:
 
     def test_run_returns_skill_result(self):
         instance = FaultClearingScanAnalysis()
-        result = instance.run({"model": {"rid": "test"}})
+        result = instance.run(
+            {
+                "model": {"rid": "test"},
+                "stability_results": [{"clearing_time": 0.1, "stable": True}],
+            }
+        )
         assert result is not None
         assert hasattr(result, "skill_name")
 

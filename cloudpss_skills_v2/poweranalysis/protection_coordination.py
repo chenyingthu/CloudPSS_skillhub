@@ -160,9 +160,9 @@ class ProtectionCoordinationAnalysis:
         if _as_float(analysis.get("fault_current_safety_factor", 0.5), 0.5) <= 0:
             errors.append("analysis.fault_current_safety_factor must be positive")
 
-        relays = config.get("relays", []) or []
-        if not isinstance(relays, list):
-            errors.append("relays must be a list")
+        relays = config.get("relays")
+        if not isinstance(relays, list) or not relays:
+            errors.append("relays must be a non-empty list")
         for idx, relay in enumerate(relays if isinstance(relays, list) else []):
             if not isinstance(relay, dict):
                 errors.append(f"relays[{idx}] must be an object")
@@ -174,6 +174,10 @@ class ProtectionCoordinationAnalysis:
                 errors.append(f"relays[{idx}].load_current must be non-negative")
             if _as_float(relay.get("fault_current", relay.get("fault_current_a", 0)), 0) < 0:
                 errors.append(f"relays[{idx}].fault_current must be non-negative")
+            if _as_float(relay.get("load_current", relay.get("load_current_a", 0)), 0) <= 0:
+                errors.append(f"relays[{idx}].load_current must be positive")
+            if _as_float(relay.get("fault_current", relay.get("fault_current_a", 0)), 0) <= 0:
+                errors.append(f"relays[{idx}].fault_current must be positive")
 
         pairs = config.get("coordination_pairs", []) or []
         if not isinstance(pairs, list):
@@ -202,7 +206,7 @@ class ProtectionCoordinationAnalysis:
             pf_result = api.run_power_flow(model_handle=handle)
 
             analysis = config.get("analysis", {}) or {}
-            relays = self._normalize_relays(config.get("relays", []), handle, analysis)
+            relays = config["relays"]
             settings = [self._calculate_relay_settings(relay, analysis) for relay in relays]
             settings_by_id = {setting.relay_id: setting for setting in settings}
             coordination = self._check_coordination(settings_by_id, config, analysis)
@@ -226,6 +230,9 @@ class ProtectionCoordinationAnalysis:
                     "power_flow_converged": bool(pf_result.is_success),
                 },
                 "analysis_type": "protection_coordination",
+                "data_source": "explicit_relay_settings",
+                "confidence_level": "formula_derived_from_explicit_input",
+                "validation_status": "explicit_relays_required",
                 "relay_count": len(settings),
                 "coordination_pair_count": total_pairs,
                 "valid_coordination_pairs": valid_pairs,
@@ -277,55 +284,6 @@ class ProtectionCoordinationAnalysis:
             start_time=start_time,
             end_time=datetime.now(),
         )
-
-    def _normalize_relays(self, relays: list[dict[str, Any]], handle: Any, analysis: dict[str, Any]) -> list[dict[str, Any]]:
-        if relays:
-            return relays
-
-        components = []
-        try:
-            components = handle.get_components()
-        except Exception:
-            components = []
-
-        branch_relays = [component for component in components if getattr(component, "component_type", "") == "branch"][:3]
-        if not branch_relays:
-            branch_relays = []
-
-        defaults: list[dict[str, Any]] = []
-        for idx, component in enumerate(branch_relays):
-            defaults.append(
-                {
-                    "id": f"R{idx + 1}",
-                    "type": ProtectionType.OVERCURRENT.value,
-                    "location": getattr(component, "name", "") or getattr(component, "key", f"branch_{idx + 1}"),
-                    "protected_element": getattr(component, "key", ""),
-                    "load_current": 200.0 + idx * 25.0,
-                    "fault_current": 2500.0 - idx * 250.0,
-                    "time_dial": 0.08 + idx * 0.04,
-                }
-            )
-        if defaults:
-            return defaults
-
-        return [
-            {
-                "id": "R1",
-                "type": ProtectionType.OVERCURRENT.value,
-                "location": "primary_feeder",
-                "load_current": 200.0,
-                "fault_current": 2400.0,
-                "time_dial": 0.08,
-            },
-            {
-                "id": "R2",
-                "type": ProtectionType.OVERCURRENT.value,
-                "location": "backup_feeder",
-                "load_current": 220.0,
-                "fault_current": 2400.0,
-                "time_dial": 0.16,
-            },
-        ]
 
     def _calculate_relay_settings(self, relay: dict[str, Any], analysis: dict[str, Any]) -> RelaySettings:
         relay_id = str(relay.get("id") or relay.get("name") or relay.get("relay_id") or f"relay_{uuid.uuid4().hex[:8]}")

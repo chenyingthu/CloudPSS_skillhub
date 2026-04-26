@@ -116,6 +116,7 @@ class RenewableIntegrationAnalysis:
                 "capacity_mw": 100.0,
                 "short_circuit_mva": 350.0,
                 "point_of_interconnection": "bus_1",
+                "capacity_series_mw": [40.0, 55.0, 20.0, 75.0],
             },
             "harmonics": {
                 "fundamental_voltage": 1.0,
@@ -147,17 +148,27 @@ class RenewableIntegrationAnalysis:
             errors.append("renewable.capacity_mw must be positive")
         if _as_float(renewable.get("short_circuit_mva", 0), 0) <= 0:
             errors.append("renewable.short_circuit_mva must be positive")
+        capacity_series = renewable.get("capacity_series_mw")
+        if not isinstance(capacity_series, list) or not capacity_series:
+            errors.append("renewable.capacity_series_mw must be a non-empty list")
+        else:
+            for idx, value in enumerate(capacity_series):
+                if _as_float(value, -1.0) < 0:
+                    errors.append(f"renewable.capacity_series_mw[{idx}] must be non-negative")
 
         harmonics = config.get("harmonics", {}) or {}
         if _as_float(harmonics.get("fundamental_voltage", 1.0), 1.0) <= 0:
             errors.append("harmonics.fundamental_voltage must be positive")
         if _as_float(harmonics.get("limit_thd", 0.05), 0.05) <= 0:
             errors.append("harmonics.limit_thd must be positive")
+        orders = harmonics.get("orders")
+        if not isinstance(orders, dict) or not orders:
+            errors.append("harmonics.orders must be a non-empty object")
 
         lvrt = config.get("lvrt", {}) or {}
-        profile = lvrt.get("profile", []) or []
-        if profile and not isinstance(profile, list):
-            errors.append("lvrt.profile must be a list")
+        profile = lvrt.get("profile")
+        if not isinstance(profile, list) or not profile:
+            errors.append("lvrt.profile must be a non-empty list")
         for idx, point in enumerate(profile if isinstance(profile, list) else []):
             if not isinstance(point, dict):
                 errors.append(f"lvrt.profile[{idx}] must be an object")
@@ -215,6 +226,14 @@ class RenewableIntegrationAnalysis:
                     "point_of_interconnection": renewable.get("point_of_interconnection"),
                 },
                 "analysis_type": "renewable_integration",
+                "data_source": {
+                    "scr": "renewable.short_circuit_mva",
+                    "harmonics": "harmonics.orders",
+                    "lvrt": "lvrt.profile",
+                    "capacity": "renewable.capacity_series_mw",
+                },
+                "confidence_level": "formula_derived_from_explicit_input",
+                "validation_status": "explicit_inputs_required",
                 "results": {
                     "scr": scr_result,
                     "harmonics": harmonic_result,
@@ -311,12 +330,6 @@ class RenewableIntegrationAnalysis:
         profile = sorted(lvrt.get("profile", []) or [], key=lambda item: _as_float(item.get("time_s", 0), 0))
         min_voltage_allowed = _as_float(lvrt.get("min_voltage_pu", 0.15), 0.15)
         max_recovery_time = _as_float(lvrt.get("max_recovery_time_s", 1.5), 1.5)
-        if not profile:
-            profile = [
-                {"time_s": 0.0, "voltage_pu": 1.0},
-                {"time_s": 0.15, "voltage_pu": 0.2},
-                {"time_s": 0.8, "voltage_pu": 0.92},
-            ]
         min_voltage = min(_as_float(point.get("voltage_pu", 1.0), 1.0) for point in profile)
         recovery_time = next(
             (
@@ -343,8 +356,6 @@ class RenewableIntegrationAnalysis:
         capacity_mw = _as_float(renewable.get("capacity_mw", 0), 0)
         series = renewable.get("capacity_series_mw", []) or []
         capacity_series = [_as_float(value, 0) for value in series if _as_float(value, 0) >= 0]
-        if not capacity_series:
-            capacity_series = [0.4 * capacity_mw, 0.55 * capacity_mw, 0.2 * capacity_mw, 0.75 * capacity_mw]
         average_output = sum(capacity_series) / len(capacity_series) if capacity_series else 0.0
         capacity_factor = average_output / capacity_mw if capacity_mw > 0 else 0.0
         target = _as_float(analysis.get("target_capacity_factor", 0.25), 0.25)

@@ -197,8 +197,22 @@ def _config_for(skill_name: str, tmp_path: Path) -> dict[str, Any]:
             "auth": _local_auth(),
             "analysis": {"branches": ["line:0", "line:1"], "max_scenarios": 1},
         },
-        "thevenin_equivalent": {**pf, "pcc": {"bus": "bus:0", "base_mva": 100}},
-        "power_quality_analysis": {**pf, "analysis": {"harmonic_orders": [2, 3, 5]}},
+        "thevenin_equivalent": {
+            **pf,
+            "pcc": {"bus": "bus:0", "base_mva": 100},
+            "equivalent": {
+                "z_th_pu": {"real": 0.01, "imag": 0.05},
+                "source": "registry_matrix_explicit_input",
+            },
+        },
+        "power_quality_analysis": {
+            **pf,
+            "analysis": {"harmonic_orders": [2, 3, 5]},
+            "measurements": {
+                "harmonic_voltages": {"2": 0.01, "3": 0.015, "5": 0.02},
+                "phase_voltages_pu": [1.0, 0.99, 1.01],
+            },
+        },
         "protection_coordination": {
             **pf,
             "relays": [
@@ -277,6 +291,11 @@ def _config_for(skill_name: str, tmp_path: Path) -> dict[str, Any]:
             "auth": _local_auth(),
             "fault": {"bus": "bus:0", "type": "3ph"},
             "scan": {"clearing_times": [0.05, 0.1, 0.2]},
+            "stability_results": [
+                {"clearing_time": 0.05, "stable": True, "critical": False},
+                {"clearing_time": 0.1, "stable": True, "critical": True},
+                {"clearing_time": 0.2, "stable": False, "critical": True},
+            ],
         },
         "renewable_integration": {
             **pf,
@@ -285,6 +304,7 @@ def _config_for(skill_name: str, tmp_path: Path) -> dict[str, Any]:
                 "capacity_mw": 100.0,
                 "short_circuit_mva": 350.0,
                 "point_of_interconnection": "bus:0",
+                "capacity_series_mw": [40.0, 55.0, 20.0, 75.0],
             },
             "harmonics": {
                 "fundamental_voltage": 1.0,
@@ -308,7 +328,9 @@ def _config_for(skill_name: str, tmp_path: Path) -> dict[str, Any]:
         },
         "transient_stability_margin": {
             "model": {"rid": "case14"},
-            "fault_scenarios": [{"location": "bus:0", "clearing_time": 0.1}],
+            "fault_scenarios": [
+                {"location": "bus:0", "clearing_time": 0.1, "cct": 0.2}
+            ],
         },
         "emt_fault_study": {
             "model": {"rid": "case14"},
@@ -329,7 +351,9 @@ def _config_for(skill_name: str, tmp_path: Path) -> dict[str, Any]:
         },
         "reactive_compensation_design": {
             "model": {"rid": "case14"},
-            "weak_buses": [{"bus": "bus:3", "scr": 2.5, "voltage_pu": 0.92}],
+            "weak_buses": [
+                {"bus": "bus:3", "scr": 2.5, "voltage_pu": 0.92, "x_pu": 0.25}
+            ],
         },
         "hdf5_export": {
             "source": {"data": {"time": [0.0, 0.1], "values": [1.0, 2.0]}},

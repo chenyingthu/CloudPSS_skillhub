@@ -51,6 +51,17 @@ class FaultClearingScanAnalysis:
                         },
                     },
                 },
+                "stability_results": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["clearing_time", "stable"],
+                        "properties": {
+                            "clearing_time": {"type": "number"},
+                            "stable": {"type": "boolean"},
+                        },
+                    },
+                },
             },
         }
 
@@ -75,20 +86,42 @@ class FaultClearingScanAnalysis:
             return (False, errors)
         if not config.get("model", {}).get("rid"):
             errors.append("model.rid is required")
+        stability_results = config.get("stability_results")
+        if not isinstance(stability_results, list) or not stability_results:
+            errors.append("stability_results must be a non-empty list")
+        else:
+            for idx, item in enumerate(stability_results):
+                if not isinstance(item, dict):
+                    errors.append(f"stability_results[{idx}] must be an object")
+                    continue
+                if "clearing_time" not in item or "stable" not in item:
+                    errors.append(
+                        f"stability_results[{idx}] requires clearing_time and stable"
+                    )
+                    continue
+                try:
+                    float(item["clearing_time"])
+                except (TypeError, ValueError):
+                    errors.append(f"stability_results[{idx}].clearing_time must be numeric")
+                if not isinstance(item["stable"], bool):
+                    errors.append(f"stability_results[{idx}].stable must be boolean")
         return (len(errors) == 0, errors)
 
     def _compute_scan_results(
-        self, ct_values: list, fault_bus: str, fault_type: str
+        self, stability_results: list, fault_bus: str, fault_type: str
     ) -> list:
         results = []
-        for ct in ct_values:
+        for item in stability_results:
+            ct = float(item["clearing_time"])
+            stable = bool(item["stable"])
             results.append(
                 {
                     "clearing_time": ct,
                     "bus": fault_bus,
                     "fault_type": fault_type,
-                    "stable": ct < 0.15,
-                    "critical": 0.1 <= ct <= 0.15,
+                    "stable": stable,
+                    "critical": bool(item.get("critical", not stable)),
+                    "data_source": item.get("data_source", "stability_results"),
                 }
             )
         return results
@@ -137,12 +170,14 @@ class FaultClearingScanAnalysis:
             fault_bus = fault.get("bus", "bus1")
             fault_type = fault.get("type", "3ph")
 
-            scan = config.get("scan", {})
-            ct_values = scan.get("clearing_times", [0.05, 0.1, 0.15, 0.2, 0.3])
+            stability_results = config["stability_results"]
+            ct_values = [float(item["clearing_time"]) for item in stability_results]
 
             self._log("INFO", f"Scanning clearing times: {ct_values}")
 
-            results = self._compute_scan_results(ct_values, fault_bus, fault_type)
+            results = self._compute_scan_results(
+                stability_results, fault_bus, fault_type
+            )
 
             monotonic = self._check_monotonic_degradation(results)
 
@@ -157,6 +192,9 @@ class FaultClearingScanAnalysis:
                 "stable_count": stable_count,
                 "critical_count": critical_count,
                 "monotonic_degradation": monotonic,
+                "data_source": "stability_results",
+                "confidence_level": "trace_or_simulation_derived",
+                "validation_status": "explicit_stability_results_required",
             }
 
             self._log(

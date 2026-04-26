@@ -56,6 +56,17 @@ def test_validate_requires_model_capacity_and_short_circuit_capacity():
     assert any("short_circuit_mva" in error for error in errors)
 
 
+def test_validate_requires_explicit_measurement_series():
+    skill = RenewableIntegrationAnalysis()
+    config = skill.get_default_config()
+    config["renewable"].pop("capacity_series_mw", None)
+
+    valid, errors = skill.validate(config)
+
+    assert valid is False
+    assert any("capacity_series_mw" in error for error in errors)
+
+
 def test_scr_analysis_classifies_and_checks_threshold():
     skill = RenewableIntegrationAnalysis()
 
@@ -137,6 +148,7 @@ def test_run_returns_standardized_success_payload(monkeypatch: pytest.MonkeyPatc
     assert result.data["success"] is True
     assert result.data["results"]["scr"]["scr"] == 3.5
     assert result.data["model_info"]["power_flow_converged"] is True
+    assert result.data["data_source"]["lvrt"] == "lvrt.profile"
 
 
 def test_run_fails_when_thd_exceeds_limit(monkeypatch: pytest.MonkeyPatch):

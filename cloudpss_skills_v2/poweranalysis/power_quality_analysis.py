@@ -53,6 +53,19 @@ class PowerQualityAnalysisAnalysis:
                         "sag_threshold": {"type": "number", "default": 0.9},
                     },
                 },
+                "measurements": {
+                    "type": "object",
+                    "properties": {
+                        "harmonic_voltages": {"type": "object"},
+                        "fundamental_voltage": {"type": "number", "default": 1.0},
+                        "phase_voltages_pu": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                            "minItems": 3,
+                            "maxItems": 3,
+                        },
+                    },
+                },
             },
         }
 
@@ -99,6 +112,33 @@ class PowerQualityAnalysisAnalysis:
             return (False, errors)
         if not config.get("model", {}).get("rid"):
             errors.append("model.rid is required")
+        measurements = config.get("measurements")
+        if not isinstance(measurements, dict):
+            errors.append("measurements with harmonic_voltages and phase_voltages_pu is required")
+        else:
+            harmonics = measurements.get("harmonic_voltages")
+            if not isinstance(harmonics, dict) or not harmonics:
+                errors.append("measurements.harmonic_voltages must be a non-empty object")
+            else:
+                for order, magnitude in harmonics.items():
+                    try:
+                        int(order)
+                        float(magnitude)
+                    except (TypeError, ValueError):
+                        errors.append(
+                            "measurements.harmonic_voltages entries must be numeric"
+                        )
+                        break
+            phase_voltages = measurements.get("phase_voltages_pu")
+            if not isinstance(phase_voltages, list) or len(phase_voltages) != 3:
+                errors.append("measurements.phase_voltages_pu must contain 3 values")
+            else:
+                for value in phase_voltages:
+                    try:
+                        float(value)
+                    except (TypeError, ValueError):
+                        errors.append("measurements.phase_voltages_pu values must be numeric")
+                        break
         return (len(errors) == 0, errors)
 
     def run(self, config: dict | None) -> SkillResult:
@@ -139,13 +179,21 @@ class PowerQualityAnalysisAnalysis:
             )
             thd_threshold = analysis_config.get("thd_threshold", 0.05)
             unbalance_threshold = analysis_config.get("unbalance_threshold", 0.02)
+            measurements = config["measurements"]
 
             handle = api.get_model_handle(model_rid)
             result = api.run_power_flow(model_handle=handle)
 
-            harmonic_voltages = {h: 0.01 * (h % 3 + 1) for h in harmonic_orders}
-            thd = self._calculate_thd(harmonic_voltages, fundamental=1.0)
-            unbalance = 0.02
+            harmonic_voltages = {
+                int(order): float(value)
+                for order, value in measurements["harmonic_voltages"].items()
+            }
+            fundamental = float(measurements.get("fundamental_voltage", 1.0))
+            phase_voltages = [
+                float(value) for value in measurements["phase_voltages_pu"]
+            ]
+            thd = self._calculate_thd(harmonic_voltages, fundamental=fundamental)
+            unbalance = self._calculate_unbalance(*phase_voltages)
             quality = self._classify_power_quality(thd, unbalance)
 
             bus_results = []
@@ -163,6 +211,8 @@ class PowerQualityAnalysisAnalysis:
             result_data = {
                 "model_rid": model_rid,
                 "harmonic_orders": harmonic_orders,
+                "harmonic_voltages": harmonic_voltages,
+                "fundamental_voltage": fundamental,
                 "thd": round(thd, 4),
                 "thd_threshold": thd_threshold,
                 "thd_exceeds": thd > thd_threshold,
@@ -170,6 +220,13 @@ class PowerQualityAnalysisAnalysis:
                 "unbalance_threshold": unbalance_threshold,
                 "quality_classification": quality,
                 "bus_count": len(bus_results),
+                "data_source": "measurements",
+                "confidence_level": "measurement_derived",
+                "validation_status": "explicit_measurements_required",
+                "assumptions": [
+                    "harmonic_voltages are per-unit magnitudes relative to fundamental_voltage",
+                    "phase_voltages_pu are simultaneous phase RMS voltage measurements",
+                ],
             }
 
             self._log(

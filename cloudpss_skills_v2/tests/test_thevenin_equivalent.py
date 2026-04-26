@@ -175,6 +175,7 @@ class TestValidate:
         config = {
             "model": {"rid": "test_model"},
             "pcc": {"bus": "BUS1"},
+            "equivalent": {"z_th_pu": {"real": 0.01, "imag": 0.05}},
         }
         valid, errors = instance.validate(config)
         assert valid is True
@@ -228,6 +229,7 @@ class TestValidate:
         config = {
             "model": {"rid": "test_model"},
             "pcc": {"bus": "BUS1", "base_mva": 50},
+            "equivalent": {"z_th_pu": {"real": 0.01, "imag": 0.05}},
         }
         valid, errors = instance.validate(config)
         assert valid is True
@@ -236,7 +238,17 @@ class TestValidate:
         config = {
             "model": {"rid": "test_model"},
             "pcc": {"bus": "BUS1"},
+            "equivalent": {"z_th_pu": {"real": 0.01, "imag": 0.05}},
             "engine": "pandapower",
         }
         valid, errors = instance.validate(config)
         assert valid is True
+
+    def test_requires_explicit_thevenin_impedance(self, instance):
+        config = {
+            "model": {"rid": "test_model"},
+            "pcc": {"bus": "BUS1"},
+        }
+        valid, errors = instance.validate(config)
+        assert valid is False
+        assert any("equivalent.z_th_pu" in error for error in errors)

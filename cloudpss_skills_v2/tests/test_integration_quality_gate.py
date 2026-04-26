@@ -34,3 +34,26 @@ def test_live_cloudpss_fixtures_target_local_server(
 ):
     assert cloudpss_api_url == "http://166.111.60.76:50001"
     assert cloudpss_model_rid.startswith("model/chenying/")
+
+
+def test_trusted_analysis_rejects_hidden_synthetic_physical_data():
+    project_root = Path(__file__).parents[1]
+    forbidden_snippets = (
+        "z_th_real = 0.01",
+        "z_th_imag = 0.05",
+        "0.01 * (h % 3 + 1)",
+        "unbalance = 0.02",
+        "ct < 0.15",
+        "def _estimate_cct",
+        "primary_feeder",
+        "backup_feeder",
+    )
+    offenders: list[str] = []
+
+    for path in sorted((project_root / "poweranalysis").glob("*.py")):
+        text = path.read_text()
+        for snippet in forbidden_snippets:
+            if snippet in text:
+                offenders.append(f"{path.relative_to(project_root)}: {snippet}")
+
+    assert offenders == []

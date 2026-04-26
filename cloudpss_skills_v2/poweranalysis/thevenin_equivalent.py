@@ -51,6 +51,21 @@ class TheveninEquivalentAnalysis:
                         "base_mva": {"type": "number", "default": 100},
                     },
                 },
+                "equivalent": {
+                    "type": "object",
+                    "properties": {
+                        "z_th_pu": {
+                            "type": "object",
+                            "required": ["real", "imag"],
+                            "properties": {
+                                "real": {"type": "number"},
+                                "imag": {"type": "number"},
+                            },
+                        },
+                        "voltage_kv": {"type": "number"},
+                        "source": {"type": "string"},
+                    },
+                },
             },
         }
 
@@ -91,6 +106,18 @@ class TheveninEquivalentAnalysis:
             errors.append("model.rid is required")
         if not config.get("pcc", {}).get("bus"):
             errors.append("pcc.bus is required")
+        z_th = config.get("equivalent", {}).get("z_th_pu")
+        if not isinstance(z_th, dict):
+            errors.append("equivalent.z_th_pu with real and imag is required")
+        else:
+            for key in ("real", "imag"):
+                if key not in z_th:
+                    errors.append(f"equivalent.z_th_pu.{key} is required")
+                else:
+                    try:
+                        float(z_th[key])
+                    except (TypeError, ValueError):
+                        errors.append(f"equivalent.z_th_pu.{key} must be numeric")
         return (len(errors) == 0, errors)
 
     def run(self, config: dict | None) -> SkillResult:
@@ -143,9 +170,11 @@ class TheveninEquivalentAnalysis:
                     pcc_bus_data = bus
                     break
 
-            z_th_real = 0.01
-            z_th_imag = 0.05
-            voltage_kv = 110.0
+            equivalent_config = config["equivalent"]
+            z_th_input = equivalent_config["z_th_pu"]
+            z_th_real = float(z_th_input["real"])
+            z_th_imag = float(z_th_input["imag"])
+            voltage_kv = float(equivalent_config.get("voltage_kv", 110.0))
 
             if pcc_bus_data and base_result.data and "bus_results" in base_result.data:
                 for bus in base_result.data["bus_results"]:
@@ -174,6 +203,15 @@ class TheveninEquivalentAnalysis:
                 else "weak"
                 if scr < 2
                 else "moderate",
+                "data_source": equivalent_config.get(
+                    "source", "explicit_thevenin_impedance"
+                ),
+                "confidence_level": "formula_derived_from_explicit_input",
+                "validation_status": "explicit_input_required",
+                "assumptions": [
+                    "z_th_pu is supplied by the caller from a trusted short-circuit or Thevenin study",
+                    "short-circuit capacity is calculated as base_mva / |z_th_pu|",
+                ],
             }
 
             self._log("INFO", f"SCC: {scc_mva:.1f} MVA, SCR: {scr:.2f}")

@@ -71,6 +71,17 @@ def test_validate_rejects_bad_margin_order():
     assert any("max_coordination" in error for error in errors)
 
 
+def test_validate_requires_explicit_relays():
+    skill = ProtectionCoordinationAnalysis()
+
+    valid, errors = skill.validate(
+        {"skill": "protection_coordination", "model": {"rid": "case14"}}
+    )
+
+    assert valid is False
+    assert any("relays" in error for error in errors)
+
+
 def test_relay_settings_use_load_and_fault_current_limits():
     skill = ProtectionCoordinationAnalysis()
     setting = skill._calculate_relay_settings(
@@ -167,6 +178,7 @@ def test_run_returns_standardized_success_payload(monkeypatch: pytest.MonkeyPatc
     assert result.data["success"] is True
     assert result.data["relay_count"] == 2
     assert result.data["coordination_results"][0]["is_valid"] is True
+    assert result.data["data_source"] == "explicit_relay_settings"
 
 
 def test_run_fails_when_coordination_margin_is_invalid(monkeypatch: pytest.MonkeyPatch):

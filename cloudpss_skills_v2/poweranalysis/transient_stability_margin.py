@@ -38,7 +38,13 @@ class TransientStabilityMarginAnalysis:
             "required": ["model", "fault_scenarios"],
             "properties": {
                 "model": {"type": "object", "required": ["rid"]},
-                "fault_scenarios": {"type": "array"},
+                "fault_scenarios": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["clearing_time", "cct"],
+                    },
+                },
                 "target_margin": {"type": "number", "default": 10.0},
             },
         }
@@ -53,6 +59,22 @@ class TransientStabilityMarginAnalysis:
         scenarios = config.get("fault_scenarios")
         if not isinstance(scenarios, list) or not scenarios:
             errors.append("fault_scenarios must be a non-empty list")
+        else:
+            for idx, scenario in enumerate(scenarios):
+                if not isinstance(scenario, dict):
+                    errors.append(f"fault_scenarios[{idx}] must be an object")
+                    continue
+                for key in ("clearing_time", "cct"):
+                    if key not in scenario:
+                        errors.append(f"fault_scenarios[{idx}].{key} is required")
+                        continue
+                    try:
+                        value = float(scenario[key])
+                    except (TypeError, ValueError):
+                        errors.append(f"fault_scenarios[{idx}].{key} must be numeric")
+                        continue
+                    if value < 0:
+                        errors.append(f"fault_scenarios[{idx}].{key} must be non-negative")
         return len(errors) == 0, errors
 
     def _calculate_margin_percent(self, cct: float | None, actual_time: float | None) -> float:
@@ -69,12 +91,6 @@ class TransientStabilityMarginAnalysis:
             return "unstable"
         return "marginal"
 
-    def _estimate_cct(self, actual_time: float, target_margin: float) -> float:
-        ratio = 1.0 - target_margin / 100.0
-        if ratio <= 0:
-            return max(actual_time, 0.5)
-        return max(actual_time / ratio, actual_time)
-
     def run(self, config: dict[str, Any] | None = None) -> SkillResult:
         start_time = datetime.now()
         config = config or {}
@@ -90,8 +106,8 @@ class TransientStabilityMarginAnalysis:
         results = []
         for scenario in config["fault_scenarios"]:
             location = str(scenario.get("location") or scenario.get("bus") or "unknown")
-            actual_time = float(scenario.get("clearing_time", 0.3))
-            cct = float(scenario.get("cct", self._estimate_cct(actual_time, target_margin)))
+            actual_time = float(scenario["clearing_time"])
+            cct = float(scenario["cct"])
             margin = self._calculate_margin_percent(cct, actual_time)
             results.append(
                 StabilityMargin(
@@ -115,6 +131,9 @@ class TransientStabilityMarginAnalysis:
                 "results": results,
                 "secure_count": secure_count,
                 "total_scenarios": len(results),
+                "data_source": "fault_scenarios.cct",
+                "confidence_level": "simulation_or_study_derived",
+                "validation_status": "explicit_cct_required",
             },
             metrics={"secure_count": secure_count, "scenario_count": len(results)},
             start_time=start_time,
