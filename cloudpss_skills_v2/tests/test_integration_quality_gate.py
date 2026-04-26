@@ -6,6 +6,7 @@ from pathlib import Path
 
 import cloudpss_skills_v2  # noqa: F401 - populate registry
 from cloudpss_skills_v2 import SkillRegistry
+from cloudpss_skills_v2.tests.golden_cases import TRUSTED_GOLDEN_CASES
 from cloudpss_skills_v2.tools.model_validator import ModelValidatorTool
 
 
@@ -65,3 +66,31 @@ def test_trusted_analysis_rejects_hidden_synthetic_physical_data():
 
 def test_model_validator_is_registered_as_real_validator():
     assert SkillRegistry.get("model_validator") is ModelValidatorTool
+
+
+def test_trusted_golden_cases_carry_source_or_derivation_metadata():
+    missing: list[str] = []
+
+    for case_name, case in TRUSTED_GOLDEN_CASES.items():
+        reference = case.get("reference")
+        if not isinstance(reference, dict):
+            missing.append(f"{case_name}: reference")
+            continue
+        for key in ("standard_basis", "formula", "limitations", "sources"):
+            if not reference.get(key):
+                missing.append(f"{case_name}: reference.{key}")
+
+        sources = reference.get("sources", [])
+        if not isinstance(sources, list) or not sources:
+            missing.append(f"{case_name}: reference.sources")
+            continue
+        for idx, source in enumerate(sources):
+            if not isinstance(source, dict) or not source.get("title"):
+                missing.append(f"{case_name}: reference.sources[{idx}].title")
+                continue
+            if not source.get("url") and not (
+                source.get("source_kind") == "derivation" and source.get("derivation")
+            ):
+                missing.append(f"{case_name}: reference.sources[{idx}].url_or_derivation")
+
+    assert missing == []

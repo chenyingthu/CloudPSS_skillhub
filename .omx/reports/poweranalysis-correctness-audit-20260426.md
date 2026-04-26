@@ -47,7 +47,27 @@ Date: 2026-04-26
 3. Validate protection coordination curves and margins against known IEC/IEEE examples.
 4. Validate renewable integration, reactive compensation, and orthogonal sensitivity formulas against known engineering cases and document their standards basis.
 5. Use the new `model_builder` -> `model_validator` local chain to construct trusted inline cases before promoting them to live CloudPSS/pandapower golden-case validation.
-6. Extend the first local golden-case lane with literature-backed IEEE/IEC cases for protection, power quality, renewable integration, and compensation sizing.
+6. Extend the first local golden-case lane with larger IEEE/IEC benchmark cases for protection, power quality, renewable integration, and compensation sizing.
+
+## Golden-Case Provenance
+
+The deterministic local golden cases now require provenance metadata beside each expected value:
+
+- `standard_basis`: the standard family, public documentation basis, or explicit local contract.
+- `formula`: the exact formula being locked by the test.
+- `sources`: public source URLs or an explicit derivation entry for local approximations.
+- `limitations`: what the case does not prove.
+
+Covered source-backed cases:
+
+| Case | Basis | Scope |
+| --- | --- | --- |
+| two-bus PV model | Local model-builder/model-validator topology contract | Structural graph and typed parameter validation only. |
+| Thevenin/SCR | IEC 60909 short-circuit convention plus per-unit Thevenin arithmetic | Verifies arithmetic from supplied `z_th_pu`; does not derive impedance from a network. |
+| Power quality THD/unbalance | IEEE 519/IEC THD convention and NEMA magnitude-unbalance convention | Verifies THD and magnitude unbalance from explicit measurements. |
+| IEC standard inverse relay | IEC 60255/60255-151 inverse-time family as published in relay vendor manuals | Verifies standard inverse curve constants and pickup/time calculation. |
+| Reactive compensation sizing | Explicit Q-V sensitivity derivation | Screening approximation only; not a full compensation design optimization. |
+| Renewable integration | SCR, THD, LVRT-threshold, and capacity-factor formulas | Verifies configured metrics from explicit inputs; does not certify grid-code compliance. |
 
 ## Verification
 
@@ -71,3 +91,11 @@ Date: 2026-04-26
   - PASS: 16 passed.
 - `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
   - PASS: 873 passed, 0 skipped after adding the first deterministic local golden cases.
+- `python -m pytest -q cloudpss_skills_v2/tests/test_integration_quality_gate.py cloudpss_skills_v2/tests/test_golden_trusted_analysis_cases.py`
+  - PASS: 12 passed after adding source/derivation metadata requirements.
+- `python -m compileall -q cloudpss_skills_v2 && python -m pytest -q cloudpss_skills_v2/tests/test_integration_quality_gate.py cloudpss_skills_v2/tests/test_golden_trusted_analysis_cases.py cloudpss_skills_v2/tests/test_model_validator.py`
+  - PASS: compile plus 18 targeted tests passed.
+- `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py`
+  - PASS: 48 passed.
+- `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
+  - PASS: 875 passed, 0 skipped after adding source-backed golden-case provenance.
