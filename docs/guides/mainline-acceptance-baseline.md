@@ -85,6 +85,21 @@
 
 - `178 passed, 145 warnings in 1154.60s (0:19:14)`
 
+2026-04-26 新增的 `cloudpss_skills_v2` 证据应单独理解：
+
+- `cloudpss_skills_v2` 已建立严格注册技能矩阵：
+  `test_integration_registry_matrix.py`
+  会从 `SkillRegistry` 实例化每个已注册 skill，验证配置，运行最小真实用例，并检查
+  `SkillResult`、关键输出字段和 artifact。
+- 当前本地工作站在 `http://166.111.60.76:50001` 和
+  `.cloudpss_token_internal` 可用时，v2 全量测试结果为：
+  `832 passed, 3 skipped, 210 warnings in 195.28s`。
+- 默认 CI/普通开发环境不要求访问私有 CloudPSS 服务器；矩阵中只有
+  `emt_n1_screening` 和 `emt_simulation` 这两个 live-only 条目会在 token
+  或服务器不可用时 skip，其余 pandapower/本地/数据处理条目仍需运行。
+- 该 v2 证据证明“注册技能至少有一条真实可运行路径”，不等同于每个分析算法已经完成
+  工程级正确性复核。
+
 2026-03-20 新增的 EMT 研究输出能力，当前证据应这样理解：
 
 - `emt_research_report_example.py`

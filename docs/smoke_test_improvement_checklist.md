@@ -15,3 +15,39 @@ rg -n "pytest\\.mark\\.(smoke|needs_improvement)|smoke:|needs_improvement:" clou
 timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_quality_gate.py cloudpss_skills_v2/tests/test_integration_cloudpss.py cloudpss_skills_v2/tests/test_integration_registry_matrix.py
 timeout 600s python -m pytest -q cloudpss_skills_v2/tests
 ```
+
+## V2 Test Lanes
+
+Default/CI-safe lane:
+
+```bash
+python -m compileall -q cloudpss_skills_v2
+rg -n "pytest\\.mark\\.(smoke|needs_improvement)|smoke:|needs_improvement:" cloudpss_skills_v2/tests pytest.ini
+timeout 300s python -m pytest -q \
+  cloudpss_skills_v2/tests/test_integration_quality_gate.py \
+  cloudpss_skills_v2/tests/test_integration_datalib.py \
+  cloudpss_skills_v2/tests/test_integration_registry_matrix.py
+```
+
+Private live lane, only when `.cloudpss_token_internal` and
+`http://166.111.60.76:50001` are available:
+
+```bash
+timeout 600s python -m pytest -q \
+  cloudpss_skills_v2/tests/test_integration_cloudpss.py \
+  cloudpss_skills_v2/tests/test_integration_local_server.py \
+  cloudpss_skills_v2/tests/test_integration_poweranalysis.py \
+  cloudpss_skills_v2/tests/test_integration_registry_matrix.py
+```
+
+Full local workstation lane:
+
+```bash
+timeout 600s python -m pytest -q cloudpss_skills_v2/tests
+```
+
+Latest recorded full local result:
+
+```text
+832 passed, 3 skipped, 210 warnings in 195.28s
+```

@@ -61,6 +61,32 @@
   `env TEST_SAVE_KEY_PREFIX=study_branch pytest tests/ -q --run-integration`
   -> `178 passed, 145 warnings in 1154.60s (0:19:14)`
 
+## `cloudpss_skills_v2` 证据补充
+
+这部分证据只针对 v2 skills，不替代上面的旧主线 CloudPSS SDK/workflow
+基线。
+
+| v2 能力 | 主要入口 | 本地/CI-safe 测试 | 私有 live 测试 | 等级 | 当前边界 |
+|------|------|------|------|------|------|
+| 注册技能可运行矩阵 | `cloudpss_skills_v2/tests/test_integration_registry_matrix.py` | 默认运行 46 个本地/pandapower/数据处理条目；live-only 条目无 token/网络时 skip | 有 `.cloudpss_token_internal` 和 `http://166.111.60.76:50001` 时 48 个注册 skill 全部通过 | A/L 混合 | 证明每个注册 skill 有最小真实路径；不等价于所有算法完成工程级正确性审查 |
+| v2 live CloudPSS adapter 路径 | `test_integration_cloudpss.py`, `test_integration_local_server.py`, `test_integration_poweranalysis.py` | 不作为默认 CI 要求 | 本地服务器完整路径通过，最近记录为 v2 全量 `832 passed, 3 skipped` 的一部分 | A | 只针对 `166.111.60.76:50001`，不覆盖公网或 `internal.cloudpss.com` |
+| fake/smoke 测试防回归 | `test_integration_quality_gate.py` | `rg` 检查与 pytest 质量门 | 不需要 live | L | 只防止弱标记回流；不能单独证明功能正确 |
+| DataLib 转换 | `test_integration_datalib.py` | pandapower `case14` 真实结果转 `BusData`/`BranchData`/`NetworkSummary` | 不需要 live | L | 证明转换链路和字段映射，不证明 CloudPSS 数据全覆盖 |
+
+最新 v2 验证命令：
+
+```bash
+python -m compileall -q cloudpss_skills_v2
+rg -n "pytest\\.mark\\.(smoke|needs_improvement)|smoke:|needs_improvement:" cloudpss_skills_v2/tests pytest.ini
+timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_cloudpss.py cloudpss_skills_v2/tests/test_integration_quality_gate.py
+timeout 600s python -m pytest -q cloudpss_skills_v2/tests
+```
+
+最新记录：
+
+- `timeout 600s python -m pytest -q cloudpss_skills_v2/tests`
+  -> `832 passed, 3 skipped, 210 warnings in 195.28s`
+
 ## 使用建议
 
 后续如果新增一个主线能力，更新本表时至少要补齐这四项：

@@ -23,6 +23,8 @@
 | INT-009 | `core.SkillResult.to_dict` | CODE_DEFECT | FIXED | Real skill runs exposed legacy modules storing dict log entries, causing `AttributeError: 'dict' object has no attribute 'to_dict'`. | `to_dict()` now serializes dataclass and dict logs/artifacts. |
 | INT-010 | CloudPSS EMT adapter auth | CODE_DEFECT | FIXED | EMT integration failed 401 because `CloudPSSEMTAdapter` read `EngineConfig.extra` instead of nested `extra.auth`. | Adapter now resolves nested auth and base URL consistently; RUN-014 EMT paths passed. |
 | INT-011 | `ShortCircuitAnalysis` pandapower path | CODE_DEFECT | FIXED | Pandapower short-circuit returned `bus_results`, but analysis only recognized `fault_currents`, so successful simulations were marked FAILED. | Analysis now converts `bus_results[].ikss_ka/ip_ka/ith_ka`; RUN-014 passed. |
+| INT-012 | registered skill matrix live gating | TEST_DEFECT | FIXED | Review found live-only EMT entries would fail in environments without `.cloudpss_token_internal` or route to `166.111.60.76:50001`. | Added explicit skip gate for only `emt_n1_screening` and `emt_simulation`; no-token temp cwd verified as 2 skipped, 46 deselected. |
+| INT-013 | CloudPSS short-circuit auth | CODE_DEFECT | FIXED | Review found `Engine.create_short_circuit_for_skill(..., auth=...)` nested credentials under `extra.auth`, while `CloudPSSShortCircuitAdapter` only read flat `extra`. | Adapter now supports both nested and flat auth; regression tests cover both shapes. |
 
 ## Test Runs
 
@@ -52,9 +54,14 @@
 | RUN-022 | `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_datalib.py cloudpss_skills_v2/tests/test_integration_quality_gate.py cloudpss_skills_v2/tests/test_integration_cloudpss.py cloudpss_skills_v2/tests/test_integration_registry_matrix.py` | PASS | 123 passed in 65.36s after fixing pandapower summary generation/load aggregation. |
 | RUN-023 | `python -m compileall -q cloudpss_skills_v2` | PASS | Full package compilation succeeded after final test and adapter changes. |
 | RUN-024 | `timeout 600s python -m pytest -q cloudpss_skills_v2/tests` | PASS | 830 passed, 3 skipped in 237.63s; final full v2 suite passed with local CloudPSS target and no weak markers. |
+| RUN-025 | `timeout 240s python -m pytest -q cloudpss_skills_v2/tests/test_integration_cloudpss.py::TestCloudPSSShortCircuitAdapterLifecycle cloudpss_skills_v2/tests/test_integration_registry_matrix.py` | PASS | 53 passed; covers nested/flat short-circuit auth and live matrix on available local server. |
+| RUN-026 | `tmpdir=$(mktemp -d) && cd "$tmpdir" && PYTHONPATH=/home/chenying/researches/cloudpss-toolkit timeout 120s python -m pytest -q /home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/test_integration_registry_matrix.py -k 'emt_n1_screening or emt_simulation'` | PASS | 2 skipped, 46 deselected; no-token environment skips private live entries instead of failing. |
+| RUN-027 | `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_cloudpss.py cloudpss_skills_v2/tests/test_integration_quality_gate.py` | PASS | 74 passed; CloudPSS adapter and quality gates passed after review fixes. |
+| RUN-028 | `timeout 600s python -m pytest -q cloudpss_skills_v2/tests` | PASS | 832 passed, 3 skipped in 195.28s; final full v2 suite after review fixes. |
 
 ## Remaining External/Design Items
 
 - Public CloudPSS and `https://internal.cloudpss.com` are not tested in this campaign by explicit user scope.
 - `test_integration_cross_engine.py` remains a pandapower interface-invariant suite, not a multi-server numerical comparison.
 - No `smoke` / `needs_improvement` pytest markers remain in `cloudpss_skills_v2/tests`; the quality gate prevents reintroduction.
+- In ordinary CI/dev environments without the private local CloudPSS token/server route, only the two live-only EMT registry-matrix cases should skip; the rest of the matrix remains mandatory.

@@ -1,0 +1,94 @@
+name: CloudPSS Skills V2 CI
+
+on:
+  push:
+    branches: [main, develop, 'cleanup/**']
+    paths:
+      - 'cloudpss_skills_v2/**'
+      - 'docs/smoke_test_improvement_checklist.md'
+      - 'pytest.ini'
+      - '.github/workflows/cloudpss-skills-v2-ci.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'cloudpss_skills_v2/**'
+      - 'docs/smoke_test_improvement_checklist.md'
+      - 'pytest.ini'
+      - '.github/workflows/cloudpss-skills-v2-ci.yml'
+  workflow_dispatch:
+    inputs:
+      run_private_live:
+        description: 'Run private live CloudPSS tests against 166.111.60.76'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+jobs:
+  v2-default:
+    name: V2 Default Integration Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Compile v2 package
+        run: |
+          python -m compileall -q cloudpss_skills_v2
+
+      - name: Reject weak integration markers
+        run: |
+          ! rg -n "pytest\\.mark\\.(smoke|needs_improvement)|smoke:|needs_improvement:" cloudpss_skills_v2/tests pytest.ini
+
+      - name: Run CI-safe v2 integration gate
+        run: |
+          timeout 300s python -m pytest -q \
+            cloudpss_skills_v2/tests/test_integration_quality_gate.py \
+            cloudpss_skills_v2/tests/test_integration_datalib.py \
+            cloudpss_skills_v2/tests/test_integration_registry_matrix.py
+
+  v2-private-live:
+    name: V2 Private Live CloudPSS Gate
+    runs-on: ubuntu-latest
+    needs: [v2-default]
+    if: github.event_name == 'workflow_dispatch' && inputs.run_private_live == 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Create local-server token file
+        env:
+          CLOUDPSS_TOKEN_INTERNAL: ${{ secrets.CLOUDPSS_TOKEN_INTERNAL }}
+        run: |
+          test -n "$CLOUDPSS_TOKEN_INTERNAL"
+          printf '%s' "$CLOUDPSS_TOKEN_INTERNAL" > .cloudpss_token_internal
+
+      - name: Run private live v2 suite
+        run: |
+          timeout 600s python -m pytest -q \
+            cloudpss_skills_v2/tests/test_integration_cloudpss.py \
+            cloudpss_skills_v2/tests/test_integration_local_server.py \
+            cloudpss_skills_v2/tests/test_integration_poweranalysis.py \
+            cloudpss_skills_v2/tests/test_integration_registry_matrix.py
