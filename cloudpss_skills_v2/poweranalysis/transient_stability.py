@@ -50,6 +50,14 @@ class TransientStabilityAnalysis:
                         },
                     },
                 },
+                "rotor_angle_trace": {
+                    "type": "object",
+                    "required": ["angles_deg"],
+                    "properties": {
+                        "time": {"type": "array", "items": {"type": "number"}},
+                        "angles_deg": {"type": "array", "items": {"type": "number"}},
+                    },
+                },
             },
         }
 
@@ -74,6 +82,15 @@ class TransientStabilityAnalysis:
             return (False, errors)
         if not config.get("model", {}).get("rid"):
             errors.append("model.rid is required")
+        trace = config.get("rotor_angle_trace", {})
+        angles = trace.get("angles_deg", [])
+        if not angles:
+            errors.append("rotor_angle_trace.angles_deg is required")
+        elif len(angles) < 2:
+            errors.append("rotor_angle_trace.angles_deg must contain at least two samples")
+        times = trace.get("time", [])
+        if times and len(times) != len(angles):
+            errors.append("rotor_angle_trace.time and rotor_angle_trace.angles_deg must have the same length")
         return (len(errors) == 0, errors)
 
     def _assess_stability(
@@ -133,8 +150,10 @@ class TransientStabilityAnalysis:
             handle = api.get_model_handle(model_rid)
             result = api.run_power_flow(model_handle=handle)
 
-            simulated_angles = [10.0, 45.0, 80.0, 120.0, 95.0, 70.0, 50.0, 40.0]
-            stability = self._assess_stability(simulated_angles)
+            trace = config["rotor_angle_trace"]
+            rotor_angles = [float(value) for value in trace["angles_deg"]]
+            critical_angle = sim_config.get("critical_angle", 180.0)
+            stability = self._assess_stability(rotor_angles, critical_angle)
 
             result_data = {
                 "converged": result.is_success,
@@ -143,6 +162,7 @@ class TransientStabilityAnalysis:
                 "fault": fault,
                 "stability": stability,
                 "time_points": int(duration / time_step),
+                "data_source": "rotor_angle_trace",
             }
 
             status = "stable" if stability.get("stable") else "unstable"

@@ -33,9 +33,16 @@ class TestSmallSignalStabilityAnalysis:
         valid, errors = instance.validate(config)
         assert valid is False
 
-    def test_validate_valid_config(self):
+    def test_validate_missing_state_matrix(self):
         instance = SmallSignalStabilityAnalysis()
         config = {"model": {"rid": "test"}}
+        valid, errors = instance.validate(config)
+        assert valid is False
+        assert "state_matrix is required for small signal eigenvalue analysis" in errors
+
+    def test_validate_valid_config(self):
+        instance = SmallSignalStabilityAnalysis()
+        config = {"model": {"rid": "test"}, "state_matrix": [[-0.1, 0.0], [0.0, -0.2]]}
         valid, errors = instance.validate(config)
         assert valid is True
 
@@ -72,9 +79,17 @@ class TestSmallSignalStabilityAnalysis:
 
     def test_run_returns_skill_result(self):
         instance = SmallSignalStabilityAnalysis()
-        result = instance.run({"model": {"rid": "test"}})
+        result = instance.run(
+            {
+                "engine": "pandapower",
+                "model": {"rid": "case14", "source": "local"},
+                "state_matrix": [[-0.1, 0.05], [-0.05, -0.08]],
+            }
+        )
         assert result is not None
         assert hasattr(result, "skill_name")
+        assert result.data["data_source"] == "state_matrix"
+        assert result.data["stable"] is True
 
     def test_run_with_invalid_config(self):
         instance = SmallSignalStabilityAnalysis()

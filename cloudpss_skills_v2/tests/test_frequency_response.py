@@ -49,9 +49,20 @@ class TestFrequencyResponseAnalysis:
         valid, errors = instance.validate(config)
         assert valid is False
 
-    def test_validate_valid_config(self):
+    def test_validate_missing_frequency_trace(self):
         instance = FrequencyResponseAnalysis()
         config = {"model": {"rid": "test"}, "disturbance": {"type": "load_shedding"}}
+        valid, errors = instance.validate(config)
+        assert valid is False
+        assert "frequency_trace.time and frequency_trace.frequency_hz are required" in errors
+
+    def test_validate_valid_config(self):
+        instance = FrequencyResponseAnalysis()
+        config = {
+            "model": {"rid": "test"},
+            "disturbance": {"type": "load_shedding"},
+            "frequency_trace": {"time": [0, 1], "frequency_hz": [50.0, 49.9]},
+        }
         valid, errors = instance.validate(config)
         assert valid is True
 
@@ -60,6 +71,7 @@ class TestFrequencyResponseAnalysis:
         config = {
             "model": {"rid": "test"},
             "disturbance": {"type": "step_load_change", "magnitude": 0.1},
+            "frequency_trace": {"time": [0, 1], "frequency_hz": [50.0, 49.9]},
         }
         valid, errors = instance.validate(config)
         assert valid is True
@@ -93,10 +105,20 @@ class TestFrequencyResponseAnalysis:
     def test_run_returns_skill_result(self):
         instance = FrequencyResponseAnalysis()
         result = instance.run(
-            {"model": {"rid": "test"}, "disturbance": {"type": "load_shedding"}}
+            {
+                "engine": "pandapower",
+                "model": {"rid": "case14", "source": "local"},
+                "disturbance": {"type": "load_shedding"},
+                "frequency_trace": {
+                    "time": [0, 1, 2, 3],
+                    "frequency_hz": [50.0, 49.8, 49.9, 50.0],
+                },
+            }
         )
         assert result is not None
         assert hasattr(result, "skill_name")
+        assert result.data["data_source"] == "frequency_trace"
+        assert result.data["nadir"] == 49.8
 
     def test_run_with_invalid_config(self):
         instance = FrequencyResponseAnalysis()

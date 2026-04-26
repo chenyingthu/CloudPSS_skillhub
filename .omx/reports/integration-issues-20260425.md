@@ -30,6 +30,7 @@
 | INT-016 | weak test labels | TEST_DEFECT | FIXED | Old generated unit files still contained `Smoke test` docstrings even after pytest markers were removed. | Removed weak docstring labels and expanded quality gate to reject weak test labels, not just markers. |
 | INT-017 | default config and schema skip branches | TEST_DEFECT | FIXED | Full-suite `-rs` showed 3 skips because some skill tests allowed missing `get_default_config()`, and follow-up scan found additional schema/default skip branches. | Added validated defaults for `emt_fault_study`, `maintenance_security`, `n2_security`, `frequency_response`, `disturbance_severity`; fixed `orthogonal_sensitivity`'s invalid default config; removed non-live skip branches. |
 | INT-018 | `libs/component_registry.py` | CODE_DEFECT | FIXED | File contained only empty function stubs and had no references in v2 code, tests, or docs. | Deleted the unused stub module instead of preserving a misleading API surface. |
+| INT-019 | dynamic/stability skill hidden synthetic data | CODE_DEFECT | FIXED | `frequency_response`, `disturbance_severity`, `transient_stability`, `small_signal_stability`, and `emt_fault_study` could report dynamic/stability metrics from internal fixed traces, matrices, or scenario defaults. | These skills now require explicit traces, state matrices, or scenario measurements and report `data_source`; target and registry tests cover the new contracts. |
 
 ## Test Runs
 
@@ -75,6 +76,11 @@
 | RUN-038 | `python -m compileall -q cloudpss_skills_v2` | PASS | Full package compilation succeeded after deleting the unused component registry stub and default-config cleanup. |
 | RUN-039 | `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py` | PASS | 48 passed in 27.66s; registered skill matrix still covers all skills including local CloudPSS live-only entries. |
 | RUN-040 | `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs` | PASS | 842 passed, 0 skipped in 189.98s; no non-live skip branches remain in the v2 test suite on this environment. |
+| RUN-041 | `python -m pytest -q cloudpss_skills_v2/tests/test_frequency_response.py cloudpss_skills_v2/tests/test_disturbance_severity.py cloudpss_skills_v2/tests/test_transient_stability.py cloudpss_skills_v2/tests/test_small_signal_stability.py cloudpss_skills_v2/tests/test_emt_fault_study.py` | PASS | 77 passed; dynamic/stability metrics now require explicit data sources instead of hidden synthetic defaults. |
+| RUN-042 | `python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py -k 'frequency_response or disturbance_severity or transient_stability or small_signal_stability or emt_fault_study'` | PASS | 6 passed, 42 deselected; registry configs include explicit traces/matrices/measurements. |
+| RUN-043 | `python -m compileall -q cloudpss_skills_v2` | PASS | Package compiles after dynamic/stability contract changes. |
+| RUN-044 | `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py` | PASS | 48 passed in 31.63s; all registered skill paths still run. |
+| RUN-045 | `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs` | PASS | 848 passed, 0 skipped in 189.52s; full v2 suite passed after correctness contract changes. |
 
 ## Remaining External/Design Items
 

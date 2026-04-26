@@ -221,13 +221,24 @@ def _config_for(skill_name: str, tmp_path: Path) -> dict[str, Any]:
         "frequency_response": {
             **pf,
             "disturbance": {"type": "step_load_change", "magnitude": 0.05},
+            "frequency_trace": {
+                "time": [0.0, 1.0, 2.0, 3.0],
+                "frequency_hz": [50.0, 49.92, 49.97, 50.0],
+            },
         },
         "dudv_curve": {
             **pf,
             "bus": {"key": "bus:0"},
             "scan": {"voltage_range": [0.95, 1.05], "num_points": 5},
         },
-        "disturbance_severity": {**pf},
+        "disturbance_severity": {
+            **pf,
+            "voltage_trace": {
+                "time": [0.0, 1.0, 2.0, 3.0],
+                "voltage_pu": [1.0, 1.0, 0.72, 0.98],
+            },
+            "simulation": {"fault_time": 2.0},
+        },
         "orthogonal_sensitivity": {
             "model": {"rid": "case14"},
             "parameters": [
@@ -250,11 +261,16 @@ def _config_for(skill_name: str, tmp_path: Path) -> dict[str, Any]:
             "simulation": {"timeout": 60, "sampling_freq": 1000},
             "output": {"format": "json", "path": str(out), "timestamp": False},
         },
-        "small_signal_stability": {**pf, "analysis": {"damping_threshold": 0.05}},
+        "small_signal_stability": {
+            **pf,
+            "analysis": {"damping_threshold": 0.05},
+            "state_matrix": [[-0.1, 0.05], [-0.05, -0.08]],
+        },
         "transient_stability": {
             **pf,
             "auth": _local_auth(),
             "simulation": {"duration": 1.0, "time_step": 0.1},
+            "rotor_angle_trace": {"angles_deg": [10.0, 45.0, 80.0, 95.0, 70.0]},
         },
         "fault_clearing_scan": {
             **pf,
@@ -296,7 +312,13 @@ def _config_for(skill_name: str, tmp_path: Path) -> dict[str, Any]:
         },
         "emt_fault_study": {
             "model": {"rid": "case14"},
-            "scenarios": {"baseline": {"voltage_deviation": 0.25}},
+            "scenarios": {
+                "baseline": {
+                    "prefault_voltage_pu": 1.0,
+                    "minimum_voltage_pu": 0.75,
+                    "clearing_time": 0.1,
+                }
+            },
         },
         "harmonic_analysis": {
             "waveform": {

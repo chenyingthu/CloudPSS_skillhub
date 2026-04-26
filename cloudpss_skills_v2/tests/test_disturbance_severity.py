@@ -43,9 +43,19 @@ class TestDisturbanceSeverityAnalysis:
         valid, errors = instance.validate(config)
         assert valid is False
 
-    def test_validate_valid_config(self):
+    def test_validate_missing_voltage_trace(self):
         instance = DisturbanceSeverityAnalysis()
         config = {"model": {"rid": "test"}}
+        valid, errors = instance.validate(config)
+        assert valid is False
+        assert "voltage_trace.time and voltage_trace.voltage_pu are required" in errors
+
+    def test_validate_valid_config(self):
+        instance = DisturbanceSeverityAnalysis()
+        config = {
+            "model": {"rid": "test"},
+            "voltage_trace": {"time": [0, 1], "voltage_pu": [1.0, 0.9]},
+        }
         valid, errors = instance.validate(config)
         assert valid is True
 
@@ -121,9 +131,21 @@ class TestDisturbanceSeverityAnalysis:
 
     def test_run_returns_skill_result(self):
         instance = DisturbanceSeverityAnalysis()
-        result = instance.run({"model": {"rid": "test"}})
+        result = instance.run(
+            {
+                "engine": "pandapower",
+                "model": {"rid": "case14", "source": "local"},
+                "simulation": {"fault_time": 2.0},
+                "voltage_trace": {
+                    "time": [0, 1, 1.8, 2, 3, 4],
+                    "voltage_pu": [1.0, 1.0, 1.0, 0.6, 0.9, 1.0],
+                },
+            }
+        )
         assert result is not None
         assert hasattr(result, "skill_name")
+        assert result.data["data_source"] == "voltage_trace"
+        assert result.data["dv_down"] > 0
 
     def test_run_with_invalid_config(self):
         instance = DisturbanceSeverityAnalysis()

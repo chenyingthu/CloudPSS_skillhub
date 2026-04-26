@@ -32,9 +32,16 @@ class TestTransientStabilityAnalysis:
         valid, errors = instance.validate(config)
         assert valid is False
 
-    def test_validate_valid_config(self):
+    def test_validate_missing_rotor_angle_trace(self):
         instance = TransientStabilityAnalysis()
         config = {"model": {"rid": "test"}}
+        valid, errors = instance.validate(config)
+        assert valid is False
+        assert "rotor_angle_trace.angles_deg is required" in errors
+
+    def test_validate_valid_config(self):
+        instance = TransientStabilityAnalysis()
+        config = {"model": {"rid": "test"}, "rotor_angle_trace": {"angles_deg": [0, 10]}}
         valid, errors = instance.validate(config)
         assert valid is True
 
@@ -65,9 +72,18 @@ class TestTransientStabilityAnalysis:
 
     def test_run_returns_skill_result(self):
         instance = TransientStabilityAnalysis()
-        result = instance.run({"model": {"rid": "test"}})
+        result = instance.run(
+            {
+                "engine": "pandapower",
+                "model": {"rid": "case14", "source": "local"},
+                "simulation": {"duration": 1.0, "time_step": 0.1, "critical_angle": 150},
+                "rotor_angle_trace": {"angles_deg": [10, 45, 80, 120, 95]},
+            }
+        )
         assert result is not None
         assert hasattr(result, "skill_name")
+        assert result.data["data_source"] == "rotor_angle_trace"
+        assert result.data["stability"]["stable"] is True
 
     def test_run_with_invalid_config(self):
         instance = TransientStabilityAnalysis()

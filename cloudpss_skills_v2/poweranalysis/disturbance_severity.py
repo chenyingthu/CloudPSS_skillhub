@@ -52,6 +52,14 @@ class DisturbanceSeverityAnalysis:
                         "si_window": {"type": "number", "default": 0.5},
                     },
                 },
+                "voltage_trace": {
+                    "type": "object",
+                    "required": ["time", "voltage_pu"],
+                    "properties": {
+                        "time": {"type": "array", "items": {"type": "number"}},
+                        "voltage_pu": {"type": "array", "items": {"type": "number"}},
+                    },
+                },
             },
         }
 
@@ -66,6 +74,10 @@ class DisturbanceSeverityAnalysis:
                 "pre_fault_window": 0.5,
                 "si_interval": 0.0,
                 "si_window": 0.5,
+            },
+            "voltage_trace": {
+                "time": [0.0, 1.0, 2.0, 3.0, 3.9, 4.0, 4.1, 4.5, 5.0, 6.0],
+                "voltage_pu": [1.0, 1.0, 1.0, 1.0, 1.0, 0.5, 0.6, 0.85, 0.98, 1.0],
             },
         }
 
@@ -90,6 +102,15 @@ class DisturbanceSeverityAnalysis:
             return (False, errors)
         if not config.get("model", {}).get("rid"):
             errors.append("model.rid is required")
+        trace = config.get("voltage_trace", {})
+        times = trace.get("time", [])
+        voltages = trace.get("voltage_pu", [])
+        if not times or not voltages:
+            errors.append("voltage_trace.time and voltage_trace.voltage_pu are required")
+        elif len(times) != len(voltages):
+            errors.append("voltage_trace.time and voltage_trace.voltage_pu must have the same length")
+        elif len(times) < 2:
+            errors.append("voltage_trace must contain at least two samples")
         return (len(errors) == 0, errors)
 
     def _calculate_dv(
@@ -199,8 +220,9 @@ class DisturbanceSeverityAnalysis:
             handle = api.get_model_handle(model_rid)
             result = api.run_power_flow(model_handle=handle)
 
-            time = np.array([0, 1, 2, 3, 3.9, 4.0, 4.1, 4.5, 5.0, 6.0])
-            voltage = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 0.5, 0.6, 0.85, 0.98, 1.0])
+            trace = config["voltage_trace"]
+            time = np.asarray(trace["time"], dtype=float)
+            voltage = np.asarray(trace["voltage_pu"], dtype=float)
 
             dv_result = self._calculate_dv(
                 voltage, time, disturbance_time, pre_fault_window
@@ -220,6 +242,7 @@ class DisturbanceSeverityAnalysis:
                 "v_steady": dv_result["v_steady"],
                 "si": si,
                 "severity": severity,
+                "data_source": "voltage_trace",
             }
 
             self._log(

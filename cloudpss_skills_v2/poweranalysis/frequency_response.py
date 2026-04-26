@@ -51,6 +51,14 @@ class FrequencyResponseAnalysis:
                         "magnitude": {"type": "number"},
                     },
                 },
+                "frequency_trace": {
+                    "type": "object",
+                    "required": ["time", "frequency_hz"],
+                    "properties": {
+                        "time": {"type": "array", "items": {"type": "number"}},
+                        "frequency_hz": {"type": "array", "items": {"type": "number"}},
+                    },
+                },
             },
         }
 
@@ -61,6 +69,10 @@ class FrequencyResponseAnalysis:
             "auth": {"token": "local-pandapower-token"},
             "model": {"rid": "case14", "source": "local"},
             "disturbance": {"type": "step_load_change", "magnitude": 0.05},
+            "frequency_trace": {
+                "time": [0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+                "frequency_hz": [50.0, 49.95, 49.88, 49.92, 49.98, 50.0],
+            },
         }
 
     def __init__(self):
@@ -87,6 +99,15 @@ class FrequencyResponseAnalysis:
         disturbance = config.get("disturbance", {})
         if not disturbance.get("type"):
             errors.append("disturbance.type is required")
+        trace = config.get("frequency_trace", {})
+        times = trace.get("time", [])
+        freqs = trace.get("frequency_hz", [])
+        if not times or not freqs:
+            errors.append("frequency_trace.time and frequency_trace.frequency_hz are required")
+        elif len(times) != len(freqs):
+            errors.append("frequency_trace.time and frequency_trace.frequency_hz must have the same length")
+        elif len(times) < 2:
+            errors.append("frequency_trace must contain at least two samples")
         return (len(errors) == 0, errors)
 
     def _calculate_nadir(self, freq: np.ndarray) -> float:
@@ -153,8 +174,9 @@ class FrequencyResponseAnalysis:
             handle = api.get_model_handle(model_rid)
             result = api.run_power_flow(model_handle=handle)
 
-            time = np.array([0, 1, 2, 3, 4, 5])
-            freq = np.array([50.0, 49.95, 49.88, 49.92, 49.98, 50.0])
+            trace = config["frequency_trace"]
+            time = np.asarray(trace["time"], dtype=float)
+            freq = np.asarray(trace["frequency_hz"], dtype=float)
 
             nadir = self._calculate_nadir(freq)
             rocof = self._calculate_rocof(freq, time)
@@ -169,6 +191,7 @@ class FrequencyResponseAnalysis:
                 "recovery_time": recovery_time,
                 "frequency_unit": "Hz",
                 "time_span": float(time[-1] - time[0]),
+                "data_source": "frequency_trace",
             }
 
             self._log(

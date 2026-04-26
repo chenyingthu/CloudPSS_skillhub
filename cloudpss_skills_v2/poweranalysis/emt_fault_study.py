@@ -9,7 +9,7 @@ from cloudpss_skills_v2.core import Artifact, LogEntry, SkillResult, SkillStatus
 
 
 class EmtFaultStudyAnalysis:
-    """Compare deterministic EMT fault scenarios."""
+    """Compare explicit EMT fault scenario measurements."""
 
     name = "emt_fault_study"
     description = "EMT故障研究 - 比较基准、延迟清除和轻微故障场景"
@@ -33,9 +33,24 @@ class EmtFaultStudyAnalysis:
         return {
             "model": {"rid": "case14", "source": "local"},
             "scenarios": {
-                "baseline": {"enabled": True, "voltage_deviation": 0.3},
-                "delayed_clear": {"enabled": True, "voltage_deviation": 0.5},
-                "mild_fault": {"enabled": True, "voltage_deviation": 0.15},
+                "baseline": {
+                    "enabled": True,
+                    "prefault_voltage_pu": 1.0,
+                    "minimum_voltage_pu": 0.7,
+                    "clearing_time": 0.1,
+                },
+                "delayed_clear": {
+                    "enabled": True,
+                    "prefault_voltage_pu": 1.0,
+                    "minimum_voltage_pu": 0.5,
+                    "clearing_time": 0.2,
+                },
+                "mild_fault": {
+                    "enabled": True,
+                    "prefault_voltage_pu": 1.0,
+                    "minimum_voltage_pu": 0.85,
+                    "clearing_time": 0.08,
+                },
             },
         }
 
@@ -45,6 +60,22 @@ class EmtFaultStudyAnalysis:
             return False, ["config is required"]
         if not config.get("model", {}).get("rid"):
             errors.append("model.rid is required")
+        scenarios = config.get("scenarios", {})
+        if not isinstance(scenarios, dict) or not scenarios:
+            errors.append("scenarios are required")
+        for scenario_name, scenario in scenarios.items():
+            if not isinstance(scenario, dict):
+                errors.append(f"scenarios.{scenario_name} must be an object")
+                continue
+            if scenario.get("enabled", True) and "voltage_deviation" not in scenario:
+                missing_voltage = (
+                    "prefault_voltage_pu" not in scenario
+                    or "minimum_voltage_pu" not in scenario
+                )
+                if missing_voltage:
+                    errors.append(
+                        f"scenarios.{scenario_name} requires voltage_deviation or prefault/minimum voltage measurements"
+                    )
         return len(errors) == 0, errors
 
     def _severity_from_deviation(self, voltage_deviation: float) -> str:
@@ -60,12 +91,14 @@ class EmtFaultStudyAnalysis:
         scenario_name: str,
         config: dict[str, Any],
     ) -> dict[str, Any]:
-        default_deviation = {
-            "baseline": 0.3,
-            "delayed_clear": 0.5,
-            "mild_fault": 0.15,
-        }.get(scenario_name, 0.2)
-        voltage_deviation = float(config.get("voltage_deviation", default_deviation))
+        if "voltage_deviation" in config:
+            voltage_deviation = float(config["voltage_deviation"])
+            data_source = "voltage_deviation"
+        else:
+            prefault = float(config["prefault_voltage_pu"])
+            minimum = float(config["minimum_voltage_pu"])
+            voltage_deviation = abs(prefault - minimum)
+            data_source = "voltage_measurements"
         clearing_time = float(config.get("clearing_time", 0.1))
         return {
             "model_rid": model_rid,
@@ -73,6 +106,7 @@ class EmtFaultStudyAnalysis:
             "voltage_deviation": voltage_deviation,
             "clearing_time": clearing_time,
             "severity": self._severity_from_deviation(voltage_deviation),
+            "data_source": data_source,
         }
 
     def _compare_scenarios(self, results: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -102,8 +136,7 @@ class EmtFaultStudyAnalysis:
         model_rid = config["model"]["rid"]
         scenarios = config.get("scenarios", {})
         results = {}
-        for scenario_name in ("baseline", "delayed_clear", "mild_fault"):
-            scenario = scenarios.get(scenario_name, {})
+        for scenario_name, scenario in scenarios.items():
             if scenario.get("enabled", True):
                 results[scenario_name] = self._analyze_scenario(
                     model_rid, scenario_name, scenario

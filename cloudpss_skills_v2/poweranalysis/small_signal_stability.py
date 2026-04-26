@@ -50,6 +50,10 @@ class SmallSignalStabilityAnalysis:
                         "damping_threshold": {"type": "number", "default": 0.05},
                     },
                 },
+                "state_matrix": {
+                    "type": "array",
+                    "items": {"type": "array", "items": {"type": "number"}},
+                },
             },
         }
 
@@ -74,6 +78,16 @@ class SmallSignalStabilityAnalysis:
             return (False, errors)
         if not config.get("model", {}).get("rid"):
             errors.append("model.rid is required")
+        matrix = config.get("state_matrix")
+        if matrix is None:
+            errors.append("state_matrix is required for small signal eigenvalue analysis")
+        else:
+            try:
+                arr = np.asarray(matrix, dtype=float)
+                if arr.ndim != 2 or arr.shape[0] != arr.shape[1] or arr.shape[0] == 0:
+                    errors.append("state_matrix must be a non-empty square matrix")
+            except (TypeError, ValueError):
+                errors.append("state_matrix must be numeric")
         return (len(errors) == 0, errors)
 
     def _eigenvalue_analysis(
@@ -145,7 +159,7 @@ class SmallSignalStabilityAnalysis:
             handle = api.get_model_handle(model_rid)
             result = api.run_power_flow(model_handle=handle)
 
-            state_matrix = np.array([[-0.1, 0.05], [-0.05, -0.08]])
+            state_matrix = np.asarray(config["state_matrix"], dtype=float)
             eigen_results = self._eigenvalue_analysis(state_matrix, damping_threshold)
 
             result_data = {
@@ -156,6 +170,7 @@ class SmallSignalStabilityAnalysis:
                 "critical_count": eigen_results.get("critical_count", 0),
                 "modes": eigen_results.get("modes", []),
                 "critical_modes": eigen_results.get("critical_modes", []),
+                "data_source": "state_matrix",
             }
 
             status = "stable" if eigen_results.get("stable") else "unstable"
