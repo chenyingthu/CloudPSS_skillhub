@@ -1,55 +1,17 @@
 # Smoke Test Improvement Checklist
 
-以下测试目前仅验证导入、实例化、属性存在性或非常浅层的默认行为，已统一标记为 `@pytest.mark.smoke` 和 `@pytest.mark.needs_improvement`。
+Status on 2026-04-25: resolved for `cloudpss_skills_v2/tests`.
 
-- 统一改进 issue: https://github.com/org/repo/issues/456
-- 当前已标记 smoke 测试总数: 367
+- Removed all `pytest.mark.smoke` and `pytest.mark.needs_improvement` usages from the v2 test suite.
+- Added `cloudpss_skills_v2/tests/test_integration_quality_gate.py` to prevent those markers from returning.
+- Added/kept the strict registry integration matrix so every registered skill is instantiated from `SkillRegistry`, validated, run, and checked for successful `SkillResult` outputs/artifacts.
+- Replaced the weak DataLib integration file with real pandapower `case14` result conversion into `BusData`, `BranchData`, and `NetworkSummary`.
+- Live CloudPSS tests are scoped to `http://166.111.60.76:50001` with `.cloudpss_token_internal`; public CloudPSS endpoints are intentionally outside the current test target.
 
-## By file
+Verification:
 
-- [ ] `test_algo_lib.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_auto_loop_breaker.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_batch_powerflow.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_batch_task_manager.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_compare_visualization.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_component_catalog.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_config_batch_runner.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_disturbance_severity.py` - 10 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_dudv_curve.py` - 13 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_emt_n1_screening.py` - 12 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_fault_clearing_scan.py` - 10 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_fault_severity_scan.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_frequency_response.py` - 11 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_harmonic_analysis.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_integration_cloudpss.py` - 25 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_integration_cross_engine.py` - 8 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_integration_datalib.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_integration_pandapower.py` - 31 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_integration_powerskill.py` - 12 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_integration_short_circuit.py` - 11 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_integration_skill_flow.py` - 15 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_integration_tools.py` - 18 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_loss_analysis.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_model_builder.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_model_hub.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_model_lib.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_model_parameter_extractor.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_n1_security.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_param_scan.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_parameter_sensitivity.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_power_quality_analysis.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_protection_coordination.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_reactive_compensation_design.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_renewable_integration.py` - 10 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_report_generator.py` - 10 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_result_compare.py` - 10 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_small_signal_stability.py` - 10 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_study_pipeline.py` - 20 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_thevenin_equivalent.py` - 14 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_topology_check.py` - 10 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_transient_stability.py` - 10 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_transient_stability_margin.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_visualize.py` - 11 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_voltage_stability.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_waveform_export.py` - 14 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
-- [ ] `test_workflow_lib.py` - 3 smoke tests need stronger business-logic assertions (issue: https://github.com/org/repo/issues/456)
+```bash
+rg -n "pytest\\.mark\\.(smoke|needs_improvement)|smoke:|needs_improvement:" cloudpss_skills_v2/tests pytest.ini
+timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_quality_gate.py cloudpss_skills_v2/tests/test_integration_cloudpss.py cloudpss_skills_v2/tests/test_integration_registry_matrix.py
+timeout 600s python -m pytest -q cloudpss_skills_v2/tests
+```

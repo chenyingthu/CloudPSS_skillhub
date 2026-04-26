@@ -111,13 +111,27 @@ class SkillResult:
         )
 
     def to_dict(self) -> dict[str, Any]:
+        def artifact_to_dict(artifact: Artifact | dict[str, Any]) -> dict[str, Any]:
+            if hasattr(artifact, "to_dict"):
+                return artifact.to_dict()
+            if isinstance(artifact, dict):
+                return artifact
+            return {"name": str(artifact)}
+
+        def log_to_dict(log: LogEntry | dict[str, Any]) -> dict[str, Any]:
+            if hasattr(log, "to_dict"):
+                return log.to_dict()
+            if isinstance(log, dict):
+                return log
+            return {"message": str(log)}
+
         return {
             "skill_name": self.skill_name,
             "status": self.status.value,
             "success": self.is_success,
             "data": self.data,
-            "artifacts": [a.to_dict() for a in self.artifacts],
-            "logs": [l.to_dict() for l in self.logs],
+            "artifacts": [artifact_to_dict(a) for a in self.artifacts],
+            "logs": [log_to_dict(l) for l in self.logs],
             "metrics": self.metrics,
             "error": self.error,
             "start_time": self.start_time.isoformat() if self.start_time else None,

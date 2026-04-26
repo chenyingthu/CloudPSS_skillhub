@@ -1,75 +1,125 @@
+"""Transient stability margin analysis."""
 
 from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import datetime
+from typing import Any
+
 from cloudpss_skills_v2.core import SkillResult, SkillStatus
-from cloudpss_skills_v2.powerapi import EngineConfig
+
+
 @dataclass
 class StabilityMargin:
-    metric_name: str = ''
-    value: float = 0.0
-    limit: float = 0.0
-    margin_pct: float = 0.0
-    is_secure: bool = True
+    fault_location: str = ""
+    cct: float = 0.0
+    actual_time: float = 0.0
+    margin_percent: float = 0.0
+    stability_status: str = "unknown"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "fault_location": self.fault_location,
+            "cct": self.cct,
+            "actual_time": self.actual_time,
+            "margin_percent": self.margin_percent,
+            "stability_status": self.stability_status,
+        }
+
 
 class TransientStabilityMarginAnalysis:
-    '''Lightweight implementation of the transient stability margin analysis.
+    name = "transient_stability_margin"
+    description = "暂态稳定裕度 - 根据故障清除时间估算稳定裕度"
 
-    This is a simplified port focused on the testable math and data flow
-    patterns used in CloudPSS v2 skills.
-    '''
-    
-    def __init__(self):
-        self.name = 'TransientStabilityMargin'
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["model", "fault_scenarios"],
+            "properties": {
+                "model": {"type": "object", "required": ["rid"]},
+                "fault_scenarios": {"type": "array"},
+                "target_margin": {"type": "number", "default": 10.0},
+            },
+        }
 
-    
-    def validate(self, config = None):
-        errors = []
-        model = config.get('model')
-        if not isinstance(model, dict) or model.get('rid'):
-            errors.append('Missing model.rid')
-        if not config.get('fault_scenarios') and config.get('generators'):
-            errors.append('Missing fault_scenarios or generators')
-        return (len(errors) == 0, errors)
+    def validate(self, config: dict[str, Any] | None = None) -> tuple[bool, list[str]]:
+        errors: list[str] = []
+        if not isinstance(config, dict):
+            return False, ["config is required"]
+        model = config.get("model")
+        if not isinstance(model, dict) or not model.get("rid"):
+            errors.append("model.rid is required")
+        scenarios = config.get("fault_scenarios")
+        if not isinstance(scenarios, list) or not scenarios:
+            errors.append("fault_scenarios must be a non-empty list")
+        return len(errors) == 0, errors
 
-    
-    def _calculate_margin_percent(self, cct = None, actual_time = None):
-        if cct <= 0:
-            return 0
-        return ((cct - actual_time) / cct) * 100
+    def _calculate_margin_percent(self, cct: float | None, actual_time: float | None) -> float:
+        cct_value = float(cct or 0.0)
+        if cct_value <= 0:
+            return 0.0
+        return ((cct_value - float(actual_time or 0.0)) / cct_value) * 100.0
 
-    
-    def _assess_stability(self, margin_percent = None):
-        threshold = 10
-        if margin_percent > threshold:
-            return 'stable'
-        if margin_percent < 0:
-            return 'unstable'
-        return 'marginal'
+    def _assess_stability(self, margin_percent: float | None) -> str:
+        margin = float(margin_percent or 0.0)
+        if margin > 10.0:
+            return "stable"
+        if margin < 0.0:
+            return "unstable"
+        return "marginal"
 
-    
-    def _binary_search_cct(self, fault_location = None, actual_time = None, target_margin = (0.3, 10)):
-        ratio = 1 - target_margin / 100
+    def _estimate_cct(self, actual_time: float, target_margin: float) -> float:
+        ratio = 1.0 - target_margin / 100.0
         if ratio <= 0:
             return max(actual_time, 0.5)
-        cct = None / ratio
-        if cct <= 0:
-            cct = 0.5
-        return cct
+        return max(actual_time / ratio, actual_time)
 
-    
-    def run(self, config = None):
-        (valid, errors) = self.validate(config)
+    def run(self, config: dict[str, Any] | None = None) -> SkillResult:
+        start_time = datetime.now()
+        config = config or {}
+        valid, errors = self.validate(config)
         if not valid:
-            return SkillResult(skill_name = self.name, status = SkillStatus.FAILED, data = None, artifacts = [], logs = [], metrics = { })
-        fault_scenarios = None.get('fault_scenarios', [])
+            return SkillResult.failure(
+                skill_name=self.name,
+                error="; ".join(errors),
+                data={"stage": "validation", "errors": errors},
+            )
+
+        target_margin = float(config.get("target_margin", 10.0))
         results = []
-        for fs in fault_scenarios:
-            location = fs.get('location', 'UNKNOWN')
-            cct = self._binary_search_cct(location, actual_time = 0.3, target_margin = 10)
-            margin = self._calculate_margin_percent(cct, 0.3)
-            status = self._assess_stability(margin)
-            results.append(StabilityMargin(fault_location = location, cct = cct, margin_percent = margin, stability_status = status))
-__all__ = [
-    'TransientStabilityMarginAnalysis',
-    'StabilityMargin']
+        for scenario in config["fault_scenarios"]:
+            location = str(scenario.get("location") or scenario.get("bus") or "unknown")
+            actual_time = float(scenario.get("clearing_time", 0.3))
+            cct = float(scenario.get("cct", self._estimate_cct(actual_time, target_margin)))
+            margin = self._calculate_margin_percent(cct, actual_time)
+            results.append(
+                StabilityMargin(
+                    fault_location=location,
+                    cct=cct,
+                    actual_time=actual_time,
+                    margin_percent=margin,
+                    stability_status=self._assess_stability(margin),
+                ).to_dict()
+            )
+
+        secure_count = len(
+            [item for item in results if item["stability_status"] == "stable"]
+        )
+        return SkillResult(
+            skill_name=self.name,
+            status=SkillStatus.SUCCESS,
+            data={
+                "model_rid": config["model"]["rid"],
+                "target_margin": target_margin,
+                "results": results,
+                "secure_count": secure_count,
+                "total_scenarios": len(results),
+            },
+            metrics={"secure_count": secure_count, "scenario_count": len(results)},
+            start_time=start_time,
+            end_time=datetime.now(),
+        )
+
+
+__all__ = ["TransientStabilityMarginAnalysis", "StabilityMargin"]

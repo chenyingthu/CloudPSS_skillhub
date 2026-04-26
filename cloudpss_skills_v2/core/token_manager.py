@@ -32,6 +32,21 @@ class TokenManager:
                 return token
             raise ValueError("Invalid CloudPSS token format in auth.token")
 
+        token_file = auth_config.get("token_file")
+        if token_file:
+            token_path = Path(str(token_file)).expanduser()
+            if not token_path.is_absolute():
+                token_path = Path.cwd() / token_path
+            try:
+                token = token_path.read_text(encoding="utf-8").strip()
+            except OSError as exc:
+                raise ValueError(
+                    f"Failed to read CloudPSS token from auth.token_file {token_path}: {exc}"
+                ) from exc
+            if TokenManager.validate_token(token):
+                return token
+            raise ValueError(f"Invalid CloudPSS token format in auth.token_file: {token_path}")
+
         env_token = os.environ.get("CLOUDPSS_TOKEN")
         if env_token:
             token = env_token.strip()

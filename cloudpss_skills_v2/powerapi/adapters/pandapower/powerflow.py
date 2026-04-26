@@ -142,15 +142,35 @@ def _determine_bus_type(idx, net) -> str:
 
 def _bus_row(idx, row, net) -> dict:
     vm_pu = va_degree = None
+    generation_mw = generation_mvar = load_mw = load_mvar = 0.0
     if hasattr(net, "res_bus") and not net.res_bus.empty and idx in net.res_bus.index:
         vm_pu = _safe_float(net.res_bus.at[idx, "vm_pu"])
         va_degree = _safe_float(net.res_bus.at[idx, "va_degree"])
+    if hasattr(net, "res_gen") and not net.res_gen.empty and hasattr(net, "gen"):
+        for gen_idx, gen in net.gen[net.gen["bus"] == idx].iterrows():
+            if gen_idx in net.res_gen.index:
+                generation_mw += _safe_float(net.res_gen.at[gen_idx, "p_mw"])
+                generation_mvar += _safe_float(net.res_gen.at[gen_idx, "q_mvar"])
+    if hasattr(net, "res_ext_grid") and not net.res_ext_grid.empty and hasattr(net, "ext_grid"):
+        for ext_idx, ext_grid in net.ext_grid[net.ext_grid["bus"] == idx].iterrows():
+            if ext_idx in net.res_ext_grid.index:
+                generation_mw += _safe_float(net.res_ext_grid.at[ext_idx, "p_mw"])
+                generation_mvar += _safe_float(net.res_ext_grid.at[ext_idx, "q_mvar"])
+    if hasattr(net, "res_load") and not net.res_load.empty and hasattr(net, "load"):
+        for load_idx, load in net.load[net.load["bus"] == idx].iterrows():
+            if load_idx in net.res_load.index:
+                load_mw += _safe_float(net.res_load.at[load_idx, "p_mw"])
+                load_mvar += _safe_float(net.res_load.at[load_idx, "q_mvar"])
     return {
         "name": str(row.get("name", f"Bus_{idx}")),
         "voltage_kv": _safe_float(row.get("vn_kv", 0)),
         "voltage_pu": vm_pu,
         "angle_deg": va_degree,
         "bus_type": _determine_bus_type(idx, net),
+        "generation_mw": round(generation_mw, 6),
+        "generation_mvar": round(generation_mvar, 6),
+        "load_mw": round(load_mw, 6),
+        "load_mvar": round(load_mvar, 6),
         "engine_id": idx,
     }
 
@@ -218,6 +238,10 @@ def _generate_pf_summary(bus_rows, branch_rows) -> dict:
     max_vm = 0.0
     for b in bus_rows:
         vm = _safe_float(b.get("voltage_pu"), 1.0)
+        total_p_gen += _safe_float(b.get("generation_mw"))
+        total_q_gen += _safe_float(b.get("generation_mvar"))
+        total_p_load += _safe_float(b.get("load_mw"))
+        total_q_load += _safe_float(b.get("load_mvar"))
         if 0 < vm < min_vm:
             min_vm = vm
         if vm > max_vm:
@@ -225,6 +249,14 @@ def _generate_pf_summary(bus_rows, branch_rows) -> dict:
     for br in branch_rows:
         total_loss += _safe_float(br.get("pl_mw"))
     return {
+        "total_generation": {
+            "p_mw": round(total_p_gen, 4),
+            "q_mvar": round(total_q_gen, 4),
+        },
+        "total_load": {
+            "p_mw": round(total_p_load, 4),
+            "q_mvar": round(total_q_load, 4),
+        },
         "total_loss_mw": round(total_loss, 4),
         "voltage_range": {"min_pu": round(min_vm, 4), "max_pu": round(max_vm, 4)},
         "bus_count": len(bus_rows),

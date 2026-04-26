@@ -4,88 +4,43 @@ from cloudpss_skills_v2.poweranalysis.dudv_curve import DUDVCurveAnalysis
 
 
 class TestDUDVCurveAnalysis:
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_import(self):
         assert DUDVCurveAnalysis is not None
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_instantiation(self):
         instance = DUDVCurveAnalysis()
         assert instance is not None
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_has_name_attribute(self):
         instance = DUDVCurveAnalysis()
         assert instance.name == "dudv_curve"
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_has_description(self):
         instance = DUDVCurveAnalysis()
         assert hasattr(instance, "description")
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_has_config_schema(self):
         instance = DUDVCurveAnalysis()
         schema = instance.config_schema
         assert schema is not None
         assert schema["type"] == "object"
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_has_validate_method(self):
         instance = DUDVCurveAnalysis()
         assert hasattr(instance, "validate")
         assert callable(instance.validate)
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_has_run_method(self):
         instance = DUDVCurveAnalysis()
         assert hasattr(instance, "run")
         assert callable(instance.run)
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_validate_empty_config(self):
         instance = DUDVCurveAnalysis()
         valid, errors = instance.validate({})
         assert valid is False
         assert len(errors) > 0
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_validate_missing_rid(self):
         instance = DUDVCurveAnalysis()
         config = {"model": {}}
@@ -93,11 +48,6 @@ class TestDUDVCurveAnalysis:
         assert valid is False
         assert "model.rid" in "".join(errors)
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_validate_valid_config(self):
         instance = DUDVCurveAnalysis()
         config = {"model": {"rid": "test_model"}}
@@ -169,11 +119,6 @@ class TestDUDVCurveAnalysis:
         result = instance._identify_stability_boundary([], [])
         assert result["boundary_voltage"] is None
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_run_returns_skill_result(self):
         instance = DUDVCurveAnalysis()
         config = {"model": {"rid": "test"}}
@@ -182,21 +127,11 @@ class TestDUDVCurveAnalysis:
         assert hasattr(result, "skill_name")
         assert hasattr(result, "status")
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_run_with_invalid_config(self):
         instance = DUDVCurveAnalysis()
         result = instance.run({})
         assert result.status.value == "failed" or result.status.name == "failed"
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_has_log_method(self):
         instance = DUDVCurveAnalysis()
         assert hasattr(instance, "_log")

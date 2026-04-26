@@ -5,68 +5,33 @@ from cloudpss_skills_v2.poweranalysis.transient_stability import (
 
 
 class TestTransientStabilityAnalysis:
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_import(self):
         assert TransientStabilityAnalysis is not None
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_instantiation(self):
         instance = TransientStabilityAnalysis()
         assert instance is not None
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_has_name_attribute(self):
         instance = TransientStabilityAnalysis()
         assert instance.name == "transient_stability"
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_has_config_schema(self):
         instance = TransientStabilityAnalysis()
         schema = instance.config_schema
         assert schema is not None
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_validate_empty_config(self):
         instance = TransientStabilityAnalysis()
         valid, errors = instance.validate({})
         assert valid is False
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_validate_missing_rid(self):
         instance = TransientStabilityAnalysis()
         config = {"model": {}}
         valid, errors = instance.validate(config)
         assert valid is False
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_validate_valid_config(self):
         instance = TransientStabilityAnalysis()
         config = {"model": {"rid": "test"}}
@@ -98,32 +63,17 @@ class TestTransientStabilityAnalysis:
         result = instance._assess_stability(rotor_angles, critical_angle=90.0)
         assert result["stable"] is False
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_run_returns_skill_result(self):
         instance = TransientStabilityAnalysis()
         result = instance.run({"model": {"rid": "test"}})
         assert result is not None
         assert hasattr(result, "skill_name")
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_run_with_invalid_config(self):
         instance = TransientStabilityAnalysis()
         result = instance.run({})
         assert result.status.value == "failed" or result.status.name == "failed"
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_has_log_method(self):
         instance = TransientStabilityAnalysis()
         assert hasattr(instance, "_log")

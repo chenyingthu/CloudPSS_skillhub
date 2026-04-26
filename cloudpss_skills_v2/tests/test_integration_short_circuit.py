@@ -15,19 +15,9 @@ class TestShortCircuitAdapterLifecycle:
         a.connect()
         return a
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_engine_name(self, adapter):
         assert adapter.engine_name == "pandapower_sc"
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_connect_succeeds(self, adapter):
         assert adapter.is_connected() is True
 
@@ -40,29 +30,14 @@ class TestShortCircuitRun:
         a.connect()
         return a
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_run_case9(self, adapter):
         result = adapter.run_simulation({"model_id": "case9"})
         assert result.status == SimulationStatus.COMPLETED
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_run_case14(self, adapter):
         result = adapter.run_simulation({"model_id": "case14"})
         assert result.status == SimulationStatus.COMPLETED
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_run_case30(self, adapter):
         result = adapter.run_simulation({"model_id": "case30"})
         assert result.status == SimulationStatus.COMPLETED
@@ -76,32 +51,17 @@ class TestShortCircuitResults:
         a.connect()
         return a
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_bus_results_exist(self, adapter):
         result = adapter.run_simulation({"model_id": "case14"})
         if result.status == SimulationStatus.COMPLETED:
             assert result.data is not None
             assert "bus_results" in result.data
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_line_results_exist(self, adapter):
         result = adapter.run_simulation({"model_id": "case14"})
         if result.status == SimulationStatus.COMPLETED:
             assert "line_results" in result.data
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_fault_results_positive(self, adapter):
         result = adapter.run_simulation({"model_id": "case14"})
         if result.status == SimulationStatus.COMPLETED:
@@ -120,11 +80,6 @@ class TestShortCircuitMultipleCases:
         return a
 
     @pytest.mark.parametrize("case", ["case9", "case14", "case30", "case57"])
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_various_cases(self, adapter, case):
         result = adapter.run_simulation({"model_id": case})
         assert result.status == SimulationStatus.COMPLETED
@@ -136,20 +91,10 @@ class TestShortCircuitValidation:
     def adapter(self):
         return PandapowerShortCircuitAdapter()
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_validate_empty(self, adapter):
         result = adapter.validate_config({})
         assert result.valid is False
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_validate_with_case(self, adapter):
         result = adapter.validate_config({"model_id": "case14"})
         assert result.valid is True

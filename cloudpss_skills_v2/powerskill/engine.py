@@ -17,6 +17,36 @@ from cloudpss_skills_v2.powerskill.transient import TransientStability
 from cloudpss_skills_v2.powerskill.harmonic import HarmonicAnalysis
 from cloudpss_skills_v2.powerskill.small_signal import SmallSignalStability
 
+_API_MAP = {
+    "powerflow": PowerFlow,
+    "power_flow": PowerFlow,
+    "emt": EMT,
+    "emt_simulation": EMT,
+    "short_circuit": ShortCircuit,
+    "shortcircuit": ShortCircuit,
+    "transient": TransientStability,
+    "transient_stability": TransientStability,
+    "harmonic": HarmonicAnalysis,
+    "harmonic_analysis": HarmonicAnalysis,
+    "small_signal": SmallSignalStability,
+    "small_signal_stability": SmallSignalStability,
+}
+
+_SIM_TYPE_ALIASES = {
+    "powerflow": "power_flow",
+    "power_flow": "power_flow",
+    "emt": "emt",
+    "emt_simulation": "emt",
+    "short_circuit": "short_circuit",
+    "shortcircuit": "short_circuit",
+    "transient": "transient",
+    "transient_stability": "transient",
+    "harmonic": "harmonic",
+    "harmonic_analysis": "harmonic",
+    "small_signal": "small_signal",
+    "small_signal_stability": "small_signal",
+}
+
 
 def _create_adapter(
     engine: str, sim_type: str = "power_flow", config: EngineConfig | None = None
@@ -34,19 +64,18 @@ def _create_adapter(
             config_dict['extra'] = config.extra
         config = EngineConfig(**config_dict)
 
-    adapter_cls = registry.get(engine, sim_type)
+    canonical_sim_type = _SIM_TYPE_ALIASES.get(sim_type, sim_type)
+    adapter_cls = registry.get(engine, canonical_sim_type)
     if adapter_cls is not None:
         return adapter_cls(config=config)
 
-    fallback = registry.get(engine, "power_flow")
-    if fallback is not None:
-        return fallback(config=config)
-
-    from cloudpss_skills_v2.powerapi.adapters.cloudpss.powerflow import (
-        CloudPSSPowerFlowAdapter,
+    available = registry.list_sim_types(engine)
+    if not available:
+        raise ValueError(f"Unknown engine: {engine}")
+    raise ValueError(
+        f"Engine '{engine}' does not support simulation type '{canonical_sim_type}'. "
+        f"Available: {available}"
     )
-
-    return CloudPSSPowerFlowAdapter(config=config)
 
 
 def _build_engine_config(
@@ -56,8 +85,12 @@ def _build_engine_config(
 ) -> EngineConfig:
     """Build EngineConfig from skill-level parameters."""
     extra = dict(auth) if auth else {}
+    if auth:
+        extra["auth"] = dict(auth)
     if base_url:
         extra["base_url"] = base_url
+        if "auth" in extra:
+            extra["auth"]["base_url"] = base_url
     return EngineConfig(engine_name=engine, base_url=base_url or "", extra=extra)
 
 

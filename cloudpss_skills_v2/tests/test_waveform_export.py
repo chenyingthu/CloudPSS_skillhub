@@ -12,37 +12,17 @@ class TestWaveformExportTool:
     def instance(self):
         return WaveformExportTool()
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_import(self):
         assert WaveformExportTool is not None
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_class_attributes(self):
         assert hasattr(WaveformExportTool, "name")
         assert WaveformExportTool.name == "waveform_export"
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_instantiation(self):
         instance = WaveformExportTool()
         assert instance is not None
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_instance_attributes(self):
         instance = WaveformExportTool()
         assert hasattr(instance, "logs")
@@ -58,49 +38,24 @@ class TestGetDefaultConfig:
     def instance(self):
         return WaveformExportTool()
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_returns_dict(self, instance):
         result = instance.get_default_config()
         assert isinstance(result, dict)
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_has_skill(self, instance):
         result = instance.get_default_config()
         assert "skill" in result
         assert result["skill"] == "waveform_export"
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_has_source(self, instance):
         result = instance.get_default_config()
         assert "source" in result
         assert "job_id" in result["source"]
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_has_export(self, instance):
         result = instance.get_default_config()
         assert "export" in result
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_has_output(self, instance):
         result = instance.get_default_config()
         assert "output" in result
@@ -113,11 +68,6 @@ class TestValidate:
     def instance(self):
         return WaveformExportTool()
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_missing_job_id(self, instance):
         config = {
             "source": {},
@@ -127,40 +77,20 @@ class TestValidate:
         valid, errors = instance.validate(config)
         assert valid is False
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_empty_job_id(self, instance):
         config = {"source": {"job_id": ""}}
         valid, errors = instance.validate(config)
         assert valid is False
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_placeholder_job_id(self, instance):
         config = {"source": {"job_id": "your_job_id_here"}}
         valid, errors = instance.validate(config)
         assert valid is False
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_none_config(self, instance):
         valid, errors = instance.validate(None)
         assert valid is False
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_empty_config(self, instance):
         valid, errors = instance.validate({})
         assert valid is False

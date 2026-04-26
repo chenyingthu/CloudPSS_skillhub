@@ -1,145 +1,163 @@
+"""Reactive Compensation Design Skill v2."""
 
-'''Reactive Compensation Design Skill v2 - Design reactive power compensation schemes.'''
-import math
-from typing import Any, Dict, List, Optional, Tuple
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+
 from cloudpss_skills_v2.core import Artifact, LogEntry, SkillResult, SkillStatus
 
-def _matches_bus_identifier(candidate = None, target = None):
-    '''Check if bus identifiers match (handles various formats).'''
-    if not candidate:
-        candidate
-    candidate_norm = ''.strip().lower()
-    if not target:
-        target
-    target_norm = ''.strip().lower()
-    if not candidate_norm or target_norm:
+
+def _matches_bus_identifier(candidate=None, target=None):
+    if candidate is None or target is None:
+        return False
+    candidate_norm = str(candidate).strip().lower()
+    target_norm = str(target).strip().lower()
+    if not candidate_norm or not target_norm:
         return False
     if candidate_norm == target_norm:
         return True
-    compact_candidate = list(candidate_norm)
-    compact_target = list(target_norm)
-    if compact_candidate and compact_candidate == compact_target:
-        return True
-    candidate_digits = list(candidate_norm)
-    target_digits = list(target_norm)
-    if candidate_digits:
-        candidate_digits
-        if target_digits:
-            target_digits
-    return bool(candidate_digits == target_digits)
+    candidate_digits = "".join(ch for ch in candidate_norm if ch.isdigit())
+    target_digits = "".join(ch for ch in target_norm if ch.isdigit())
+    return bool(candidate_digits and candidate_digits == target_digits)
 
 
 class ReactiveCompensationDesignAnalysis:
-    '''Design reactive power compensation for weak buses in power systems.'''
-    name = 'reactive_compensation_design'
-    
+    """Design reactive power compensation for weak buses."""
+
+    name = "reactive_compensation_design"
+    description = "Design reactive power compensation for weak buses"
+
     def __init__(self):
+        self.logs: list[LogEntry] = []
+        self.artifacts: list[Artifact] = []
+
+    def get_default_config(self):
+        return {
+            "skill": self.name,
+            "auth": {"token_file": ".cloudpss_token"},
+            "model": {"rid": "", "source": "cloud"},
+            "weak_buses": [],
+            "vsi_result": {},
+            "compensation": {
+                "device_type": "sync_compensator",
+                "max_capacity_mvar": 100,
+            },
+            "output": {
+                "format": "json",
+                "path": "./results/",
+                "prefix": "reactive_compensation",
+            },
+        }
+
+    def validate(self, config=None):
+        errors = []
+        if not isinstance(config, dict):
+            return False, ["config is required"]
+        if not config.get("model", {}).get("rid"):
+            errors.append("model.rid is required")
+        if not config.get("weak_buses") and not config.get("vsi_result", {}).get("weak_buses"):
+            errors.append("Either weak_buses or vsi_result.weak_buses is required")
+        return len(errors) == 0, errors
+
+    def _calculate_q_required(self, delta_v_pu=None, v_pu=None, x_pu=0.2):
+        if not x_pu or x_pu <= 0:
+            return 0.0
+        return float(v_pu or 0) * float(delta_v_pu or 0) / float(x_pu)
+
+    def _estimate_compensation_size(self, q_required_mvar=None, device_type=None):
+        sizing_factors = {
+            "sync_compensator": 1.0,
+            "svg": 0.9,
+            "svc": 0.85,
+            "capacitor": 0.7,
+        }
+        return float(q_required_mvar or 0) * sizing_factors.get(device_type, 1.0)
+
+    def _assess_weakness(self, scr=None, voltage_pu=None):
+        scr_value = float(scr or 0)
+        voltage_value = float(voltage_pu or 0)
+        if scr_value < 3 or voltage_value < 0.93:
+            return "weak"
+        if scr_value < 10 or voltage_value < 0.97:
+            return "moderate"
+        return "strong"
+
+    def _extract_weak_buses(self, config: dict[str, Any]) -> list[Any]:
+        if config.get("weak_buses"):
+            return list(config["weak_buses"])
+        return list(config.get("vsi_result", {}).get("weak_buses", []))
+
+    def _bus_value(self, bus: Any, key: str, default: float) -> float:
+        if isinstance(bus, dict):
+            try:
+                return float(bus.get(key, default))
+            except (TypeError, ValueError):
+                return default
+        return default
+
+    def _bus_name(self, bus: Any) -> str:
+        if isinstance(bus, dict):
+            return str(bus.get("bus") or bus.get("name") or bus.get("id") or "")
+        return str(bus)
+
+    def run(self, config=None):
+        start_time = datetime.now()
         self.logs = []
         self.artifacts = []
-
-    
-    def get_default_config(self):
-        '''Return default configuration with all required fields.'''
-        return {
-            'skill': self.name,
-            'auth': {
-                'token_file': '.cloudpss_token' },
-            'model': {
-                'rid': '',
-                'source': 'cloud' },
-            'weak_buses': [],
-            'vsi_result': { },
-            'compensation': {
-                'device_type': 'sync_compensator',
-                'max_capacity_mvar': 100 },
-            'output': {
-                'format': 'json',
-                'path': './results/',
-                'prefix': 'reactive_compensation' } }
-
-    
-    def validate(self, config = None):
-        '''Validate configuration.'''
-        errors = []
-        if not config.get('model', { }).get('rid'):
-            errors.append('model.rid is required')
-        has_weak_buses = config.get('weak_buses')
-        has_vsi = config.get('vsi_result')
-        if not has_weak_buses and has_vsi:
-            errors.append('Either weak_buses or vsi_result is required')
-        return (len(errors) == 0, errors)
-
-    
-    def _calculate_q_required(self, delta_v_pu = None, v_pu = None, x_pu = ('delta_v_pu', float, 'v_pu', float, 'x_pu', float, 'return', float)):
-        '''Calculate required reactive power: Q = V * Delta_V / X.'''
-        if x_pu <= 0:
-            return 0
-        return v_pu * delta_v_pu / x_pu
-
-    
-    def _estimate_compensation_size(self, q_required_mvar = None, device_type = None):
-        '''Estimate compensation size based on device type.'''
-        sizing_factors = {
-            'sync_compensator': 1,
-            'svg': 0.9,
-            'svc': 0.85,
-            'capacitor': 0.7 }
-        factor = sizing_factors.get(device_type, 1)
-        return q_required_mvar * factor
-
-    
-    def _assess_weakness(self, scr = None, voltage_pu = None):
-        '''Assess bus weakness based on SCR and voltage.'''
-        if scr < 3 or voltage_pu < 0.93:
-            return 'weak'
-        if scr < 10 or voltage_pu < 0.97:
-            return 'moderate'
-        return 'strong'
-
-    
-    def run(self, config = None):
-        '''Design compensation scheme.'''
-        if config is None:
-            config = EngineConfig(engine_name=self.get_engine_name())
-        config = { }
-        (valid, errors) = self.validate(config)
+        config = config or {}
+        valid, errors = self.validate(config)
         if not valid:
-            return SkillResult.failure(skill_name = self.name, error = '; '.join(errors), data = {
-                'stage': 'validation',
-                'errors': errors })
-        model_rid = config['model']['rid']
-        compensation_config = config.get('compensation', { })
-        device_type = compensation_config.get('device_type', 'sync_compensator')
-        weak_buses = config.get('weak_buses', [])
-        vsi_result = config.get('vsi_result', { })
-        if not vsi_result and weak_buses:
-            weak_buses = vsi_result.get('weak_buses', [])
+            return SkillResult.failure(
+                self.name,
+                "; ".join(errors),
+                {"stage": "validation", "errors": errors},
+            )
+
+        compensation_config = config.get("compensation", {})
+        device_type = compensation_config.get("device_type", "sync_compensator")
+        max_capacity = float(compensation_config.get("max_capacity_mvar", 100))
+
         recommendations = []
-        for bus in weak_buses[:5]:
-            scr = 2.5 + (hash(bus) % 100) / 50
-            voltage_pu = 0.92 + (hash(bus) % 50) / 500
+        for bus in self._extract_weak_buses(config)[:5]:
+            bus_name = self._bus_name(bus)
+            scr = self._bus_value(bus, "scr", 3.0)
+            voltage_pu = self._bus_value(bus, "voltage_pu", 0.94)
             weakness = self._assess_weakness(scr, voltage_pu)
-            delta_v = 1 - voltage_pu
-            q_required = self._calculate_q_required(delta_v, voltage_pu, x_pu = 0.2)
-            q_size = self._estimate_compensation_size(q_required, device_type)
-            recommendations.append({
-                'bus': bus,
-                'weakness': weakness,
-                'scr': round(scr, 2),
-                'voltage_pu': round(voltage_pu, 4),
-                'required_q_mvar': round(q_required, 2),
-                'recommended_size_mvar': round(q_size, 2),
-                'device_type': device_type })
+            q_required = self._calculate_q_required(1.0 - voltage_pu, voltage_pu, x_pu=0.2)
+            q_size = min(self._estimate_compensation_size(q_required, device_type), max_capacity)
+            recommendations.append(
+                {
+                    "bus": bus_name,
+                    "weakness": weakness,
+                    "scr": round(scr, 2),
+                    "voltage_pu": round(voltage_pu, 4),
+                    "required_q_mvar": round(q_required, 2),
+                    "recommended_size_mvar": round(q_size, 2),
+                    "device_type": device_type,
+                }
+            )
+
+        total_capacity = sum(item["recommended_size_mvar"] for item in recommendations)
         result_data = {
-            'model_rid': recommendations,
-            'weak_bus_count': None,
-            'compensation_recommendations': round,
-            'total_recommended_capacity_mvar': sum(r.capacity_mvar for r in recommendations) }
-        return SkillResult(skill_name = self.name, status = SkillStatus.SUCCESS, data = result_data, artifacts = self.artifacts, metrics = {
-            'buses_compensated': len(recommendations),
-            'total_capacity_mvar': result_data['total_recommended_capacity_mvar'] })
+            "model_rid": config["model"]["rid"],
+            "weak_bus_count": len(recommendations),
+            "compensation_recommendations": recommendations,
+            "total_recommended_capacity_mvar": round(total_capacity, 2),
+        }
+        return SkillResult(
+            skill_name=self.name,
+            status=SkillStatus.SUCCESS,
+            data=result_data,
+            artifacts=self.artifacts,
+            logs=self.logs,
+            metrics={
+                "buses_compensated": len(recommendations),
+                "total_capacity_mvar": result_data["total_recommended_capacity_mvar"],
+            },
+            start_time=start_time,
+            end_time=datetime.now(),
+        )
 
 
-__all__ = [
-    'ReactiveCompensationDesignAnalysis',
-    '_matches_bus_identifier']
+__all__ = ["ReactiveCompensationDesignAnalysis", "_matches_bus_identifier"]

@@ -18,6 +18,7 @@ from cloudpss_skills_v2.core.skill_result import (
     SkillResult,
     SkillStatus,
 )
+from cloudpss_skills_v2.powerapi import EngineConfig
 from cloudpss_skills_v2.powerskill import Engine, PowerFlow
 
 logger = logging.getLogger(__name__)
@@ -110,7 +111,13 @@ class PowerFlowPreset:
 
     def _get_api(self, config: dict[str, Any]) -> PowerFlow:
         engine = config.get("engine", "cloudpss")
-        return Engine.create_powerflow(engine=engine)
+        auth = config.get("auth", {})
+        engine_config = EngineConfig(
+            engine_name=engine,
+            base_url=auth.get("base_url", ""),
+            extra={"auth": auth},
+        )
+        return Engine.create_powerflow(engine=engine, config=engine_config)
 
     def validate(self, config: dict[str, Any]) -> tuple[bool, list[str]]:
         errors = []

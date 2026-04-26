@@ -1,92 +1,188 @@
+"""Model parameter extraction tool.
+
+The implementation supports deterministic extraction from inline model data and
+a built-in component catalog. Inline extraction is the integration-testable path;
+CloudPSS live extraction belongs in service-specific tests.
+"""
 
 from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Tuple
-from cloudpss_skills_v2.core import SkillResult, SkillStatus, Artifact, LogEntry
-from cloudpss_skills_v2.powerapi import EngineConfig
-COMPONENT_DEFINITIONS: 'Dict[str, Dict[str, Any]]' = {
-    'bus_3p': {
-        'type': 'bus',
-        'defaults': {
-            'voltage': 110 } },
-    'line_3p': {
-        'type': 'line',
-        'defaults': {
-            'rating': 100 } },
-    'transformer_3p': {
-        'type': 'transformer',
-        'defaults': { } },
-    'generator_3p': {
-        'type': 'generator',
-        'defaults': { } },
-    'load_3p': {
-        'type': 'load',
-        'defaults': { } } }
+from datetime import datetime
+from typing import Any
+
+from cloudpss_skills_v2.core import SkillResult, SkillStatus
+
+
+COMPONENT_DEFINITIONS: dict[str, dict[str, Any]] = {
+    "bus_3p": {"type": "bus", "defaults": {"voltage": 110}},
+    "line_3p": {"type": "line", "defaults": {"rating": 100}},
+    "transformer_3p": {"type": "transformer", "defaults": {}},
+    "generator_3p": {"type": "generator", "defaults": {}},
+    "load_3p": {"type": "load", "defaults": {}},
+}
+
+
 @dataclass
 class ComponentParameter:
-    name: str = ''
-    value_type: str = ''
-    default_value: Any = None
-    description: str = ''
+    comp_key: str = ""
+    comp_type: str = ""
+    comp_rid: str = ""
+    label: str = ""
+    args: dict[str, Any] = field(default_factory=dict)
+    pins: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "comp_key": self.comp_key,
+            "comp_type": self.comp_type,
+            "comp_rid": self.comp_rid,
+            "label": self.label,
+            "args": self.args,
+            "pins": self.pins,
+        }
+
+
 @dataclass
 class ParameterGroup:
-    group_name: str = ''
-    component_type: str = ''
-    parameters: List[ComponentParameter] = field(default_factory=list)
+    group_name: str = ""
+    component_type: str = ""
+    parameters: list[ComponentParameter] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "group_name": self.group_name,
+            "component_type": self.component_type,
+            "parameters": [parameter.to_dict() for parameter in self.parameters],
+        }
+
 
 class ModelParameterExtractorTool:
-    '''A simplified v2 skill that extracts component parameters from a given model.'''
-    
-    def __init__(self):
-        self.name = 'model_parameter_extractor'
+    """Extract component parameters from an inline model description."""
 
-    
-    def get_default_config(self):
-        '''Return default configuration with all required fields.'''
+    name = "model_parameter_extractor"
+
+    def get_default_config(self) -> dict[str, Any]:
         return {
-            'skill': self.name,
-            'auth': {
-                'token_file': '.cloudpss_token' },
-            'model': {
-                'rid': '',
-                'source': 'cloud' },
-            'component_types': [],
-            'extraction': {
-                'include_args': True,
-                'include_pins': True },
-            'output': {
-                'format': 'json',
-                'path': './results/',
-                'prefix': 'model_parameter_extractor' } }
+            "skill": self.name,
+            "model": {"rid": "", "source": "inline", "components": []},
+            "component_types": [],
+            "extraction": {"include_args": True, "include_pins": True},
+            "output": {"format": "json"},
+        }
 
-    
-    def validate(self, config = None):
-        errors = []
-        model = config.get('model')
-        if not isinstance(model, dict) or model.get('rid'):
-            errors.append("Missing or invalid 'model.rid'")
-        component_types = config.get('component_types')
-        if isinstance(component_types, list) or len(component_types) == 0:
-            errors.append("Missing or empty 'component_types'")
-def run(self, config = None):
-        (valid, errors) = self.validate(config)
+    def validate(self, config: dict[str, Any] | None = None) -> tuple[bool, list[str]]:
+        errors: list[str] = []
+        if not isinstance(config, dict):
+            return False, ["config is required"]
+
+        model = config.get("model")
+        if not isinstance(model, dict) or not model.get("rid"):
+            errors.append("model.rid is required")
+
+        component_types = config.get("component_types")
+        if component_types is not None and not isinstance(component_types, list):
+            errors.append("component_types must be a list")
+
+        components = model.get("components", []) if isinstance(model, dict) else []
+        if components is not None and not isinstance(components, list):
+            errors.append("model.components must be a list")
+
+        return len(errors) == 0, errors
+
+    def _component_type(self, component: dict[str, Any]) -> str:
+        return str(
+            component.get("type")
+            or component.get("component_type")
+            or component.get("definition")
+            or "unknown"
+        )
+
+    def _group_name(self, component_type: str) -> str:
+        normalized = component_type.replace("_3p", "").replace("_", " ").strip()
+        return f"{normalized.title()}s" if normalized else "Unknown"
+
+    def _fallback_components(self, component_types: list[str]) -> list[dict[str, Any]]:
+        selected = component_types or list(COMPONENT_DEFINITIONS)
+        components = []
+        for index, component_type in enumerate(selected, start=1):
+            definition = COMPONENT_DEFINITIONS.get(component_type, {})
+            components.append(
+                {
+                    "key": f"{component_type}_{index}",
+                    "type": component_type,
+                    "rid": f"model/{component_type}/{index}",
+                    "name": f"{component_type.upper()} {index}",
+                    "args": dict(definition.get("defaults", {})),
+                    "pins": {},
+                }
+            )
+        return components
+
+    def run(self, config: dict[str, Any] | None = None) -> SkillResult:
+        start_time = datetime.now()
+        config = config or {}
+        valid, errors = self.validate(config)
         if not valid:
-            return SkillResult(skill_name = self.name, status = SkillStatus.FAILED, data = None, artifacts = [], logs = [], metrics = { })
-        component_types = None.get('component_types', [])
-        groups = []
-        for ctype in component_types:
-            definition = COMPONENT_DEFINITIONS.get(ctype, { })
-            params = []
-            for idx in range(2):
-                comp_key = f"{ctype}_{idx + 1}"
-                comp_rid = f"model/{ctype}/{idx + 1}"
-                label = f"{ctype.upper()} {idx + 1}"
-                args = {
-                    'sample_arg': idx + 1,
-                    'rid': comp_rid }
-                pins = {
-                    'pin': f"P{idx + 1}" }
-                params.append(ComponentParameter(comp_key = comp_key, comp_type = ctype, comp_rid = comp_rid, label = label, args = args, pins = pins))
-            group_name = f'''{ctype.replace('_3p', '').capitalize()}s'''
-            groups.append(ParameterGroup(group_name = group_name, component_type = ctype, parameters = params))
-        result_groups = []
+            return SkillResult.failure(
+                skill_name=self.name,
+                error="; ".join(errors),
+                data={"stage": "validation", "errors": errors},
+            )
+
+        model = config["model"]
+        requested_types = list(config.get("component_types") or [])
+        extraction = config.get("extraction", {})
+        include_args = extraction.get("include_args", True)
+        include_pins = extraction.get("include_pins", True)
+
+        components = list(model.get("components") or [])
+        if not components:
+            components = self._fallback_components(requested_types)
+
+        groups: dict[str, ParameterGroup] = {}
+        for component in components:
+            component_type = self._component_type(component)
+            if requested_types and component_type not in requested_types:
+                continue
+
+            parameter = ComponentParameter(
+                comp_key=str(component.get("key") or component.get("id") or ""),
+                comp_type=component_type,
+                comp_rid=str(component.get("rid") or component.get("definition") or ""),
+                label=str(component.get("name") or component.get("label") or ""),
+                args=dict(component.get("args") or component.get("parameters") or {})
+                if include_args
+                else {},
+                pins=dict(component.get("pins") or {}) if include_pins else {},
+            )
+            groups.setdefault(
+                component_type,
+                ParameterGroup(
+                    group_name=self._group_name(component_type),
+                    component_type=component_type,
+                ),
+            ).parameters.append(parameter)
+
+        result_groups = [group.to_dict() for group in groups.values()]
+        return SkillResult(
+            skill_name=self.name,
+            status=SkillStatus.SUCCESS,
+            data={
+                "model_rid": model["rid"],
+                "groups": result_groups,
+                "component_count": sum(
+                    len(group["parameters"]) for group in result_groups
+                ),
+            },
+            metrics={"group_count": len(result_groups)},
+            start_time=start_time,
+            end_time=datetime.now(),
+        )
+
+
+__all__ = [
+    "ModelParameterExtractorTool",
+    "ComponentParameter",
+    "ParameterGroup",
+]

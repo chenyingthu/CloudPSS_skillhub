@@ -6,68 +6,33 @@ from cloudpss_skills_v2.poweranalysis.small_signal_stability import (
 
 
 class TestSmallSignalStabilityAnalysis:
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_import(self):
         assert SmallSignalStabilityAnalysis is not None
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_instantiation(self):
         instance = SmallSignalStabilityAnalysis()
         assert instance is not None
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_has_name_attribute(self):
         instance = SmallSignalStabilityAnalysis()
         assert instance.name == "small_signal_stability"
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_has_config_schema(self):
         instance = SmallSignalStabilityAnalysis()
         schema = instance.config_schema
         assert schema is not None
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_validate_empty_config(self):
         instance = SmallSignalStabilityAnalysis()
         valid, errors = instance.validate({})
         assert valid is False
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_validate_missing_rid(self):
         instance = SmallSignalStabilityAnalysis()
         config = {"model": {}}
         valid, errors = instance.validate(config)
         assert valid is False
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_validate_valid_config(self):
         instance = SmallSignalStabilityAnalysis()
         config = {"model": {"rid": "test"}}
@@ -105,32 +70,17 @@ class TestSmallSignalStabilityAnalysis:
         assert "modes" in result
         assert len(result["modes"]) > 0
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_run_returns_skill_result(self):
         instance = SmallSignalStabilityAnalysis()
         result = instance.run({"model": {"rid": "test"}})
         assert result is not None
         assert hasattr(result, "skill_name")
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_run_with_invalid_config(self):
         instance = SmallSignalStabilityAnalysis()
         result = instance.run({})
         assert result.status.value == "failed" or result.status.name == "failed"
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_has_log_method(self):
         instance = SmallSignalStabilityAnalysis()
         assert hasattr(instance, "_log")

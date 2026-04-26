@@ -67,78 +67,38 @@ class TestVisualizeTool:
         with pytest.raises(ValueError, match="does not exist"):
             validate_data_path(str(missing_file))
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_import(self):
         assert VisualizeTool is not None
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_instantiation(self):
         instance = VisualizeTool()
         assert instance is not None
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_has_name_attribute(self):
         instance = VisualizeTool()
         assert instance.name == "visualize"
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_has_description(self):
         instance = VisualizeTool()
         assert hasattr(instance, "description")
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_has_config_schema(self):
         instance = VisualizeTool()
         schema = instance.config_schema
         assert schema is not None
         assert schema["type"] == "object"
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_validate_empty_config(self):
         instance = VisualizeTool()
         valid, errors = instance.validate({})
         assert valid is False
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_validate_missing_rid(self):
         instance = VisualizeTool()
         config = {"model": {}}
         valid, errors = instance.validate(config)
         assert valid is False
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_validate_valid_config(self):
         instance = VisualizeTool()
         config = {"model": {"rid": "test_model"}}
@@ -282,11 +242,6 @@ class TestVisualizeTool:
             paths = instance._plot_branch_flows(data, out_dir)
             assert paths == {}
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_run_returns_skill_result(self):
         instance = VisualizeTool()
         result = instance.run(
@@ -295,21 +250,11 @@ class TestVisualizeTool:
         assert result is not None
         assert hasattr(result, "skill_name")
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_run_with_invalid_config(self):
         instance = VisualizeTool()
         result = instance.run({})
         assert result.status.value == "failed" or result.status.name == "failed"
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_has_log_method(self):
         instance = VisualizeTool()
         assert hasattr(instance, "_log")

@@ -19,6 +19,7 @@ from cloudpss_skills_v2.core.skill_result import (
     SkillResult,
     SkillStatus,
 )
+from cloudpss_skills_v2.powerapi import EngineConfig
 from cloudpss_skills_v2.powerskill import (
     Engine,
     PowerFlow,
@@ -150,11 +151,12 @@ class VoltageStabilityAnalysis:
     def _get_api(self, config: dict[str, Any]) -> PowerFlow:
         engine = config.get("engine", "cloudpss")
         auth = config.get("auth", {})
-        return Engine.create_powerflow_for_skill(
-            engine=engine,
-            base_url=auth.get("base_url"),
-            auth=auth,
+        engine_config = EngineConfig(
+            engine_name=engine,
+            base_url=auth.get("base_url", ""),
+            extra={"auth": auth},
         )
+        return Engine.create_powerflow(engine=engine, config=engine_config)
 
     def validate(self, config: dict[str, Any]) -> tuple[bool, list[str]]:
         errors = []
@@ -309,12 +311,14 @@ class VoltageStabilityAnalysis:
             self._save_output(result_data, output_config, target_buses)
 
             status = SkillStatus.SUCCESS if converged_cases else SkillStatus.FAILED
+            error = None if converged_cases else "No voltage stability scan cases converged"
             return SkillResult(
                 skill_name=self.name,
                 status=status,
                 data=result_data,
                 artifacts=self.artifacts,
                 logs=self.logs,
+                error=error,
                 metrics={
                     "total_cases": len(results),
                     "converged": len(converged_cases),

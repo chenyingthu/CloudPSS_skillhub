@@ -48,11 +48,11 @@ class CloudPSSEMTAdapter(EngineAdapter):
         super().__init__(config)
         self._model_cache = {}
         self._result_cache = {}
-        
-        auth = self._config.extra or {}
-        base_url = self._config.base_url
+
+        auth = self._config.extra.get("auth", self._config.extra) or {}
+        base_url = self._config.base_url or auth.get("base_url") or auth.get("baseUrl")
         token = TokenManager.get_token(auth)
-        
+
         self._cloudpss = CloudPSSAdapter(token=token, api_url=base_url)
 
     @property
@@ -63,10 +63,10 @@ class CloudPSSEMTAdapter(EngineAdapter):
         return [SimulationType.EMT]
 
     def _do_connect(self) -> None:
-        auth = self._config.extra or {}
-        base_url = self._config.base_url
+        auth = self._config.extra.get("auth", self._config.extra) or {}
+        base_url = self._config.base_url or auth.get("base_url") or auth.get("baseUrl")
         token = TokenManager.get_token(auth)
-        
+
         self._cloudpss = CloudPSSAdapter(token=token, api_url=base_url)
 
         if not self._cloudpss.connect():

@@ -7,11 +7,6 @@ from cloudpss_skills_v2.powerapi import SimulationStatus
 
 @pytest.mark.pandapower
 class TestCrossEngineConsistency:
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_engine_creation_both_engines(self):
         pf_pandapower = Engine.create_powerflow(engine="pandapower")
         assert pf_pandapower is not None
@@ -24,11 +19,6 @@ class TestCrossEngineConsistency:
         assert handle is not None
         assert handle.model_id == "case14"
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_result_structure_consistent(self):
         from cloudpss_skills_v2.powerapi.adapters.pandapower import (
             PandapowerPowerFlowAdapter,
@@ -72,11 +62,6 @@ class TestCrossEngineVoltageComparison:
 
 @pytest.mark.pandapower
 class TestCrossEngineModelHandle:
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_model_handle_interface_consistent(self):
         pf = Engine.create_powerflow(engine="pandapower")
         handle = pf.get_model_handle("case14")
@@ -85,11 +70,6 @@ class TestCrossEngineModelHandle:
         assert hasattr(handle, "adapter")
         assert hasattr(handle, "get_components_by_type")
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_get_components_by_type_interface(self):
         from cloudpss_skills_v2.powerskill.model_handle import ComponentType
 
@@ -105,21 +85,11 @@ class TestCrossEngineModelHandle:
 
 @pytest.mark.pandapower
 class TestCrossEngineValidationConfig:
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_pandapower_validate_method(self):
         pf = Engine.create_powerflow(engine="pandapower")
         valid = pf.adapter.validate_config({"model_id": "case14"})
         assert valid.valid is True
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_pandapower_rejects_empty_config(self):
         pf = Engine.create_powerflow(engine="pandapower")
         valid = pf.adapter.validate_config({})
@@ -128,11 +98,6 @@ class TestCrossEngineValidationConfig:
 
 @pytest.mark.pandapower
 class TestCrossEngineErrorHandling:
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_invalid_model_fails(self):
         pf = Engine.create_powerflow(engine="pandapower")
         pf.adapter.connect()
@@ -155,11 +120,6 @@ class TestFrameworkAdapterPattern:
         assert issubclass(PandapowerPowerFlowAdapter, EngineAdapter)
         assert issubclass(PandapowerShortCircuitAdapter, EngineAdapter)
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_adapter_has_required_methods(self):
         from cloudpss_skills_v2.powerapi.adapters.pandapower import (
             PandapowerPowerFlowAdapter,

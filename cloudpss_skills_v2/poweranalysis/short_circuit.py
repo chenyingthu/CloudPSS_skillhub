@@ -21,6 +21,7 @@ from cloudpss_skills_v2.core.skill_result import (
     SkillResult,
     SkillStatus,
 )
+from cloudpss_skills_v2.powerapi import EngineConfig
 from cloudpss_skills_v2.powerskill import Engine, ShortCircuit
 
 logger = logging.getLogger(__name__)
@@ -183,11 +184,12 @@ class ShortCircuitAnalysis:
     def _get_api(self, config: dict[str, Any]) -> ShortCircuit:
         engine = config.get("engine", "cloudpss")
         auth = config.get("auth", {})
-        return Engine.create_short_circuit_for_skill(
-            engine=engine,
-            base_url=auth.get("base_url"),
-            auth=auth,
+        engine_config = EngineConfig(
+            engine_name=engine,
+            base_url=auth.get("base_url", ""),
+            extra={"auth": auth},
         )
+        return Engine.create_short_circuit(engine=engine, config=engine_config)
 
     def validate(self, config: dict[str, Any]) -> tuple[bool, list[str]]:
         errors = []
@@ -350,6 +352,17 @@ class ShortCircuitAnalysis:
             channel = bv.get("channel", "unknown")
             analysis[channel] = {
                 "min_voltage": bv.get("voltage_pu", 0),
+            }
+
+        for bus in result_data.get("bus_results", []):
+            channel = str(bus.get("bus") or bus.get("bus_index") or "unknown")
+            current_ka = bus.get("ikss_ka", 0)
+            analysis[channel] = {
+                "peak_current": bus.get("ip_ka", current_ka),
+                "steady_current": current_ka,
+                "current_ka": current_ka,
+                "thermal_current": bus.get("ith_ka", 0),
+                "min_voltage": bus.get("v_pu", 0),
             }
 
         return analysis

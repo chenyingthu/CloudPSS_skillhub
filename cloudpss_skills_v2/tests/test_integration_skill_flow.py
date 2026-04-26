@@ -11,11 +11,6 @@ from cloudpss_skills_v2.tools.report_generator import ReportGeneratorTool
 
 @pytest.mark.pandapower
 class TestSkillWorkflowPowerFlow:
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_create_powerflow_skill(self):
         pf = Engine.create_powerflow(engine="pandapower")
         assert pf is not None
@@ -26,11 +21,6 @@ class TestSkillWorkflowPowerFlow:
         success = pf.adapter.load_model("case14")
         assert success is True
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_run_powerflow_skill(self):
         pf = Engine.create_powerflow(engine="pandapower")
         pf.adapter.connect()
@@ -42,20 +32,10 @@ class TestSkillWorkflowPowerFlow:
 
 @pytest.mark.pandapower
 class TestSkillWorkflowShortCircuit:
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_create_short_circuit_skill(self):
         sc = Engine.create_short_circuit(engine="pandapower")
         assert sc is not None
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_run_short_circuit_skill(self):
         sc = Engine.create_short_circuit(engine="pandapower")
         sc.adapter.connect()
@@ -65,22 +45,12 @@ class TestSkillWorkflowShortCircuit:
 
 @pytest.mark.pandapower
 class TestSkillWorkflowTopologyCheck:
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_topology_tool_success(self):
         tool = TopologyCheckTool()
         result = tool.run({"model": {"rid": "case14"}})
         assert result.status == SkillStatus.SUCCESS
         assert result.data is not None
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_topology_tool_returns_valid_data(self):
         tool = TopologyCheckTool()
         result = tool.run({"model": {"rid": "case14"}})
@@ -90,11 +60,6 @@ class TestSkillWorkflowTopologyCheck:
 
 @pytest.mark.pandapower
 class TestSkillWorkflowVisualize:
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_visualize_tool_success(self):
         tool = VisualizeTool()
         result = tool.run({"model": {"rid": "case14"}})
@@ -104,21 +69,11 @@ class TestSkillWorkflowVisualize:
 
 @pytest.mark.pandapower
 class TestSkillWorkflowReport:
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_report_needs_sections(self):
         tool = ReportGeneratorTool()
         result = tool.run({"model": {"rid": "case14"}})
         assert result.status == SkillStatus.FAILED
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_report_with_sections(self):
         tool = ReportGeneratorTool()
         result = tool.run(
@@ -131,11 +86,6 @@ class TestSkillWorkflowReport:
 @pytest.mark.pandapower
 class TestSkillWorkflowMultiCase:
     @pytest.mark.parametrize("case", ["case14", "case30", "case57"])
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_powerflow_multiple_cases(self, case):
         pf = Engine.create_powerflow(engine="pandapower")
         pf.adapter.connect()
@@ -145,11 +95,6 @@ class TestSkillWorkflowMultiCase:
 
 @pytest.mark.pandapower
 class TestSkillWorkflowChain:
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_pf_then_topology(self):
         pf = Engine.create_powerflow(engine="pandapower")
         pf.adapter.connect()
@@ -161,11 +106,6 @@ class TestSkillWorkflowChain:
         assert topo_result.status == SkillStatus.SUCCESS
         assert topo_result.data is not None
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_full_chain_pf_viz_report(self):
         pf = Engine.create_powerflow(engine="pandapower")
         pf.adapter.connect()
@@ -185,21 +125,11 @@ class TestSkillWorkflowChain:
 
 @pytest.mark.pandapower
 class TestSkillValidation:
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_powerflow_validates_config(self):
         pf = Engine.create_powerflow(engine="pandapower")
         valid = pf.adapter.validate_config({"model_id": "case14"})
         assert valid.valid is True
 
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_powerflow_rejects_invalid(self):
         pf = Engine.create_powerflow(engine="pandapower")
         pf.adapter.connect()
@@ -209,11 +139,6 @@ class TestSkillValidation:
 
 @pytest.mark.pandapower
 class TestSkillErrorRecovery:
-    @pytest.mark.smoke
-    @pytest.mark.needs_improvement(
-        reason="仅验证导入，需添加业务逻辑验证",
-        issue="https://github.com/org/repo/issues/456",
-    )
     def test_graceful_failure_invalid_case(self):
         pf = Engine.create_powerflow(engine="pandapower")
         pf.adapter.connect()

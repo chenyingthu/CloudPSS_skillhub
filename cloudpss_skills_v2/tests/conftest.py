@@ -1,19 +1,19 @@
 """Shared test fixtures for cloudpss_skills_v2 tests."""
 
-import os
 from pathlib import Path
 
 import pytest
 
 
+LOCAL_CLOUDPSS_API_URL = "http://166.111.60.76:50001"
+LOCAL_CLOUDPSS_MODEL_RID = "model/chenying/IEEE39"
+
+
 @pytest.fixture(scope="session")
 def cloudpss_token():
-    """Get CloudPSS token from env or file."""
-    token = os.environ.get("CLOUDPSS_TOKEN")
-    if token:
-        return token
+    """Get the token for the local CloudPSS integration server."""
 
-    for token_file in [".cloudpss_token", ".cloudpss_token_internal"]:
+    for token_file in [".cloudpss_token_internal"]:
         p = Path(token_file)
         if p.exists():
             return p.read_text().strip()
@@ -22,14 +22,14 @@ def cloudpss_token():
 
 @pytest.fixture(scope="session")
 def cloudpss_api_url():
-    """Get CloudPSS API URL."""
-    return os.environ.get("CLOUDPSS_API_URL", "https://internal.cloudpss.com")
+    """Get the CloudPSS API URL used by integration tests."""
+    return LOCAL_CLOUDPSS_API_URL
 
 
 @pytest.fixture(scope="session")
 def cloudpss_model_rid():
-    """Get CloudPSS model RID from env."""
-    return os.environ.get("CLOUDPSS_MODEL_RID")
+    """Get the CloudPSS model RID used by integration tests."""
+    return LOCAL_CLOUDPSS_MODEL_RID
 
 
 @pytest.fixture(scope="session")

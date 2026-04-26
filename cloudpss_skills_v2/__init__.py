@@ -74,6 +74,7 @@ from cloudpss_skills_v2.poweranalysis import (
     RenewableIntegrationAnalysis,
     VSIWeakBusAnalysis,
 )
+from cloudpss_skills_v2.powerskill.presets import PowerFlowPreset, EMTPreset
 
 SkillRegistry.register("n1_security", "poweranalysis", N1SecurityAnalysis, "N-1安全校核")
 SkillRegistry.register("contingency_analysis", "poweranalysis", ContingencyAnalysis, "预想事故分析")
@@ -103,6 +104,8 @@ SkillRegistry.register("fault_clearing_scan", "poweranalysis", FaultClearingScan
 SkillRegistry.register("reactive_compensation_design", "poweranalysis", ReactiveCompensationDesignAnalysis, "无功补偿设计")
 SkillRegistry.register("renewable_integration", "poweranalysis", RenewableIntegrationAnalysis, "新能源接入")
 SkillRegistry.register("vsi_weak_bus", "poweranalysis", VSIWeakBusAnalysis, "VSI弱母线")
+SkillRegistry.register("power_flow", "simulation", PowerFlowPreset, "潮流计算")
+SkillRegistry.register("emt_simulation", "simulation", EMTPreset, "EMT暂态仿真")
 
 __version__ = "2.0.0"
 __author__ = "CloudPSS Team"
@@ -145,14 +148,6 @@ SkillRegistry.register("batch_task_manager", "tool", BatchTaskManagerTool, "批�
 SkillRegistry.register("config_batch_runner", "tool", ConfigBatchRunnerTool, "配置批量运行")
 SkillRegistry.register("study_pipeline", "tool", StudyPipelineTool, "研究流水线")
 SkillRegistry.register("model_validator", "tool", ModelBuilderTool, "模型验证")
-
-# Register Simulation skills (PowerSkill layer)
-SkillRegistry.register("power_flow", "simulation", PowerFlow, "潮流计算")
-SkillRegistry.register("emt_simulation", "simulation", EMT, "EMT暂态仿真")
-SkillRegistry.register("short_circuit", "simulation", ShortCircuit, "短路电流计算")
-SkillRegistry.register("transient_stability", "simulation", TransientStability, "暂态稳定分析")
-SkillRegistry.register("harmonic_analysis", "simulation", HarmonicAnalysis, "谐波分析")
-SkillRegistry.register("small_signal_stability", "simulation", SmallSignalStability, "小信号稳定分析")
 
 __all__.extend([
     "HDF5ExportTool", "ComtradeExportTool", "WaveformExportTool",
