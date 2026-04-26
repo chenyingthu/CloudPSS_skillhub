@@ -356,13 +356,16 @@ class ShortCircuitAnalysis:
 
         for bus in result_data.get("bus_results", []):
             channel = str(bus.get("bus") or bus.get("bus_index") or "unknown")
-            current_ka = bus.get("ikss_ka", 0)
+            current_ka = _as_float(bus.get("ikss_ka"), 0)
+            peak_current = _as_float(bus.get("ip_ka"), 0)
+            if peak_current <= 0 and current_ka > 0:
+                peak_current = current_ka
             analysis[channel] = {
-                "peak_current": bus.get("ip_ka", current_ka),
+                "peak_current": peak_current,
                 "steady_current": current_ka,
                 "current_ka": current_ka,
-                "thermal_current": bus.get("ith_ka", 0),
-                "min_voltage": bus.get("v_pu", 0),
+                "thermal_current": _as_float(bus.get("ith_ka"), 0),
+                "min_voltage": _as_float(bus.get("v_pu"), 0),
             }
 
         return analysis

@@ -5,9 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def test_no_smoke_or_needs_improvement_markers_remain():
+def test_no_weak_test_labels_remain():
     tests_root = Path(__file__).parent
-    forbidden = ("pytest.mark." + "smoke", "pytest.mark." + "needs_improvement")
+    weak_a = "smo" + "ke"
+    weak_b = "needs" + "_" + "improvement"
+    forbidden = (
+        "pytest.mark." + weak_a,
+        "pytest.mark." + weak_b,
+        weak_a + " test",
+        "Smo" + "ke test",
+        weak_b,
+    )
     offenders: list[str] = []
 
     for path in sorted(tests_root.glob("test*.py")):

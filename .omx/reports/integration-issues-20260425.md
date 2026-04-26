@@ -25,6 +25,9 @@
 | INT-011 | `ShortCircuitAnalysis` pandapower path | CODE_DEFECT | FIXED | Pandapower short-circuit returned `bus_results`, but analysis only recognized `fault_currents`, so successful simulations were marked FAILED. | Analysis now converts `bus_results[].ikss_ka/ip_ka/ith_ka`; RUN-014 passed. |
 | INT-012 | registered skill matrix live gating | TEST_DEFECT | FIXED | Review found live-only EMT entries would fail in environments without `.cloudpss_token_internal` or route to `166.111.60.76:50001`. | Added explicit skip gate for only `emt_n1_screening` and `emt_simulation`; no-token temp cwd verified as 2 skipped, 46 deselected. |
 | INT-013 | CloudPSS short-circuit auth | CODE_DEFECT | FIXED | Review found `Engine.create_short_circuit_for_skill(..., auth=...)` nested credentials under `extra.auth`, while `CloudPSSShortCircuitAdapter` only read flat `extra`. | Adapter now supports both nested and flat auth; regression tests cover both shapes. |
+| INT-014 | poweranalysis module tests | TEST_DEFECT | FIXED | Second-pass review found several high-risk skills still had shallow import/config tests instead of business invariants. | Added real pandapower N-1 contingency, voltage stability PV scan, short-circuit capacity, and EMT N-1 ranking/digest assertions; RUN-029 and RUN-033 passed. |
+| INT-015 | `ShortCircuitAnalysis` peak-current normalization | CODE_DEFECT | FIXED | Real pandapower `bus_results` can contain positive `ikss_ka` with `ip_ka == 0`, causing analysis to report zero peak current while capacity was positive. | Fall back peak current to `ikss_ka` when `ip_ka` is absent/non-positive; tests now require `peak_current >= steady_current > 0`. |
+| INT-016 | weak test labels | TEST_DEFECT | FIXED | Old generated unit files still contained `Smoke test` docstrings even after pytest markers were removed. | Removed weak docstring labels and expanded quality gate to reject weak test labels, not just markers. |
 
 ## Test Runs
 
@@ -58,10 +61,15 @@
 | RUN-026 | `tmpdir=$(mktemp -d) && cd "$tmpdir" && PYTHONPATH=/home/chenying/researches/cloudpss-toolkit timeout 120s python -m pytest -q /home/chenying/researches/cloudpss-toolkit/cloudpss_skills_v2/tests/test_integration_registry_matrix.py -k 'emt_n1_screening or emt_simulation'` | PASS | 2 skipped, 46 deselected; no-token environment skips private live entries instead of failing. |
 | RUN-027 | `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_cloudpss.py cloudpss_skills_v2/tests/test_integration_quality_gate.py` | PASS | 74 passed; CloudPSS adapter and quality gates passed after review fixes. |
 | RUN-028 | `timeout 600s python -m pytest -q cloudpss_skills_v2/tests` | PASS | 832 passed, 3 skipped in 195.28s; final full v2 suite after review fixes. |
+| RUN-029 | `python -m pytest -q cloudpss_skills_v2/tests/test_n1_security.py cloudpss_skills_v2/tests/test_contingency_analysis.py cloudpss_skills_v2/tests/test_voltage_stability.py cloudpss_skills_v2/tests/test_short_circuit.py cloudpss_skills_v2/tests/test_emt_n1_screening.py` | PASS | 24 passed in 4.55s; deep poweranalysis assertions cover real pandapower contingency/PV/short-circuit paths and EMT N-1 ranking. |
+| RUN-030 | `python -m compileall -q cloudpss_skills_v2` | PASS | Full package compilation succeeded after deep assertion and short-circuit normalization changes. |
+| RUN-031 | `python -m pytest -q cloudpss_skills_v2/tests/test_integration_quality_gate.py` | PASS | 2 passed; quality gate rejects weak pytest markers and weak test-label docstrings. |
+| RUN-032 | `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py` | PASS | 48 passed in 30.07s; all registered skills ran, including live-only local CloudPSS EMT entries on `http://166.111.60.76:50001`. |
+| RUN-033 | `timeout 600s python -m pytest -q cloudpss_skills_v2/tests` | PASS | 837 passed, 3 skipped in 189.90s; full v2 suite passed after deep assertion expansion. |
 
 ## Remaining External/Design Items
 
 - Public CloudPSS and `https://internal.cloudpss.com` are not tested in this campaign by explicit user scope.
 - `test_integration_cross_engine.py` remains a pandapower interface-invariant suite, not a multi-server numerical comparison.
-- No `smoke` / `needs_improvement` pytest markers remain in `cloudpss_skills_v2/tests`; the quality gate prevents reintroduction.
+- No weak `smoke` / `needs_improvement` pytest markers or weak `Smoke test` labels remain in `cloudpss_skills_v2/tests`; the quality gate prevents reintroduction.
 - In ordinary CI/dev environments without the private local CloudPSS token/server route, only the two live-only EMT registry-matrix cases should skip; the rest of the matrix remains mandatory.

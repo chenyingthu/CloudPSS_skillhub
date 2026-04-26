@@ -1,7 +1,7 @@
 """Bounded live integration tests for PowerAnalysis skills.
 
 These tests intentionally use the local CloudPSS server and one or two known
-IEEE39 components. They are not smoke tests: each test runs the real skill
+IEEE39 components. They are not substitution-only checks: each test runs the real skill
 entrypoint through the CloudPSS adapter and asserts shaped outputs.
 """
 

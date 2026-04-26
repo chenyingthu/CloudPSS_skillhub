@@ -39,13 +39,18 @@ class TestEmtN1ScreeningAnalysis:
         handle = _FakeHandle()
         pf_calls = []
         emt_calls = []
+        pf_results = [
+            SimpleNamespace(is_success=True, data={"max_voltage": 1.0}),
+            SimpleNamespace(is_success=True, data={"max_voltage": 0.79}),
+            SimpleNamespace(is_success=True, data={"max_voltage": 0.87}),
+        ]
 
         pf_api = SimpleNamespace(
             adapter=SimpleNamespace(engine_name="fake_pf"),
             get_model_handle=lambda model_rid: handle,
             run_power_flow=lambda **kwargs: (
                 pf_calls.append(kwargs)
-                or SimpleNamespace(is_success=True, data={"max_voltage": 0.9})
+                or pf_results.pop(0)
             ),
         )
         emt_api = SimpleNamespace(
@@ -69,19 +74,31 @@ class TestEmtN1ScreeningAnalysis:
             {
                 "model": {"rid": "model/test", "source": "cloud"},
                 "auth": {"token": "token"},
-                "contingencies": [{"branch": "line_1"}],
+                "contingencies": [{"branch": "line_1"}, {"branch": "line_2"}],
+                "thresholds": {"voltage_deviation": 0.1},
                 "simulation": {"duration": 1.5, "sampling_freq": 1000},
             }
         )
 
         assert result.status == SkillStatus.SUCCESS
-        assert handle.removed == ["line_1"]
-        assert len(pf_calls) == 2
-        assert len(emt_calls) == 1
+        assert handle.removed == ["line_1", "line_2"]
+        assert len(pf_calls) == 3
+        assert len(emt_calls) == 2
         assert emt_calls[0]["model_id"] is not None
         assert emt_calls[0]["fault_config"]["actual_trip"] is True
+        assert result.data["total_contingencies"] == 2
+        assert result.data["digest"] == {
+            "total_contingencies": 2,
+            "severe_count": 1,
+            "moderate_count": 1,
+            "normal_count": 0,
+            "severe_contingencies": ["line_1"],
+        }
         assert result.data["results"][0]["actual_trip"] is True
         assert result.data["results"][0]["emt_success"] is True
+        assert [r["branch"] for r in result.data["results"]] == ["line_1", "line_2"]
+        assert [r["severity"] for r in result.data["results"]] == ["severe", "moderate"]
+        assert result.data["results"][0]["max_gap"] > result.data["results"][1]["max_gap"]
 
     def test_run_skips_topology_trip_when_actual_trip_disabled(self, monkeypatch):
         instance = EmtN1ScreeningAnalysis()
