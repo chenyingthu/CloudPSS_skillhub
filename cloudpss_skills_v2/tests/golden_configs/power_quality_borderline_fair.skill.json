@@ -1,0 +1,31 @@
+{
+  "case_id": "power_quality_borderline_fair",
+  "description": "Literature-backed THD and voltage magnitude-unbalance boundary case from explicit measurements.",
+  "capability": {
+    "skill_runnable": true,
+    "engine_runnable": false,
+    "engine_claim": "none",
+    "engine_notes": "The pandapower adapter may be touched by the skill, but THD and unbalance are calculated from explicit measurements, not from an engine harmonic simulation."
+  },
+  "skill": "power_quality_analysis",
+  "config": {
+    "skill": "power_quality_analysis",
+    "engine": "pandapower",
+    "model": {"rid": "case14", "source": "local"},
+    "analysis": {
+      "harmonic_orders": [5, 7, 11],
+      "thd_threshold": 0.05,
+      "unbalance_threshold": 0.02
+    },
+    "measurements": {
+      "harmonic_voltages": {"5": 0.04, "7": 0.03, "11": 0.02},
+      "fundamental_voltage": 1.0,
+      "phase_voltages_pu": [1.0, 0.97, 1.02]
+    }
+  },
+  "expected": {
+    "thd": 0.0539,
+    "unbalance": 0.0268,
+    "quality_classification": "fair"
+  }
+}

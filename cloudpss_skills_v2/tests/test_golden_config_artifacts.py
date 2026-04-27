@@ -115,7 +115,9 @@ def test_golden_config_artifacts_exist_for_all_current_cases():
 
     assert paths == {
         "power_quality_balanced_harmonic.skill.json",
+        "power_quality_borderline_fair.skill.json",
         "protection_iec_standard_inverse.skill.json",
+        "protection_iec_very_inverse.skill.json",
         "reactive_compensation_weak_bus.skill.json",
         "renewable_integration_passing.skill.json",
         "thevenin_weak_grid.skill.json",
@@ -152,7 +154,15 @@ def test_skill_golden_configs_run_against_declared_skill_inputs():
             assert result.data["thd"] == pytest.approx(expected["thd"])
             assert result.data["unbalance"] == pytest.approx(expected["unbalance"])
             assert result.data["quality_classification"] == expected["quality_classification"]
+        elif artifact["case_id"] == "power_quality_borderline_fair":
+            assert result.data["thd"] == pytest.approx(expected["thd"])
+            assert result.data["unbalance"] == pytest.approx(expected["unbalance"])
+            assert result.data["quality_classification"] == expected["quality_classification"]
         elif artifact["case_id"] == "protection_iec_standard_inverse":
+            setting = result.data["settings"][0]
+            assert setting["pickup_current"] == pytest.approx(expected["pickup_current"])
+            assert setting["time_delay"] == pytest.approx(expected["operating_time_s"], abs=1e-4)
+        elif artifact["case_id"] == "protection_iec_very_inverse":
             setting = result.data["settings"][0]
             assert setting["pickup_current"] == pytest.approx(expected["pickup_current"])
             assert setting["time_delay"] == pytest.approx(expected["operating_time_s"], abs=1e-4)

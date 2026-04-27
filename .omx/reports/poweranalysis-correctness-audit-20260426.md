@@ -69,7 +69,9 @@ Covered source-backed cases:
 | two-bus PV model | Local model-builder/model-validator topology contract | Structural graph and typed parameter validation only. |
 | Thevenin/SCR | IEC 60909 short-circuit convention plus per-unit Thevenin arithmetic | Verifies arithmetic from supplied `z_th_pu`; does not derive impedance from a network. |
 | Power quality THD/unbalance | IEEE 519/IEC THD convention and NEMA magnitude-unbalance convention | Verifies THD and magnitude unbalance from explicit measurements. |
+| Power quality borderline fair | IEEE 519/IEC THD convention and NEMA magnitude-unbalance convention | Verifies a threshold-adjacent explicit measurement set that classifies as `fair`, not `good`. |
 | IEC standard inverse relay | IEC 60255/60255-151 inverse-time family as published in relay vendor manuals | Verifies standard inverse curve constants and pickup/time calculation. |
+| IEC very inverse relay | IEC 60255/60255-151 inverse-time family as published in relay vendor manuals | Verifies very-inverse curve constants and pickup/time calculation. |
 | Reactive compensation sizing | Explicit Q-V sensitivity derivation | Screening approximation only; not a full compensation design optimization. |
 | Renewable integration | SCR, THD, LVRT-threshold, and capacity-factor formulas | Verifies configured metrics from explicit inputs; does not certify grid-code compliance. |
 
@@ -82,7 +84,9 @@ Reusable JSON config artifacts now exist under `cloudpss_skills_v2/tests/golden_
 | `two_bus_pv_model.workflow.json` | model_builder -> model_validator workflow | Skill workflow only; not an engine network case. |
 | `thevenin_weak_grid.skill.json` | Thevenin/SCR formula input | Skill config only; golden values come from explicit `z_th_pu`. |
 | `power_quality_balanced_harmonic.skill.json` | THD/unbalance explicit measurements | Skill config only; golden values come from explicit measurement data. |
+| `power_quality_borderline_fair.skill.json` | THD/unbalance threshold-boundary measurements | Skill config only; golden values come from explicit measurement data. |
 | `protection_iec_standard_inverse.skill.json` | IEC inverse-time relay setting | Skill config only; golden values come from explicit relay settings. |
+| `protection_iec_very_inverse.skill.json` | IEC very-inverse relay setting | Skill config only; golden values come from explicit relay settings. |
 | `reactive_compensation_weak_bus.skill.json` | Weak-bus compensation sizing | Skill config only; golden values come from explicit weak-bus parameters. |
 | `renewable_integration_passing.skill.json` | SCR/THD/LVRT/capacity-factor checks | Skill config only; golden values come from explicit renewable, harmonic, LVRT, and capacity-series inputs. |
 
@@ -218,3 +222,11 @@ The short-circuit skill benchmark uses the same two-bus radial artifact with a 2
   - PASS: 48 passed after metadata-contract updates.
 - `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
   - PASS: 898 passed in 205.89s after metadata-contract updates.
+- `python -m pytest -q cloudpss_skills_v2/tests/test_golden_trusted_analysis_cases.py cloudpss_skills_v2/tests/test_golden_config_artifacts.py cloudpss_skills_v2/tests/test_integration_quality_gate.py`
+  - PASS: 22 passed after adding the power-quality borderline-fair and IEC very-inverse relay golden cases.
+- `python -m compileall -q cloudpss_skills_v2`
+  - PASS: package compilation succeeded after adding the literature-backed golden cases.
+- `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py`
+  - PASS: 48 passed after adding the literature-backed golden cases.
+- `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
+  - PASS: 900 passed in 201.70s after adding the literature-backed golden cases.

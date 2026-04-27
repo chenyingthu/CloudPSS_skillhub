@@ -116,6 +116,34 @@ POWER_QUALITY_BALANCED_HARMONIC = {
 }
 
 
+POWER_QUALITY_BORDERLINE_FAIR = {
+    "harmonic_voltages": {"5": 0.04, "7": 0.03, "11": 0.02},
+    "phase_voltages_pu": [1.0, 0.97, 1.02],
+    "expected_thd": 0.05385164807134504,
+    "expected_unbalance": 0.026755852842809423,
+    "reference": {
+        "standard_basis": "IEEE 519/IEC power-quality THD convention and NEMA magnitude-unbalance convention.",
+        "formula": "THD = sqrt(sum(Vh^2)) / V1; unbalance = max(|Va,b,c - Vavg|) / Vavg",
+        "sources": [
+            public_source(
+                "MathWorks Total Harmonic Distortion block documentation",
+                "https://de.mathworks.com/help/sps/ref/totalharmonicdistortion.html",
+                "Defines THD as RMS total harmonics divided by RMS fundamental.",
+            ),
+            public_source(
+                "Schneider Electric voltage/current unbalance FAQ",
+                "https://www.se.com/us/en/faqs/FA409853/",
+                "Documents the NEMA maximum-deviation-from-average method.",
+            ),
+        ],
+        "limitations": [
+            "This is a threshold-boundary formula case from explicit measurements only.",
+            "It does not validate harmonic-source modeling, TDD, flicker, or sequence-component unbalance.",
+        ],
+    },
+}
+
+
 PROTECTION_IEC_STANDARD_INVERSE = {
     "relay": {
         "id": "R1",
@@ -144,6 +172,40 @@ PROTECTION_IEC_STANDARD_INVERSE = {
         ],
         "limitations": [
             "Only the IEC standard inverse curve is checked in this golden case.",
+            "CT saturation, reset behavior, breaker clearing time, and grading margins are outside this formula check.",
+        ],
+    },
+}
+
+
+PROTECTION_IEC_VERY_INVERSE = {
+    "relay": {
+        "id": "R1",
+        "load_current": 200.0,
+        "fault_current": 3000.0,
+        "time_dial": 0.1,
+        "curve_type": "iec_very_inverse",
+    },
+    "analysis": {"load_multiplier": 1.25, "fault_current_safety_factor": 0.5},
+    "expected_pickup_current": 250.0,
+    "expected_operating_time_s": 0.1227,
+    "reference": {
+        "standard_basis": "IEC 60255 / IEC 60255-151 inverse-time overcurrent curve family.",
+        "formula": "t = TMS * k / ((If / Ipickup)^alpha - 1), with VI k=13.5 and alpha=1.0",
+        "sources": [
+            public_source(
+                "ABB REX610 technical manual, very inverse-time characteristics",
+                "https://techdoc.relays.protection-control.abb/r/REX610-Technical-Manual/1.1/en-US/Very-inverse-time-characteristics",
+                "Vendor technical manual publishing IEC very inverse constants.",
+            ),
+            public_source(
+                "Schneider Electric ADVC operations manual, IEC255 inverse time tables",
+                "https://www.productinfo.schneider-electric.com/advc-operationsmanual/pkr39809_advc_operations-manual/English/BM_ADVC3%20Operations%20Manual_0000999204.xml/%24/TPC_ADVC3_OM_AppendixDIEC255InverseTimeTablesCPT_0001060607",
+                "Vendor manual states IEC255 inverse-time formulas used for table values.",
+            ),
+        ],
+        "limitations": [
+            "Only the IEC very inverse curve formula is checked in this golden case.",
             "CT saturation, reset behavior, breaker clearing time, and grading margins are outside this formula check.",
         ],
     },
@@ -229,7 +291,9 @@ TRUSTED_GOLDEN_CASES = {
     "two_bus_pv_model": TWO_BUS_PV_MODEL,
     "thevenin_weak_grid": THEVENIN_WEAK_GRID,
     "power_quality_balanced_harmonic": POWER_QUALITY_BALANCED_HARMONIC,
+    "power_quality_borderline_fair": POWER_QUALITY_BORDERLINE_FAIR,
     "protection_iec_standard_inverse": PROTECTION_IEC_STANDARD_INVERSE,
+    "protection_iec_very_inverse": PROTECTION_IEC_VERY_INVERSE,
     "reactive_compensation_weak_bus": REACTIVE_COMPENSATION_WEAK_BUS,
     "renewable_integration_passing": RENEWABLE_INTEGRATION_PASSING,
 }

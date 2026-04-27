@@ -21,7 +21,9 @@ from cloudpss_skills_v2.poweranalysis.thevenin_equivalent import (
     TheveninEquivalentAnalysis,
 )
 from cloudpss_skills_v2.tests.golden_cases import (
+    POWER_QUALITY_BORDERLINE_FAIR,
     POWER_QUALITY_BALANCED_HARMONIC,
+    PROTECTION_IEC_VERY_INVERSE,
     PROTECTION_IEC_STANDARD_INVERSE,
     REACTIVE_COMPENSATION_WEAK_BUS,
     RENEWABLE_INTEGRATION_PASSING,
@@ -125,9 +127,7 @@ def test_thevenin_equivalent_matches_hand_calculated_short_circuit_capacity():
     case = THEVENIN_WEAK_GRID
     skill = TheveninEquivalentAnalysis()
 
-    z_mag = skill._calculate_impedance_magnitude(
-        case["z_th_pu"]["real"], case["z_th_pu"]["imag"]
-    )
+    z_mag = skill._calculate_impedance_magnitude(case["z_th_pu"]["real"], case["z_th_pu"]["imag"])
     scc = skill._calculate_scc(110.0, z_mag, case["base_mva"])
     scr = skill._calculate_scr(scc, case["base_mva"])
 
@@ -145,9 +145,7 @@ def test_power_quality_matches_hand_calculated_thd_and_unbalance():
     skill = PowerQualityAnalysisAnalysis()
 
     harmonics = {int(order): value for order, value in case["harmonic_voltages"].items()}
-    thd = skill._calculate_thd(
-        harmonics
-    )
+    thd = skill._calculate_thd(harmonics)
     unbalance = skill._calculate_unbalance(*case["phase_voltages_pu"])
     expected_thd = sum(value**2 for value in harmonics.values()) ** 0.5
 
@@ -160,6 +158,22 @@ def test_power_quality_matches_hand_calculated_thd_and_unbalance():
     assert skill._classify_power_quality(thd, unbalance) == "good"
 
 
+def test_power_quality_borderline_fair_literature_case():
+    case = POWER_QUALITY_BORDERLINE_FAIR
+    skill = PowerQualityAnalysisAnalysis()
+
+    harmonics = {int(order): value for order, value in case["harmonic_voltages"].items()}
+    thd = skill._calculate_thd(harmonics)
+    unbalance = skill._calculate_unbalance(*case["phase_voltages_pu"])
+
+    assert case["reference"]["formula"] == (
+        "THD = sqrt(sum(Vh^2)) / V1; unbalance = max(|Va,b,c - Vavg|) / Vavg"
+    )
+    assert thd == pytest.approx(case["expected_thd"])
+    assert unbalance == pytest.approx(case["expected_unbalance"])
+    assert skill._classify_power_quality(thd, unbalance) == "fair"
+
+
 def test_protection_iec_standard_inverse_operating_time_golden_case():
     case = PROTECTION_IEC_STANDARD_INVERSE
     skill = ProtectionCoordinationAnalysis()
@@ -170,6 +184,22 @@ def test_protection_iec_standard_inverse_operating_time_golden_case():
 
     assert case["reference"]["formula"] == (
         "t = TMS * k / ((If / Ipickup)^alpha - 1), with SI k=0.14 and alpha=0.02"
+    )
+    assert setting.pickup_current == pytest.approx(case["expected_pickup_current"])
+    assert expected_time == pytest.approx(case["expected_operating_time_s"], abs=1e-4)
+    assert setting.time_delay == pytest.approx(case["expected_operating_time_s"], abs=1e-4)
+
+
+def test_protection_iec_very_inverse_operating_time_literature_case():
+    case = PROTECTION_IEC_VERY_INVERSE
+    skill = ProtectionCoordinationAnalysis()
+
+    setting = skill._calculate_relay_settings(case["relay"], case["analysis"])
+    current_multiple = case["relay"]["fault_current"] / case["expected_pickup_current"]
+    expected_time = 0.1 * 13.5 / (current_multiple - 1.0)
+
+    assert case["reference"]["formula"] == (
+        "t = TMS * k / ((If / Ipickup)^alpha - 1), with VI k=13.5 and alpha=1.0"
     )
     assert setting.pickup_current == pytest.approx(case["expected_pickup_current"])
     assert expected_time == pytest.approx(case["expected_operating_time_s"], abs=1e-4)
@@ -195,9 +225,7 @@ def test_reactive_compensation_uses_golden_delta_v_formula():
     )
     assert round(expected_q, 2) == pytest.approx(case["expected_required_q_mvar"])
     recommendation = result.data["compensation_recommendations"][0]
-    assert recommendation["required_q_mvar"] == pytest.approx(
-        case["expected_required_q_mvar"]
-    )
+    assert recommendation["required_q_mvar"] == pytest.approx(case["expected_required_q_mvar"])
     assert result.data["data_source"] == "weak_buses"
 
 
@@ -227,9 +255,7 @@ def test_renewable_integration_golden_inputs_match_expected_metrics(
         "SCR = Ssc / Prated; THD = sqrt(sum(Vh^2)) / V1; capacity_factor = average(P) / Prated"
     )
     assert result.data["results"]["scr"]["scr"] == pytest.approx(case["expected_scr"])
-    assert result.data["results"]["harmonics"]["thd"] == pytest.approx(
-        case["expected_thd"]
-    )
+    assert result.data["results"]["harmonics"]["thd"] == pytest.approx(case["expected_thd"])
     assert result.data["results"]["capacity"]["capacity_factor"] == pytest.approx(
         case["expected_capacity_factor"]
     )
