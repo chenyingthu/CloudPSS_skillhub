@@ -2,11 +2,11 @@
   "case_id": "pandapower_two_bus_radial",
   "description": "Two-bus radial pandapower benchmark with one external grid, one line, and one load.",
   "capability": {
-    "skill_runnable": false,
+    "skill_runnable": true,
     "engine_runnable": true,
     "engine": "pandapower",
-    "engine_claim": "pandapower_powerflow_and_short_circuit",
-    "engine_notes": "The test builds a pandapower net from this repository artifact and runs the pandapower power-flow and IEC 60909 short-circuit adapters."
+    "engine_claim": "pandapower_powerflow_short_circuit_and_voltage_stability",
+    "engine_notes": "The tests load this repository JSON artifact through the pandapower adapter, run power-flow and IEC 60909 short-circuit adapters, and run the voltage_stability skill over explicit load-scaling levels."
   },
   "model": {
     "format": "pandapower_network_spec_v1",
@@ -53,6 +53,30 @@
     "model_id": "pandapower_two_bus_radial",
     "fault_type": "3ph"
   },
+  "skill_configs": {
+    "voltage_stability": {
+      "skill": "voltage_stability",
+      "engine": "pandapower",
+      "model": {
+        "rid": "pandapower_two_bus_radial",
+        "source": "local"
+      },
+      "scan": {
+        "load_scaling": [1.0, 2.0, 4.0, 8.0],
+        "scale_generation": false
+      },
+      "monitoring": {
+        "buses": ["Load"],
+        "collapse_threshold": 0.95
+      },
+      "output": {
+        "format": "json",
+        "prefix": "pandapower_two_bus_voltage_stability",
+        "generate_report": false,
+        "export_pv_curve": false
+      }
+    }
+  },
   "expected": {
     "power_flow": {
       "converged": true,
@@ -73,6 +97,20 @@
       "max_ikss_ka": 10.497278,
       "source_bus_ikss_ka": 10.497278,
       "load_bus_ikss_ka": 6.537857
+    },
+    "voltage_stability": {
+      "total_cases": 4,
+      "converged_cases": 4,
+      "collapse_threshold": 0.95,
+      "collapse_point": 8.0,
+      "max_loadability": 8.0,
+      "monitored_buses": ["Load"],
+      "pv_curve": [
+        {"scale": 1.0, "bus": "Load", "voltage": 1.011301},
+        {"scale": 2.0, "bus": "Load", "voltage": 1.002201},
+        {"scale": 4.0, "bus": "Load", "voltage": 0.982673},
+        {"scale": 8.0, "bus": "Load", "voltage": 0.937069}
+      ]
     }
   },
   "tolerances": {

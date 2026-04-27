@@ -26,6 +26,7 @@ Date: 2026-04-26
 | `renewable_integration` | Filled LVRT profile and capacity series with internal defaults, so energy/LVRT conclusions could exceed supplied evidence. | Requires explicit `renewable.capacity_series_mw`, `harmonics.orders`, and `lvrt.profile`; output declares per-check data sources. | Target tests reject missing series; registry matrix/default config supply explicit series/profile. |
 | `protection_coordination` | Could synthesize relay definitions from model branches or fixed feeder defaults. | Requires explicit `relays` with positive load and fault current; output declares explicit relay settings as data source. | Target tests reject missing relays; dead fallback generation removed; registry matrix supplies relays. |
 | `reactive_compensation_design` | Filled missing SCR, voltage, and reactance with defaults when sizing compensation. | Requires each weak bus to provide `scr`, `voltage_pu`, and `x_pu`; output declares formula-derived explicit weak-bus input. | Target tests reject missing `x_pu` and verify sizing uses supplied reactance; registry matrix supplies `x_pu`. |
+| `voltage_stability` | Local pandapower scans could appear to run load-scaling studies while leaving pandapower `p_mw/q_mvar` load parameters unchanged. | Supports repository JSON model artifacts and updates pandapower load parameters directly before each scan point; local pandapower no longer needs fake auth. | Golden PV-curve test locks voltage values for load scales 1.0/2.0/4.0/8.0 and requires monotonically decreasing load-bus voltage. |
 
 ## Current Risk Map
 
@@ -96,7 +97,7 @@ The first true engine-runnable golden benchmark now exists under `cloudpss_skill
 
 | File | Engine | Coverage | Expected Outputs |
 | --- | --- | --- | --- |
-| `pandapower_two_bus_radial.json` | pandapower | Builds a two-bus radial net from the JSON artifact, then runs the pandapower power-flow and IEC 60909 short-circuit adapters. | Source/load bus voltages, load-bus angle, line loading/loss, grid P/Q, max/source/load short-circuit currents. |
+| `pandapower_two_bus_radial.json` | pandapower | Loads a two-bus radial JSON artifact through the pandapower adapters, runs power-flow and IEC 60909 short-circuit adapters, then runs the registered `voltage_stability` skill over explicit load-scaling points. | Source/load bus voltages, load-bus angle, line loading/loss, grid P/Q, max/source/load short-circuit currents, PV-curve voltage points, collapse threshold crossing, and skill artifact creation. |
 | `pandapower_parallel_lines_n1.json` | pandapower | Loads a two-bus two-parallel-line JSON artifact through the pandapower adapters, verifies base-case power-flow/short-circuit values, then runs the registered `contingency_analysis` skill with either line removed. | Base-case voltage/angle, per-line loading/loss, IEC 60909 currents, N-1 case count, post-contingency voltage range, remaining-line thermal overload, severity, ranking, weak points, and artifact creation. |
 | `cloudpss_ieee39_powerflow.json` | CloudPSS local server | Runs `model/chenying/IEEE39` power flow through both the CloudPSS power-flow facade and the registered `power_flow` skill using `http://166.111.60.76:50001` and `.cloudpss_token_internal`. | Bus/branch counts, convergence, total generation/load/loss, voltage range, sentinel bus voltages/generation/load, sentinel branch losses, and skill output artifact creation. |
 
@@ -105,6 +106,8 @@ The pandapower benchmark is fully local. The CloudPSS benchmark is gated, target
 CloudPSS IEEE39 short-circuit was probed but not promoted to a golden case. The local server returned completed short-circuit jobs with empty `fault_currents`, no `bus_results`, and `max_fault_current_ka: 0`; that is not a physically meaningful short-circuit benchmark.
 
 The N-1 pandapower benchmark is intentionally simple: two equal parallel lines share a 90 MW / 30 Mvar load securely in the base case, and either single-line outage transfers the full flow to the remaining line, causing a deterministic thermal violation. This locks the physical meaning of `contingency_analysis` output instead of merely checking that the skill returns a JSON shape.
+
+The voltage-stability benchmark is also intentionally simple: the same two-bus radial system is solved at load scales 1.0, 2.0, 4.0, and 8.0. The Load bus voltage must monotonically drop from 1.011301 pu to 0.937069 pu, proving the skill actually modifies the pandapower load and reruns power flow at each scan point.
 
 ## Verification
 
@@ -162,9 +165,17 @@ The N-1 pandapower benchmark is intentionally simple: two equal parallel lines s
   - PASS: 12 passed after requiring CloudPSS live golden cases to include skill coverage.
 - `python -m pytest -q cloudpss_skills_v2/tests/test_golden_engine_cases.py cloudpss_skills_v2/tests/test_integration_quality_gate.py cloudpss_skills_v2/tests/test_contingency_analysis.py`
   - PASS: 20 passed after adding the pandapower parallel-lines N-1 golden benchmark and removing fake local pandapower auth from contingency tests.
+- `python -m pytest -q cloudpss_skills_v2/tests/test_golden_engine_cases.py cloudpss_skills_v2/tests/test_integration_quality_gate.py cloudpss_skills_v2/tests/test_voltage_stability.py`
+  - PASS: 21 passed after adding the pandapower voltage-stability golden benchmark and removing fake local pandapower auth from voltage-stability tests.
 - `python -m compileall -q cloudpss_skills_v2 && python -m pytest -q cloudpss_skills_v2/tests/test_golden_engine_cases.py cloudpss_skills_v2/tests/test_golden_config_artifacts.py cloudpss_skills_v2/tests/test_golden_trusted_analysis_cases.py cloudpss_skills_v2/tests/test_integration_quality_gate.py cloudpss_skills_v2/tests/test_model_validator.py cloudpss_skills_v2/tests/test_contingency_analysis.py`
   - PASS: compile plus 37 targeted tests passed.
 - `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py`
   - PASS: 48 passed.
 - `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
   - PASS: 889 passed, 0 skipped in 200.86s after adding the pandapower N-1 golden benchmark.
+- `python -m compileall -q cloudpss_skills_v2 && python -m pytest -q cloudpss_skills_v2/tests/test_golden_engine_cases.py cloudpss_skills_v2/tests/test_golden_config_artifacts.py cloudpss_skills_v2/tests/test_golden_trusted_analysis_cases.py cloudpss_skills_v2/tests/test_integration_quality_gate.py cloudpss_skills_v2/tests/test_model_validator.py cloudpss_skills_v2/tests/test_contingency_analysis.py cloudpss_skills_v2/tests/test_voltage_stability.py`
+  - PASS: compile plus 43 targeted tests passed after adding the voltage-stability golden benchmark.
+- `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py`
+  - PASS: 48 passed.
+- `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
+  - PASS: 890 passed, 0 skipped in 199.81s after fixing pandapower voltage-stability load scaling.

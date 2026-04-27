@@ -1,4 +1,5 @@
 """Tests for cloudpss_skills_v2.poweranalysis.voltage_stability."""
+
 import pytest
 
 from cloudpss_skills_v2.core.skill_result import SkillStatus
@@ -19,14 +20,13 @@ class TestVoltageStabilityAnalysis:
     def test_has_name_attribute(self):
         """Instance has expected attributes."""
         instance = VoltageStabilityAnalysis()
-        assert hasattr(instance, 'name') or hasattr(instance, 'run')
+        assert hasattr(instance, "name") or hasattr(instance, "run")
 
     def test_pandapower_scan_returns_ordered_convergence_and_pv_curve(self, tmp_path):
         instance = VoltageStabilityAnalysis()
         result = instance.run(
             {
                 "engine": "pandapower",
-                "auth": {"token": "local-pandapower-token"},
                 "model": {"rid": "case14", "source": "local"},
                 "scan": {"load_scaling": [1.0, 1.01], "scale_generation": False},
                 "monitoring": {"buses": ["0", "1"], "collapse_threshold": 0.7},
@@ -51,7 +51,10 @@ class TestVoltageStabilityAnalysis:
         assert scales == [1.0, 1.01]
         assert all(case["converged"] for case in result.data["results"])
         assert all(set(case["voltages"]) == {"0", "1"} for case in result.data["results"])
-        assert all(case["min_voltage"] > result.data["collapse_threshold"] for case in result.data["results"])
+        assert all(
+            case["min_voltage"] > result.data["collapse_threshold"]
+            for case in result.data["results"]
+        )
 
         pv_points = result.data["pv_curve"]
         assert len(pv_points) == 4
@@ -79,7 +82,11 @@ class TestVoltageStabilityAnalysis:
                 )()
 
             def run_power_flow(self, **kwargs):
-                return type("Result", (), {"is_success": False, "data": {}, "errors": ["no convergence"]})()
+                return type(
+                    "Result",
+                    (),
+                    {"is_success": False, "data": {}, "errors": ["no convergence"]},
+                )()
 
         monkeypatch.setattr(
             "cloudpss_skills_v2.poweranalysis.voltage_stability.Engine.create_powerflow",

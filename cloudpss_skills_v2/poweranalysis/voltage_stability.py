@@ -143,9 +143,7 @@ class VoltageStabilityAnalysis:
         self.artifacts: list[Artifact] = []
 
     def _log(self, level: str, message: str) -> None:
-        self.logs.append(
-            LogEntry(timestamp=datetime.now(), level=level, message=message)
-        )
+        self.logs.append(LogEntry(timestamp=datetime.now(), level=level, message=message))
         getattr(logger, level.lower(), logger.info)(message)
 
     def _get_api(self, config: dict[str, Any]) -> PowerFlow:
@@ -162,8 +160,9 @@ class VoltageStabilityAnalysis:
         errors = []
         if not config.get("model", {}).get("rid"):
             errors.append("必须提供 model.rid")
+        engine = config.get("engine", "cloudpss")
         auth = config.get("auth", {})
-        if not auth.get("token") and not auth.get("token_file"):
+        if engine == "cloudpss" and not auth.get("token") and not auth.get("token_file"):
             errors.append("必须提供 auth.token 或 auth.token_file")
         return len(errors) == 0, errors
 
@@ -190,15 +189,14 @@ class VoltageStabilityAnalysis:
             model_config = config["model"]
             model_rid = model_config["rid"]
             source = model_config.get("source", "cloud")
+            model_file = model_config.get("file") or model_config.get("path")
             auth = config.get("auth", {})
 
             scan_config = config.get("scan", {})
             monitoring_config = config.get("monitoring", {})
             output_config = config.get("output", {})
 
-            load_scaling = scan_config.get(
-                "load_scaling", [1.0, 1.2, 1.4, 1.6, 1.8, 2.0]
-            )
+            load_scaling = scan_config.get("load_scaling", [1.0, 1.2, 1.4, 1.6, 1.8, 2.0])
             load_target = scan_config.get("load_target")
             scale_generation = scan_config.get("scale_generation", True)
 
@@ -206,9 +204,16 @@ class VoltageStabilityAnalysis:
             collapse_threshold = monitoring_config.get("collapse_threshold", 0.7)
 
             self._log("INFO", f"电压稳定性分析: {len(load_scaling)}个负荷水平")
-            self._log(
-                "INFO", f"负荷增长范围: {min(load_scaling)}x ~ {max(load_scaling)}x"
-            )
+            self._log("INFO", f"负荷增长范围: {min(load_scaling)}x ~ {max(load_scaling)}x")
+
+            if model_file:
+                base_result = api.run_power_flow(
+                    model_id=model_rid, source=source, auth=auth, model_file=model_file
+                )
+                if not base_result.is_success:
+                    raise RuntimeError(
+                        f"基态潮流计算失败: {base_result.errors[0] if base_result.errors else 'unknown'}"
+                    )
 
             handle = api.get_model_handle(model_rid)
             base_loads = handle.get_components_by_type(ComponentType.LOAD)
@@ -221,9 +226,7 @@ class VoltageStabilityAnalysis:
                     if load_target in (l.name or "") or load_target in (l.key or "")
                 ]
 
-            self._log(
-                "INFO", f"基线负荷数: {len(base_loads)}, 发电机数: {len(base_gens)}"
-            )
+            self._log("INFO", f"基线负荷数: {len(base_loads)}, 发电机数: {len(base_gens)}")
 
             results = []
             converged_cases = []
@@ -241,7 +244,7 @@ class VoltageStabilityAnalysis:
                     )
 
                     sim_result = api.run_power_flow(
-                        model_handle=working, source=source, auth=auth
+                        model_handle=working, source=source, auth=auth, model_file=model_file
                     )
 
                     if not sim_result.is_success:
@@ -377,16 +380,17 @@ class VoltageStabilityAnalysis:
                 if handle.update_component_args(key, new_args):
                     total_load_p += base_P * scale
             else:
-                pf_P = args.get("pf_P", {}).get("source", "1")
-                pf_Q = args.get("pf_Q", {}).get("source", "0")
-                try:
-                    base_P = float(pf_P)
-                    base_Q = float(pf_Q)
-                except (ValueError, TypeError):
+                p_value = self._component_arg_value(args, "pf_P", "p_mw")
+                q_value = self._component_arg_value(args, "pf_Q", "q_mvar")
+                if p_value is None:
                     continue
+                base_P = p_value
+                base_Q = q_value or 0.0
                 new_args = {
                     "pf_P": {"source": str(base_P * scale), "ɵexp": ""},
                     "pf_Q": {"source": str(base_Q * scale), "ɵexp": ""},
+                    "p_mw": base_P * scale,
+                    "q_mvar": base_Q * scale,
                 }
                 if handle.update_component_args(key, new_args):
                     total_load_p += base_P * scale
@@ -400,13 +404,27 @@ class VoltageStabilityAnalysis:
 
                 definition = gen_info.definition or ""
                 if "_newGenerator" in definition or "SyncGenerator" in definition:
-                    pf_P = args.get("pf_P", {}).get("source", "1")
-                    try:
-                        base_P = float(pf_P)
-                    except (ValueError, TypeError):
+                    base_P = self._component_arg_value(args, "pf_P", "p_mw")
+                    if base_P is None:
                         continue
-                    new_args = {"pf_P": {"source": str(base_P * scale), "ɵexp": ""}}
+                    new_args = {
+                        "pf_P": {"source": str(base_P * scale), "ɵexp": ""},
+                        "p_mw": base_P * scale,
+                    }
                     handle.update_component_args(key, new_args)
+
+    def _component_arg_value(self, args: dict[str, Any], *keys: str) -> float | None:
+        for key in keys:
+            if key not in args:
+                continue
+            value = args[key]
+            if isinstance(value, dict):
+                value = value.get("source")
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                continue
+        return None
 
     def _extract_bus_voltages(
         self, bus_data: list[dict], target_buses: list[str]
@@ -435,9 +453,7 @@ class VoltageStabilityAnalysis:
             return True
         return target_norm in candidate_norm or candidate_norm in target_norm
 
-    def _generate_pv_curve(
-        self, converged_cases: list, target_buses: list[str]
-    ) -> list[dict]:
+    def _generate_pv_curve(self, converged_cases: list, target_buses: list[str]) -> list[dict]:
         pv_data = []
         for case in converged_cases:
             scale = case["scale"]
@@ -525,9 +541,7 @@ class VoltageStabilityAnalysis:
         path: Path,
         target_buses: list[str],
     ) -> None:
-        headers = ["load_scale", "converged", "min_voltage"] + [
-            f"V_{bus}" for bus in target_buses
-        ]
+        headers = ["load_scale", "converged", "min_voltage"] + [f"V_{bus}" for bus in target_buses]
         with open(path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(headers)
@@ -595,9 +609,7 @@ class VoltageStabilityAnalysis:
                 v = r.get("voltages", {}).get(bus, 0)
                 bus_voltages.append(f"{v:.4f}" if r.get("converged") else "-")
             lines.append(
-                f"| {r['scale']:.2f} | {conv_str} | {min_v} | "
-                + " | ".join(bus_voltages)
-                + " |"
+                f"| {r['scale']:.2f} | {conv_str} | {min_v} | " + " | ".join(bus_voltages) + " |"
             )
 
         lines.extend(["", "## 结论", ""])

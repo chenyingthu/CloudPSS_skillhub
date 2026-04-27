@@ -23,6 +23,7 @@ from cloudpss_skills_v2.powerapi.adapters.pandapower import (
     PandapowerShortCircuitAdapter,
 )
 from cloudpss_skills_v2.poweranalysis.contingency_analysis import ContingencyAnalysis
+from cloudpss_skills_v2.poweranalysis.voltage_stability import VoltageStabilityAnalysis
 from cloudpss_skills_v2.powerskill.presets.power_flow import PowerFlowPreset
 from cloudpss_skills_v2.powerskill import Engine
 
@@ -165,13 +166,19 @@ def test_engine_golden_case_artifacts_declare_verified_engine_capability():
             assert capability["engine_claim"] in {
                 "pandapower_powerflow_and_short_circuit",
                 "pandapower_powerflow_short_circuit_and_contingency",
+                "pandapower_powerflow_short_circuit_and_voltage_stability",
             }
             assert case["model"]["format"] == "pandapower_network_spec_v1"
             assert case["expected"]["power_flow"]["converged"] is True
             assert case["expected"]["short_circuit"]["standard"] == "IEC 60909"
             if capability["skill_runnable"]:
-                assert case["skill_config"]["engine"] == "pandapower"
-                assert case["skill_config"]["model"]["source"] == "local"
+                configs = case.get("skill_configs") or {
+                    case["skill_config"]["skill"]: case["skill_config"]
+                }
+                assert configs
+                for config in configs.values():
+                    assert config["engine"] == "pandapower"
+                    assert config["model"]["source"] == "local"
         else:
             assert capability["engine_claim"] == "cloudpss_live_powerflow"
             assert case["server"]["base_url"] == LOCAL_CLOUDPSS_BASE_URL
@@ -273,6 +280,47 @@ def test_pandapower_two_bus_radial_short_circuit_engine_golden_case():
     assert buses["Load"]["ikss_ka"] == pytest.approx(
         expected["load_bus_ikss_ka"], abs=tolerances["current_ka"]
     )
+
+
+@pytest.mark.integration
+@pytest.mark.pandapower
+def test_pandapower_two_bus_radial_voltage_stability_skill_golden_case(tmp_path: Path):
+    case = _load_case("pandapower_two_bus_radial")
+    expected = case["expected"]["voltage_stability"]
+    tolerances = case["tolerances"]
+    config = dict(case["skill_configs"]["voltage_stability"])
+    config["model"] = {
+        **config["model"],
+        "file": str(GOLDEN_ENGINE_CASE_DIR / "pandapower_two_bus_radial.json"),
+    }
+    config["output"] = {**config["output"], "path": str(tmp_path)}
+
+    result = VoltageStabilityAnalysis().run(config)
+
+    assert result.status == SkillStatus.SUCCESS
+    assert result.error is None
+    assert result.data["total_cases"] == expected["total_cases"]
+    assert result.data["converged_cases"] == expected["converged_cases"]
+    assert result.data["collapse_threshold"] == expected["collapse_threshold"]
+    assert result.data["collapse_point"] == expected["collapse_point"]
+    assert result.data["max_loadability"] == expected["max_loadability"]
+    assert result.data["monitored_buses"] == expected["monitored_buses"]
+
+    assert len(result.data["results"]) == expected["total_cases"]
+    for expected_point, result_point in zip(
+        expected["pv_curve"], result.data["pv_curve"], strict=True
+    ):
+        assert result_point["scale"] == expected_point["scale"]
+        assert result_point["bus"] == expected_point["bus"]
+        assert result_point["voltage"] == pytest.approx(
+            expected_point["voltage"], abs=tolerances["voltage_pu"]
+        )
+
+    load_voltages = [point["voltage"] for point in result.data["pv_curve"]]
+    assert load_voltages == sorted(load_voltages, reverse=True)
+    assert load_voltages[-1] < expected["collapse_threshold"]
+    assert len(result.artifacts) == 2
+    assert all(Path(artifact.path).exists() for artifact in result.artifacts)
 
 
 @pytest.mark.integration

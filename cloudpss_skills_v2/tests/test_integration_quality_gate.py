@@ -169,11 +169,19 @@ def test_engine_golden_cases_require_engine_artifacts_and_expected_results():
                 f"{path.name}: pandapower cases require power_flow and short_circuit expected results"
             )
         if data.get("capability", {}).get("skill_runnable") is True:
-            skill_config = data.get("skill_config")
-            if not isinstance(skill_config, dict):
+            skill_configs = data.get("skill_configs")
+            if isinstance(skill_configs, dict):
+                configs = list(skill_configs.values())
+            else:
+                skill_config = data.get("skill_config")
+                configs = [skill_config] if isinstance(skill_config, dict) else []
+            if not configs:
                 violations.append(f"{path.name}: skill_runnable cases require skill_config")
-            elif skill_config.get("engine") != engine:
-                violations.append(f"{path.name}: skill_config engine must match capability engine")
+            for skill_config in configs:
+                if skill_config.get("engine") != engine:
+                    violations.append(
+                        f"{path.name}: skill_config engine must match capability engine"
+                    )
         if engine == "cloudpss" and not data.get("power_flow_config"):
             violations.append(f"{path.name}: CloudPSS cases require power_flow_config")
 
