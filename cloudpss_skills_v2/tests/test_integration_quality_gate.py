@@ -131,15 +131,29 @@ def test_engine_golden_cases_require_engine_artifacts_and_expected_results():
             continue
         if capability.get("engine_runnable") is not True:
             violations.append(f"{path.name}: engine_runnable must be true")
-        if capability.get("engine") != "pandapower":
-            violations.append(f"{path.name}: only pandapower engine cases are currently supported")
+        engine = capability.get("engine")
+        if engine not in {"cloudpss", "pandapower"}:
+            violations.append(f"{path.name}: unsupported engine {engine}")
+        if engine == "cloudpss":
+            server = data.get("server", {})
+            if server.get("base_url") != "http://166.111.60.76:50001":
+                violations.append(f"{path.name}: CloudPSS golden cases must target only 166.111.60.76")
+            if server.get("token_file") != ".cloudpss_token_internal":
+                violations.append(f"{path.name}: CloudPSS golden cases must use .cloudpss_token_internal")
+            model = data.get("model", {})
+            if not str(model.get("rid", "")).startswith("model/chenying/"):
+                violations.append(f"{path.name}: CloudPSS golden model must be under model/chenying/")
         if not data.get("model"):
             violations.append(f"{path.name}: model artifact is required")
         expected = data.get("expected")
         if not isinstance(expected, dict):
             violations.append(f"{path.name}: expected results are required")
             continue
-        if not expected.get("power_flow") or not expected.get("short_circuit"):
-            violations.append(f"{path.name}: power_flow and short_circuit expected results are required")
+        if engine == "pandapower" and (
+            not expected.get("power_flow") or not expected.get("short_circuit")
+        ):
+            violations.append(f"{path.name}: pandapower cases require power_flow and short_circuit expected results")
+        if engine == "cloudpss" and not data.get("power_flow_config"):
+            violations.append(f"{path.name}: CloudPSS cases require power_flow_config")
 
     assert violations == []

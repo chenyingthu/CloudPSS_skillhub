@@ -97,8 +97,9 @@ The first true engine-runnable golden benchmark now exists under `cloudpss_skill
 | File | Engine | Coverage | Expected Outputs |
 | --- | --- | --- | --- |
 | `pandapower_two_bus_radial.json` | pandapower | Builds a two-bus radial net from the JSON artifact, then runs the pandapower power-flow and IEC 60909 short-circuit adapters. | Source/load bus voltages, load-bus angle, line loading/loss, grid P/Q, max/source/load short-circuit currents. |
+| `cloudpss_ieee39_powerflow.json` | CloudPSS local server | Runs `model/chenying/IEEE39` power flow through `http://166.111.60.76:50001` using `.cloudpss_token_internal`. | Bus/branch counts, convergence, total generation/load/loss, voltage range, sentinel bus voltages/generation/load, sentinel branch losses. |
 
-This benchmark is intentionally local pandapower only. It does not claim CloudPSS equivalence and does not depend on the `166.111.60.76` live server.
+The pandapower benchmark is fully local. The CloudPSS benchmark is gated, targets only `166.111.60.76`, and must not fall back to a public CloudPSS server.
 
 ## Verification
 
@@ -142,3 +143,11 @@ This benchmark is intentionally local pandapower only. It does not claim CloudPS
   - PASS: 48 passed.
 - `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
   - PASS: 884 passed, 0 skipped after adding the first pandapower engine-runnable golden benchmark.
+- `python -m pytest -q cloudpss_skills_v2/tests/test_golden_engine_cases.py`
+  - PASS: 4 passed, including CloudPSS IEEE39 live power-flow golden.
+- `python -m compileall -q cloudpss_skills_v2 && python -m pytest -q cloudpss_skills_v2/tests/test_golden_engine_cases.py cloudpss_skills_v2/tests/test_golden_config_artifacts.py cloudpss_skills_v2/tests/test_golden_trusted_analysis_cases.py cloudpss_skills_v2/tests/test_integration_quality_gate.py cloudpss_skills_v2/tests/test_model_validator.py`
+  - PASS: compile plus 28 targeted tests passed.
+- `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py`
+  - PASS: 48 passed.
+- `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
+  - PASS: 885 passed, 0 skipped after adding the CloudPSS live engine golden benchmark.

@@ -1,0 +1,72 @@
+{
+  "case_id": "cloudpss_ieee39_powerflow",
+  "description": "Live CloudPSS IEEE39 power-flow golden benchmark on the private local server.",
+  "capability": {
+    "skill_runnable": false,
+    "engine_runnable": true,
+    "engine": "cloudpss",
+    "engine_claim": "cloudpss_live_powerflow",
+    "engine_notes": "This case is gated by .cloudpss_token_internal and targets only http://166.111.60.76:50001. It must never use a public CloudPSS server."
+  },
+  "server": {
+    "base_url": "http://166.111.60.76:50001",
+    "token_file": ".cloudpss_token_internal"
+  },
+  "model": {
+    "rid": "model/chenying/IEEE39",
+    "source": "cloud",
+    "description": "10-machine 39-bus standard test system on the local CloudPSS server."
+  },
+  "power_flow_config": {
+    "model_id": "model/chenying/IEEE39",
+    "source": "cloud",
+    "timeout": 120
+  },
+  "expected": {
+    "model_rid": "model/chenying/IEEE39",
+    "converged": true,
+    "bus_count": 39,
+    "branch_count": 46,
+    "summary": {
+      "total_generation_p_mw": 6059.66,
+      "total_generation_q_mvar": 1537.21,
+      "total_load_p_mw": 6023.3,
+      "total_load_q_mvar": 1494.9,
+      "total_loss_mw": 36.3588,
+      "min_voltage_pu": 0.9365,
+      "max_voltage_pu": 1.063
+    },
+    "sentinel_buses": [
+      {
+        "name": "canvas_0_10",
+        "voltage_pu": 1.027,
+        "generation_mw": 540.0,
+        "load_mw": 0.0
+      },
+      {
+        "name": "canvas_0_111",
+        "voltage_pu": 0.9891675,
+        "generation_mw": 0.0,
+        "load_mw": 158.0
+      }
+    ],
+    "sentinel_branches": [
+      {
+        "name": "canvas_0_105",
+        "power_loss_mw": 0.987783,
+        "branch_type": "line"
+      },
+      {
+        "name": "canvas_0_108",
+        "power_loss_mw": 0.578645,
+        "branch_type": "line"
+      }
+    ]
+  },
+  "tolerances": {
+    "power_mw": 0.02,
+    "power_mvar": 0.02,
+    "loss_mw": 0.01,
+    "voltage_pu": 0.0005
+  }
+}
