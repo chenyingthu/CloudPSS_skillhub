@@ -5,8 +5,8 @@
     "skill_runnable": true,
     "engine_runnable": true,
     "engine": "pandapower",
-    "engine_claim": "pandapower_powerflow_short_circuit_and_contingency",
-    "engine_notes": "The tests load this repository JSON artifact through the pandapower adapter, run base-case power flow, IEC 60909 short-circuit, and the contingency_analysis skill."
+    "engine_claim": "pandapower_powerflow_short_circuit_n1_and_contingency",
+    "engine_notes": "The tests load this repository JSON artifact through the pandapower adapter, run base-case power flow, IEC 60909 short-circuit, and both the contingency_analysis and n1_security skills."
   },
   "model": {
     "format": "pandapower_network_spec_v1",
@@ -63,31 +63,53 @@
     "model_id": "pandapower_parallel_lines_n1",
     "fault_type": "3ph"
   },
-  "skill_config": {
-    "skill": "contingency_analysis",
-    "engine": "pandapower",
-    "model": {
-      "rid": "pandapower_parallel_lines_n1",
-      "source": "local"
+  "skill_configs": {
+    "contingency_analysis": {
+      "skill": "contingency_analysis",
+      "engine": "pandapower",
+      "model": {
+        "rid": "pandapower_parallel_lines_n1",
+        "source": "local"
+      },
+      "contingency": {
+        "level": "N-1",
+        "components": ["line:0", "line:1"],
+        "component_types": ["branch"],
+        "max_combinations": 2
+      },
+      "analysis": {
+        "check_voltage": true,
+        "check_thermal": true,
+        "voltage_limit": {"min": 0.95, "max": 1.05},
+        "thermal_limit": 1.0,
+        "severity_threshold": 0.4
+      },
+      "ranking": {"method": "severity", "top_n": 2},
+      "output": {
+        "format": "json",
+        "prefix": "pandapower_parallel_lines_n1_contingency",
+        "generate_report": false
+      }
     },
-    "contingency": {
-      "level": "N-1",
-      "components": ["line:0", "line:1"],
-      "component_types": ["branch"],
-      "max_combinations": 2
-    },
-    "analysis": {
-      "check_voltage": true,
-      "check_thermal": true,
-      "voltage_limit": {"min": 0.95, "max": 1.05},
-      "thermal_limit": 1.0,
-      "severity_threshold": 0.4
-    },
-    "ranking": {"method": "severity", "top_n": 2},
-    "output": {
-      "format": "json",
-      "prefix": "pandapower_parallel_lines_n1_contingency",
-      "generate_report": false
+    "n1_security": {
+      "skill": "n1_security",
+      "engine": "pandapower",
+      "model": {
+        "rid": "pandapower_parallel_lines_n1",
+        "source": "local"
+      },
+      "analysis": {
+        "branches": ["line:0", "line:1"],
+        "check_voltage": true,
+        "check_thermal": true,
+        "voltage_threshold": 0.05,
+        "thermal_threshold": 1.0
+      },
+      "output": {
+        "format": "json",
+        "prefix": "pandapower_parallel_lines_n1_n1_security",
+        "timestamp": false
+      }
     }
   },
   "expected": {
@@ -125,6 +147,17 @@
       "severity": 0.4141,
       "violation_type": "THERMAL",
       "weak_points": ["line:0", "line:1"]
+    },
+    "n1_security": {
+      "total_scenarios": 2,
+      "passed": 0,
+      "failed": 2,
+      "overall_severity": "critical",
+      "case_severity": "critical",
+      "violation_type": "thermal",
+      "remaining_line_loading_ratio": 1.414098,
+      "remaining_line_loading_percent": 141.409807,
+      "post_contingency_min_voltage_pu": 1.006052
     }
   },
   "tolerances": {

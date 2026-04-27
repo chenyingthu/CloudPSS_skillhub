@@ -75,6 +75,13 @@ class TestN1SecurityAnalysis:
         assert "必须提供 model.rid" in errors
         assert "必须提供 auth.token 或 auth.token_file" in errors
 
+    def test_validate_local_pandapower_does_not_require_auth(self):
+        skill = N1SecurityAnalysis()
+        valid, errors = skill.validate(
+            {"engine": "pandapower", "model": {"rid": "case14", "source": "local"}}
+        )
+        assert valid, errors
+
     def test_summarize_violations_returns_critical_for_convergence(self):
         skill = N1SecurityAnalysis()
         summary = skill._summarize_violations(

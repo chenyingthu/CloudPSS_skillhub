@@ -27,6 +27,7 @@ Date: 2026-04-26
 | `protection_coordination` | Could synthesize relay definitions from model branches or fixed feeder defaults. | Requires explicit `relays` with positive load and fault current; output declares explicit relay settings as data source. | Target tests reject missing relays; dead fallback generation removed; registry matrix supplies relays. |
 | `reactive_compensation_design` | Filled missing SCR, voltage, and reactance with defaults when sizing compensation. | Requires each weak bus to provide `scr`, `voltage_pu`, and `x_pu`; output declares formula-derived explicit weak-bus input. | Target tests reject missing `x_pu` and verify sizing uses supplied reactance; registry matrix supplies `x_pu`. |
 | `voltage_stability` | Local pandapower scans could appear to run load-scaling studies while leaving pandapower `p_mw/q_mvar` load parameters unchanged. | Supports repository JSON model artifacts and updates pandapower load parameters directly before each scan point; local pandapower no longer needs fake auth. | Golden PV-curve test locks voltage values for load scales 1.0/2.0/4.0/8.0 and requires monotonically decreasing load-bus voltage. |
+| `n1_security` | Local pandapower paths required placeholder auth and lacked a golden benchmark tying typed N-1 output to a known post-contingency overload. | Supports repository JSON model artifacts, requires auth only for CloudPSS, and reports typed contingencies/violations from real pandapower topology-removal reruns. | Golden N-1 test locks two single-line outage failures, thermal violation ratio 1.414098, critical severity, and remaining-line loading 141.409807%. |
 
 ## Current Risk Map
 
@@ -98,14 +99,14 @@ The first true engine-runnable golden benchmark now exists under `cloudpss_skill
 | File | Engine | Coverage | Expected Outputs |
 | --- | --- | --- | --- |
 | `pandapower_two_bus_radial.json` | pandapower | Loads a two-bus radial JSON artifact through the pandapower adapters, runs power-flow and IEC 60909 short-circuit adapters, then runs the registered `voltage_stability` skill over explicit load-scaling points. | Source/load bus voltages, load-bus angle, line loading/loss, grid P/Q, max/source/load short-circuit currents, PV-curve voltage points, collapse threshold crossing, and skill artifact creation. |
-| `pandapower_parallel_lines_n1.json` | pandapower | Loads a two-bus two-parallel-line JSON artifact through the pandapower adapters, verifies base-case power-flow/short-circuit values, then runs the registered `contingency_analysis` skill with either line removed. | Base-case voltage/angle, per-line loading/loss, IEC 60909 currents, N-1 case count, post-contingency voltage range, remaining-line thermal overload, severity, ranking, weak points, and artifact creation. |
+| `pandapower_parallel_lines_n1.json` | pandapower | Loads a two-bus two-parallel-line JSON artifact through the pandapower adapters, verifies base-case power-flow/short-circuit values, then runs both registered `contingency_analysis` and `n1_security` skills with either line removed. | Base-case voltage/angle, per-line loading/loss, IEC 60909 currents, N-1 case count, post-contingency voltage range, remaining-line thermal overload, severity, typed N-1 violations, ranking, weak points, and artifact creation. |
 | `cloudpss_ieee39_powerflow.json` | CloudPSS local server | Runs `model/chenying/IEEE39` power flow through both the CloudPSS power-flow facade and the registered `power_flow` skill using `http://166.111.60.76:50001` and `.cloudpss_token_internal`. | Bus/branch counts, convergence, total generation/load/loss, voltage range, sentinel bus voltages/generation/load, sentinel branch losses, and skill output artifact creation. |
 
 The pandapower benchmark is fully local. The CloudPSS benchmark is gated, targets only `166.111.60.76`, and must not fall back to a public CloudPSS server.
 
 CloudPSS IEEE39 short-circuit was probed but not promoted to a golden case. The local server returned completed short-circuit jobs with empty `fault_currents`, no `bus_results`, and `max_fault_current_ka: 0`; that is not a physically meaningful short-circuit benchmark.
 
-The N-1 pandapower benchmark is intentionally simple: two equal parallel lines share a 90 MW / 30 Mvar load securely in the base case, and either single-line outage transfers the full flow to the remaining line, causing a deterministic thermal violation. This locks the physical meaning of `contingency_analysis` output instead of merely checking that the skill returns a JSON shape.
+The N-1 pandapower benchmark is intentionally simple: two equal parallel lines share a 90 MW / 30 Mvar load securely in the base case, and either single-line outage transfers the full flow to the remaining line, causing a deterministic thermal violation. This locks the physical meaning of both `contingency_analysis` and `n1_security` output instead of merely checking that the skills return JSON shapes.
 
 The voltage-stability benchmark is also intentionally simple: the same two-bus radial system is solved at load scales 1.0, 2.0, 4.0, and 8.0. The Load bus voltage must monotonically drop from 1.011301 pu to 0.937069 pu, proving the skill actually modifies the pandapower load and reruns power flow at each scan point.
 
@@ -167,6 +168,8 @@ The voltage-stability benchmark is also intentionally simple: the same two-bus r
   - PASS: 20 passed after adding the pandapower parallel-lines N-1 golden benchmark and removing fake local pandapower auth from contingency tests.
 - `python -m pytest -q cloudpss_skills_v2/tests/test_golden_engine_cases.py cloudpss_skills_v2/tests/test_integration_quality_gate.py cloudpss_skills_v2/tests/test_voltage_stability.py`
   - PASS: 21 passed after adding the pandapower voltage-stability golden benchmark and removing fake local pandapower auth from voltage-stability tests.
+- `python -m pytest -q cloudpss_skills_v2/tests/test_golden_engine_cases.py cloudpss_skills_v2/tests/test_n1_security.py cloudpss_skills_v2/tests/test_integration_quality_gate.py`
+  - PASS: 21 passed after adding the pandapower N-1 security golden benchmark and removing fake local pandapower auth from N-1 security tests.
 - `python -m compileall -q cloudpss_skills_v2 && python -m pytest -q cloudpss_skills_v2/tests/test_golden_engine_cases.py cloudpss_skills_v2/tests/test_golden_config_artifacts.py cloudpss_skills_v2/tests/test_golden_trusted_analysis_cases.py cloudpss_skills_v2/tests/test_integration_quality_gate.py cloudpss_skills_v2/tests/test_model_validator.py cloudpss_skills_v2/tests/test_contingency_analysis.py`
   - PASS: compile plus 37 targeted tests passed.
 - `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py`
@@ -179,3 +182,9 @@ The voltage-stability benchmark is also intentionally simple: the same two-bus r
   - PASS: 48 passed.
 - `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
   - PASS: 890 passed, 0 skipped in 199.81s after fixing pandapower voltage-stability load scaling.
+- `python -m compileall -q cloudpss_skills_v2 && python -m pytest -q cloudpss_skills_v2/tests/test_golden_engine_cases.py cloudpss_skills_v2/tests/test_golden_config_artifacts.py cloudpss_skills_v2/tests/test_golden_trusted_analysis_cases.py cloudpss_skills_v2/tests/test_integration_quality_gate.py cloudpss_skills_v2/tests/test_model_validator.py cloudpss_skills_v2/tests/test_contingency_analysis.py cloudpss_skills_v2/tests/test_voltage_stability.py cloudpss_skills_v2/tests/test_n1_security.py`
+  - PASS: compile plus 48 targeted tests passed after adding the N-1 security golden benchmark.
+- `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py`
+  - PASS: 48 passed.
+- `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
+  - PASS: 892 passed, 0 skipped in 216.63s after fixing local pandapower N-1 security execution.

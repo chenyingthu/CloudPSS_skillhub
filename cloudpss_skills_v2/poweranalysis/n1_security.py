@@ -134,17 +134,16 @@ class N1SecurityAnalysis:
         self.artifacts: list[Artifact] = []
 
     def _log(self, level: str, message: str) -> None:
-        self.logs.append(
-            LogEntry(timestamp=datetime.now(), level=level, message=message)
-        )
+        self.logs.append(LogEntry(timestamp=datetime.now(), level=level, message=message))
         getattr(logger, level.lower(), logger.info)(message)
 
     def validate(self, config: dict[str, Any]) -> tuple[bool, list[str]]:
         errors = []
         if not config.get("model", {}).get("rid"):
             errors.append("必须提供 model.rid")
+        engine = config.get("engine", "cloudpss")
         auth = config.get("auth", {})
-        if not auth.get("token") and not auth.get("token_file"):
+        if engine == "cloudpss" and not auth.get("token") and not auth.get("token_file"):
             errors.append("必须提供 auth.token 或 auth.token_file")
         return len(errors) == 0, errors
 
@@ -177,8 +176,18 @@ class N1SecurityAnalysis:
             model_config = config["model"]
             model_rid = model_config["rid"]
             source = model_config.get("source", "cloud")
+            model_file = model_config.get("file") or model_config.get("path")
 
             self._log("INFO", f"模型: {model_rid}")
+
+            if model_file:
+                base_result = api.run_power_flow(
+                    model_id=model_rid, source=source, auth=auth, model_file=model_file
+                )
+                if not base_result.is_success:
+                    raise RuntimeError(
+                        f"基态潮流计算失败: {base_result.errors[0] if base_result.errors else 'unknown'}"
+                    )
 
             handle = api.get_model_handle(model_rid)
             branches = handle.get_components_by_type(ComponentType.BRANCH)
@@ -209,9 +218,7 @@ class N1SecurityAnalysis:
             thermal_threshold = analysis_config.get("thermal_threshold", 1.0)
 
             for i, branch in enumerate(all_removable):
-                self._log(
-                    "INFO", f"[{i + 1}/{len(all_removable)}] 停运支路: {branch.name}"
-                )
+                self._log("INFO", f"[{i + 1}/{len(all_removable)}] 停运支路: {branch.name}")
 
                 working = handle.clone()
                 if not working.remove_component(branch.key):
@@ -223,6 +230,7 @@ class N1SecurityAnalysis:
                         model_handle=working,
                         source=source,
                         auth=auth,
+                        model_file=model_file,
                     )
 
                     if not sim_result.is_success:
@@ -250,9 +258,7 @@ class N1SecurityAnalysis:
                     branch_data = sim_result.data.get("branches", [])
 
                     if analysis_config.get("check_voltage", True):
-                        v_violations = self._check_voltage_violations(
-                            bus_data, voltage_threshold
-                        )
+                        v_violations = self._check_voltage_violations(bus_data, voltage_threshold)
                         case_violations.extend(v_violations)
 
                     if analysis_config.get("check_thermal", True):
@@ -262,11 +268,7 @@ class N1SecurityAnalysis:
                         case_violations.extend(t_violations)
 
                     has_violations = len(case_violations) > 0
-                    severity = (
-                        SeverityLevel.CRITICAL
-                        if has_violations
-                        else SeverityLevel.NORMAL
-                    )
+                    severity = SeverityLevel.CRITICAL if has_violations else SeverityLevel.NORMAL
 
                     if has_violations:
                         result = ContingencyRecord(
@@ -321,9 +323,7 @@ class N1SecurityAnalysis:
             overall = (
                 SeverityLevel.CRITICAL
                 if failed > 0
-                else SeverityLevel.WARNING
-                if warnings > 0
-                else SeverityLevel.NORMAL
+                else SeverityLevel.WARNING if warnings > 0 else SeverityLevel.NORMAL
             )
 
             summary = AnalysisSummary(
@@ -391,9 +391,7 @@ class N1SecurityAnalysis:
             bus_name = bus.get("name", "unknown")
 
             if vm < lower_limit:
-                severity = (
-                    SeverityLevel.CRITICAL if vm < 0.85 else SeverityLevel.WARNING
-                )
+                severity = SeverityLevel.CRITICAL if vm < 0.85 else SeverityLevel.WARNING
                 violations.append(
                     ViolationRecord(
                         violation_type="voltage",
@@ -404,9 +402,7 @@ class N1SecurityAnalysis:
                     )
                 )
             elif vm > upper_limit:
-                severity = (
-                    SeverityLevel.CRITICAL if vm > 1.15 else SeverityLevel.WARNING
-                )
+                severity = SeverityLevel.CRITICAL if vm > 1.15 else SeverityLevel.WARNING
                 violations.append(
                     ViolationRecord(
                         violation_type="voltage",
@@ -433,9 +429,7 @@ class N1SecurityAnalysis:
                 loading = max(abs(p_from), abs(p_to))
 
             if loading > threshold:
-                severity = (
-                    SeverityLevel.CRITICAL if loading > 1.2 else SeverityLevel.WARNING
-                )
+                severity = SeverityLevel.CRITICAL if loading > 1.2 else SeverityLevel.WARNING
                 violations.append(
                     ViolationRecord(
                         violation_type="thermal",
@@ -447,9 +441,7 @@ class N1SecurityAnalysis:
                 )
         return violations
 
-    def _summarize_violations(
-        self, violations: list[dict[str, Any]]
-    ) -> dict[str, Any] | None:
+    def _summarize_violations(self, violations: list[dict[str, Any]]) -> dict[str, Any] | None:
         if not violations:
             return None
 
@@ -481,18 +473,14 @@ class N1SecurityAnalysis:
             "messages": [v.get("message", "") for v in violations if v.get("message")],
         }
 
-    def _save_output(
-        self, result_data: dict[str, Any], output_config: dict[str, Any]
-    ) -> None:
+    def _save_output(self, result_data: dict[str, Any], output_config: dict[str, Any]) -> None:
         output_path = Path(output_config.get("path", "./results/"))
         prefix = output_config.get("prefix", "n1_security")
         use_timestamp = output_config.get("timestamp", True)
 
         output_path.mkdir(parents=True, exist_ok=True)
 
-        ts_suffix = (
-            f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}" if use_timestamp else ""
-        )
+        ts_suffix = f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}" if use_timestamp else ""
         filename = f"{prefix}{ts_suffix}.json"
         filepath = output_path / filename
 

@@ -23,6 +23,7 @@ from cloudpss_skills_v2.powerapi.adapters.pandapower import (
     PandapowerShortCircuitAdapter,
 )
 from cloudpss_skills_v2.poweranalysis.contingency_analysis import ContingencyAnalysis
+from cloudpss_skills_v2.poweranalysis.n1_security import N1SecurityAnalysis
 from cloudpss_skills_v2.poweranalysis.voltage_stability import VoltageStabilityAnalysis
 from cloudpss_skills_v2.powerskill.presets.power_flow import PowerFlowPreset
 from cloudpss_skills_v2.powerskill import Engine
@@ -166,6 +167,7 @@ def test_engine_golden_case_artifacts_declare_verified_engine_capability():
             assert capability["engine_claim"] in {
                 "pandapower_powerflow_and_short_circuit",
                 "pandapower_powerflow_short_circuit_and_contingency",
+                "pandapower_powerflow_short_circuit_n1_and_contingency",
                 "pandapower_powerflow_short_circuit_and_voltage_stability",
             }
             assert case["model"]["format"] == "pandapower_network_spec_v1"
@@ -353,7 +355,7 @@ def test_pandapower_parallel_lines_n1_contingency_skill_golden_case(tmp_path: Pa
     case = _load_case("pandapower_parallel_lines_n1")
     expected = case["expected"]["contingency"]
     tolerances = case["tolerances"]
-    config = dict(case["skill_config"])
+    config = dict(case["skill_configs"]["contingency_analysis"])
     config["model"] = {
         **config["model"],
         "file": str(GOLDEN_ENGINE_CASE_DIR / "pandapower_parallel_lines_n1.json"),
@@ -402,6 +404,63 @@ def test_pandapower_parallel_lines_n1_contingency_skill_golden_case(tmp_path: Pa
     assert {p["component"] for p in result.data["weak_points"]} == set(expected["weak_points"])
     assert len(result.artifacts) == 2
     assert all(Path(artifact.path).exists() for artifact in result.artifacts)
+
+
+@pytest.mark.integration
+@pytest.mark.pandapower
+def test_pandapower_parallel_lines_n1_security_skill_golden_case(tmp_path: Path):
+    case = _load_case("pandapower_parallel_lines_n1")
+    expected = case["expected"]["n1_security"]
+    tolerances = case["tolerances"]
+    config = dict(case["skill_configs"]["n1_security"])
+    config["model"] = {
+        **config["model"],
+        "file": str(GOLDEN_ENGINE_CASE_DIR / "pandapower_parallel_lines_n1.json"),
+    }
+    config["output"] = {**config["output"], "path": str(tmp_path)}
+
+    result = N1SecurityAnalysis().run(config)
+
+    assert result.status == SkillStatus.FAILED
+    assert result.error is None
+    assert result.metrics == {
+        "total_branches": expected["total_scenarios"],
+        "passed": expected["passed"],
+        "failed": expected["failed"],
+    }
+
+    typed = result.data["_typed"]
+    summary = typed["summary"]
+    assert summary["total_scenarios"] == expected["total_scenarios"]
+    assert summary["passed"] == expected["passed"]
+    assert summary["failed"] == expected["failed"]
+    assert summary["overall_severity"] == expected["overall_severity"]
+
+    by_key = {contingency["branch_key"]: contingency for contingency in typed["contingencies"]}
+    assert set(by_key) == {"line:0", "line:1"}
+    for contingency in by_key.values():
+        assert contingency["converged"] is True
+        assert contingency["severity"] == expected["case_severity"]
+        assert contingency["min_vm_pu"] == pytest.approx(
+            expected["post_contingency_min_voltage_pu"],
+            abs=tolerances["voltage_pu"],
+        )
+        assert contingency["max_loading_pct"] == pytest.approx(
+            expected["remaining_line_loading_percent"],
+            abs=tolerances["percent"],
+        )
+        assert len(contingency["violations"]) == 1
+        violation = contingency["violations"][0]
+        assert violation["violation_type"] == expected["violation_type"]
+        assert violation["value"] == pytest.approx(
+            expected["remaining_line_loading_ratio"],
+            abs=tolerances["percent"],
+        )
+        assert violation["severity"] == expected["case_severity"]
+
+    assert len(typed["violations"]) == expected["failed"]
+    assert len(result.artifacts) == 1
+    assert Path(result.artifacts[0].path).exists()
 
 
 @pytest.mark.integration
