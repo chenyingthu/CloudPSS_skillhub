@@ -167,7 +167,9 @@ class ProtectionCoordinationAnalysis:
             if not isinstance(relay, dict):
                 errors.append(f"relays[{idx}] must be an object")
                 continue
-            relay_type = relay.get("type", relay.get("relay_type", ProtectionType.OVERCURRENT.value))
+            relay_type = relay.get(
+                "type", relay.get("relay_type", ProtectionType.OVERCURRENT.value)
+            )
             if relay_type not in {item.value for item in ProtectionType}:
                 errors.append(f"relays[{idx}].type is invalid")
             if _as_float(relay.get("load_current", relay.get("load_current_a", 0)), 0) < 0:
@@ -233,6 +235,18 @@ class ProtectionCoordinationAnalysis:
                 "data_source": "explicit_relay_settings",
                 "confidence_level": "formula_derived_from_explicit_input",
                 "validation_status": "explicit_relays_required",
+                "standard_basis": (
+                    "IEC 60255 / IEC 60255-151 inverse-time overcurrent "
+                    "curve family for supported IEC curve constants"
+                ),
+                "assumptions": [
+                    "relay load_current, fault_current, time_dial, and curve_type are supplied by the caller",
+                    "pickup and operating time are formula-derived from explicit relay settings",
+                ],
+                "limitations": [
+                    "The skill does not model CT saturation, breaker clearing time, reset behavior, or protection-device dynamics",
+                    "Distance-zone checks are configured reach checks, not a full protection simulation",
+                ],
                 "relay_count": len(settings),
                 "coordination_pair_count": total_pairs,
                 "valid_coordination_pairs": valid_pairs,
@@ -260,7 +274,9 @@ class ProtectionCoordinationAnalysis:
                     "coordination_pair_count": total_pairs,
                     "pass_rate": valid_pairs / total_pairs if total_pairs else 1.0,
                 },
-                error=None if passed else "Protection coordination margins or zones failed validation",
+                error=(
+                    None if passed else "Protection coordination margins or zones failed validation"
+                ),
                 start_time=start_time,
                 end_time=datetime.now(),
             )
@@ -285,18 +301,31 @@ class ProtectionCoordinationAnalysis:
             end_time=datetime.now(),
         )
 
-    def _calculate_relay_settings(self, relay: dict[str, Any], analysis: dict[str, Any]) -> RelaySettings:
-        relay_id = str(relay.get("id") or relay.get("name") or relay.get("relay_id") or f"relay_{uuid.uuid4().hex[:8]}")
+    def _calculate_relay_settings(
+        self, relay: dict[str, Any], analysis: dict[str, Any]
+    ) -> RelaySettings:
+        relay_id = str(
+            relay.get("id")
+            or relay.get("name")
+            or relay.get("relay_id")
+            or f"relay_{uuid.uuid4().hex[:8]}"
+        )
         relay_type = relay.get("type", relay.get("relay_type", ProtectionType.OVERCURRENT.value))
         load_current = _as_float(relay.get("load_current", relay.get("load_current_a", 0)), 0)
         fault_current = _as_float(relay.get("fault_current", relay.get("fault_current_a", 0)), 0)
         load_multiplier = _as_float(analysis.get("load_multiplier", 1.25), 1.25)
         fault_factor = _as_float(analysis.get("fault_current_safety_factor", 0.5), 0.5)
-        configured_pickup = _as_float(relay.get("pickup_current", relay.get("pickup_current_a", 0)), 0)
-        pickup_current = configured_pickup or max(load_current * load_multiplier, fault_current * fault_factor * 0.1, 1.0)
+        configured_pickup = _as_float(
+            relay.get("pickup_current", relay.get("pickup_current_a", 0)), 0
+        )
+        pickup_current = configured_pickup or max(
+            load_current * load_multiplier, fault_current * fault_factor * 0.1, 1.0
+        )
         curve_type = relay.get("curve_type", "iec_standard_inverse")
         time_dial = _as_float(relay.get("time_dial", relay.get("tds", 0.1)), 0.1)
-        operating_time = self._calculate_operating_time(fault_current, pickup_current, time_dial, curve_type)
+        operating_time = self._calculate_operating_time(
+            fault_current, pickup_current, time_dial, curve_type
+        )
         return RelaySettings(
             relay_id=relay_id,
             relay_type=str(relay_type),
@@ -315,7 +344,9 @@ class ProtectionCoordinationAnalysis:
     ) -> float:
         if pickup_current <= 0 or fault_current <= pickup_current:
             return float("inf")
-        constant_a, constant_b = IEC_CURVE_CONSTANTS.get(curve_type, IEC_CURVE_CONSTANTS["iec_standard_inverse"])
+        constant_a, constant_b = IEC_CURVE_CONSTANTS.get(
+            curve_type, IEC_CURVE_CONSTANTS["iec_standard_inverse"]
+        )
         multiple = fault_current / pickup_current
         denominator = multiple**constant_b - 1.0
         if denominator <= 0:
@@ -323,7 +354,10 @@ class ProtectionCoordinationAnalysis:
         return constant_a * time_dial / denominator
 
     def _check_coordination(
-        self, settings_by_id: dict[str, RelaySettings], config: dict[str, Any], analysis: dict[str, Any]
+        self,
+        settings_by_id: dict[str, RelaySettings],
+        config: dict[str, Any],
+        analysis: dict[str, Any],
     ) -> list[CoordinationResult]:
         min_margin = _as_float(analysis.get("min_coordination_margin_s", 0.3), 0.3)
         pairs = config.get("coordination_pairs", []) or []
@@ -340,7 +374,9 @@ class ProtectionCoordinationAnalysis:
             backup = settings_by_id.get(str(pair.get("backup")))
             if primary is None or backup is None:
                 continue
-            primary_time = _as_float(pair.get("primary_time", primary.time_delay), primary.time_delay)
+            primary_time = _as_float(
+                pair.get("primary_time", primary.time_delay), primary.time_delay
+            )
             backup_time = _as_float(pair.get("backup_time", backup.time_delay), backup.time_delay)
             coordination_time = backup_time - primary_time
             results.append(
@@ -350,13 +386,18 @@ class ProtectionCoordinationAnalysis:
                     primary_time=_round(primary_time),
                     backup_time=_round(backup_time),
                     coordination_time=_round(coordination_time),
-                    required_margin=_round(_as_float(pair.get("required_margin", min_margin), min_margin)),
-                    is_valid=coordination_time >= _as_float(pair.get("required_margin", min_margin), min_margin),
+                    required_margin=_round(
+                        _as_float(pair.get("required_margin", min_margin), min_margin)
+                    ),
+                    is_valid=coordination_time
+                    >= _as_float(pair.get("required_margin", min_margin), min_margin),
                 )
             )
         return results
 
-    def _generate_tcc_curves(self, settings: list[RelaySettings], analysis: dict[str, Any]) -> list[dict[str, Any]]:
+    def _generate_tcc_curves(
+        self, settings: list[RelaySettings], analysis: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         multiples = analysis.get("curve_multiples", [1.5, 2, 3, 5, 8, 10, 15, 20])
         curves = []
         for setting in settings:
@@ -380,17 +421,23 @@ class ProtectionCoordinationAnalysis:
             )
         return curves
 
-    def _validate_zones(self, zones: list[dict[str, Any]], settings_by_id: dict[str, RelaySettings]) -> list[dict[str, Any]]:
+    def _validate_zones(
+        self, zones: list[dict[str, Any]], settings_by_id: dict[str, RelaySettings]
+    ) -> list[dict[str, Any]]:
         results = []
         for zone in zones or []:
             relay_id = str(zone.get("relay"))
             reach = _as_float(zone.get("reach_percent", 0), 0)
             protected_length = _as_float(zone.get("protected_length", 100), 100)
-            expected_reach = _as_float(zone.get("expected_reach_percent", zone.get("zone", 1) == 1 and 80 or 120), 80)
+            expected_reach = _as_float(
+                zone.get("expected_reach_percent", zone.get("zone", 1) == 1 and 80 or 120), 80
+            )
             tolerance = _as_float(zone.get("tolerance_percent", 10), 10)
             lower = max(0.0, expected_reach - tolerance)
             upper = expected_reach + tolerance
-            is_valid = relay_id in settings_by_id and lower <= reach <= upper and protected_length > 0
+            is_valid = (
+                relay_id in settings_by_id and lower <= reach <= upper and protected_length > 0
+            )
             results.append(
                 {
                     "relay": relay_id,
@@ -414,7 +461,9 @@ class ProtectionCoordinationAnalysis:
                 )
         for zone in zones:
             if not zone["is_valid"]:
-                recommendations.append(f"Review distance zone {zone['zone']} reach for relay {zone['relay']}")
+                recommendations.append(
+                    f"Review distance zone {zone['zone']} reach for relay {zone['relay']}"
+                )
         return recommendations or ["All configured coordination checks passed"]
 
     def _calculate_coordination_time(self, backup_time: float, primary_time: float) -> float:

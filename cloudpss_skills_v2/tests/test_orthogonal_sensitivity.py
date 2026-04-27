@@ -27,3 +27,12 @@ class TestOrthogonalSensitivityAnalysis:
         assert config["model"]["rid"] == "case14"
         assert len(config["parameters"]) == 2
         assert config["target"]["metric"] == "voltage"
+
+    def test_run_declares_screening_not_professional_sensitivity(self, instance):
+        result = instance.run(instance.get_default_config())
+
+        assert result.is_success
+        assert result.data["data_source"] == "configured_parameter_levels"
+        assert result.data["confidence_level"] == "screening_design_from_explicit_inputs"
+        assert "screening proxy" in " ".join(result.data["assumptions"])
+        assert "does not currently rerun" in " ".join(result.data["limitations"])

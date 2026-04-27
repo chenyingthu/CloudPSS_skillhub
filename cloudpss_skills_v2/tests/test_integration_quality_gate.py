@@ -11,6 +11,16 @@ from cloudpss_skills_v2.tests.golden_cases import TRUSTED_GOLDEN_CASES
 from cloudpss_skills_v2.tools.model_validator import ModelValidatorTool
 
 
+TRUSTED_ANALYSIS_OUTPUT_SKILLS = {
+    "thevenin_equivalent",
+    "power_quality_analysis",
+    "protection_coordination",
+    "reactive_compensation_design",
+    "renewable_integration",
+    "orthogonal_sensitivity",
+}
+
+
 def test_no_weak_test_labels_remain():
     tests_root = Path(__file__).parent
     weak_a = "smo" + "ke"
@@ -184,5 +194,51 @@ def test_engine_golden_cases_require_engine_artifacts_and_expected_results():
                     )
         if engine == "cloudpss" and not data.get("power_flow_config"):
             violations.append(f"{path.name}: CloudPSS cases require power_flow_config")
+
+    assert violations == []
+
+
+def test_trusted_analysis_skills_emit_evidence_boundary_metadata():
+    violations: list[str] = []
+    required = {
+        "data_source",
+        "confidence_level",
+        "assumptions",
+        "limitations",
+        "standard_basis",
+    }
+    golden_config_dir = Path(__file__).parent / "golden_configs"
+    skill_configs = {}
+    for path in sorted(golden_config_dir.glob("*.skill.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        skill_configs[data["skill"]] = data["config"]
+
+    missing_configs = (
+        TRUSTED_ANALYSIS_OUTPUT_SKILLS - set(skill_configs) - {"orthogonal_sensitivity"}
+    )
+    if missing_configs:
+        violations.append(f"missing golden configs: {sorted(missing_configs)}")
+
+    for skill_name in sorted(TRUSTED_ANALYSIS_OUTPUT_SKILLS):
+        skill_class = SkillRegistry.get(skill_name)
+        if skill_class is None:
+            violations.append(f"{skill_name}: not registered")
+            continue
+        skill = skill_class()
+        config = skill_configs.get(skill_name)
+        if config is None and skill_name == "orthogonal_sensitivity":
+            config = skill.get_default_config()
+        result = skill.run(config)
+        if not result.is_success:
+            violations.append(f"{skill_name}: did not run successfully: {result.error}")
+            continue
+        data = result.data or {}
+        for key in sorted(required):
+            if not data.get(key):
+                violations.append(f"{skill_name}: missing {key}")
+        if not isinstance(data.get("assumptions"), list) or not data["assumptions"]:
+            violations.append(f"{skill_name}: assumptions must be a non-empty list")
+        if not isinstance(data.get("limitations"), list) or not data["limitations"]:
+            violations.append(f"{skill_name}: limitations must be a non-empty list")
 
     assert violations == []

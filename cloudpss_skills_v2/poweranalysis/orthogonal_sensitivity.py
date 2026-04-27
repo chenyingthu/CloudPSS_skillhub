@@ -255,6 +255,18 @@ class OrthogonalSensitivityAnalysis:
                 "run_count": len(matrix),
                 "run_matrix": matrix,
                 "sensitivities": [item.to_dict() for item in sensitivities],
+                "data_source": "configured_parameter_levels",
+                "confidence_level": "screening_design_from_explicit_inputs",
+                "validation_status": "explicit_parameter_levels_required",
+                "standard_basis": "Orthogonal design table screening over configured parameter levels",
+                "assumptions": [
+                    "parameter levels are supplied by the caller and represent meaningful study inputs",
+                    "the default score is a deterministic screening proxy unless replaced by real simulation results",
+                ],
+                "limitations": [
+                    "This skill does not currently rerun a power-flow, EMT, or stability engine for each orthogonal case",
+                    "Sensitivity effects are screening values from configured levels, not professional numerical sensitivities",
+                ],
             },
             metrics={"parameter_count": len(parameters), "run_count": len(matrix)},
             start_time=start_time,

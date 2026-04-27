@@ -1,6 +1,9 @@
 """Tests for cloudpss_skills_v2.poweranalysis.reactive_compensation_design."""
+
 import pytest
-from cloudpss_skills_v2.poweranalysis.reactive_compensation_design import ReactiveCompensationDesignAnalysis
+from cloudpss_skills_v2.poweranalysis.reactive_compensation_design import (
+    ReactiveCompensationDesignAnalysis,
+)
 
 
 class TestReactiveCompensationDesignAnalysis:
@@ -17,7 +20,7 @@ class TestReactiveCompensationDesignAnalysis:
     def test_has_name_attribute(self):
         """instance has expected attributes."""
         instance = ReactiveCompensationDesignAnalysis()
-        assert hasattr(instance, 'name') or hasattr(instance, 'run')
+        assert hasattr(instance, "name") or hasattr(instance, "run")
 
     def test_requires_explicit_weak_bus_measurements(self):
         instance = ReactiveCompensationDesignAnalysis()
@@ -35,13 +38,14 @@ class TestReactiveCompensationDesignAnalysis:
         result = instance.run(
             {
                 "model": {"rid": "case14"},
-                "weak_buses": [
-                    {"bus": "bus:3", "scr": 2.5, "voltage_pu": 0.92, "x_pu": 0.25}
-                ],
+                "weak_buses": [{"bus": "bus:3", "scr": 2.5, "voltage_pu": 0.92, "x_pu": 0.25}],
             }
         )
         assert result.is_success
         assert result.data["data_source"] == "weak_buses"
+        assert result.data["confidence_level"] == "screening_design_from_explicit_inputs"
+        assert "Q-V sensitivity" in result.data["standard_basis"]
+        assert result.data["limitations"]
         rec = result.data["compensation_recommendations"][0]
         assert rec["x_pu"] == 0.25
         assert rec["required_q_mvar"] == 0.29

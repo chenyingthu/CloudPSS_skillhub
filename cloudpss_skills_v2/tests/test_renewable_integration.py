@@ -70,9 +70,7 @@ def test_validate_requires_explicit_measurement_series():
 def test_scr_analysis_classifies_and_checks_threshold():
     skill = RenewableIntegrationAnalysis()
 
-    result = skill._analyze_scr(
-        {"capacity_mw": 100, "short_circuit_mva": 250}, {"min_scr": 3.0}
-    )
+    result = skill._analyze_scr({"capacity_mw": 100, "short_circuit_mva": 250}, {"min_scr": 3.0})
 
     assert result["scr"] == 2.5
     assert result["grid_strength"] == "moderate"
@@ -149,6 +147,9 @@ def test_run_returns_standardized_success_payload(monkeypatch: pytest.MonkeyPatc
     assert result.data["results"]["scr"]["scr"] == 3.5
     assert result.data["model_info"]["power_flow_converged"] is True
     assert result.data["data_source"]["lvrt"] == "lvrt.profile"
+    assert "capacity-factor" in result.data["standard_basis"]
+    assert result.data["assumptions"]
+    assert result.data["limitations"]
 
 
 def test_run_fails_when_thd_exceeds_limit(monkeypatch: pytest.MonkeyPatch):

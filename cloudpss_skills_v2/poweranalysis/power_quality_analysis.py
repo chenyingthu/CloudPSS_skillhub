@@ -125,9 +125,7 @@ class PowerQualityAnalysisAnalysis:
                         int(order)
                         float(magnitude)
                     except (TypeError, ValueError):
-                        errors.append(
-                            "measurements.harmonic_voltages entries must be numeric"
-                        )
+                        errors.append("measurements.harmonic_voltages entries must be numeric")
                         break
             phase_voltages = measurements.get("phase_voltages_pu")
             if not isinstance(phase_voltages, list) or len(phase_voltages) != 3:
@@ -174,9 +172,7 @@ class PowerQualityAnalysisAnalysis:
             self._log("INFO", f"Model: {model_rid}")
 
             analysis_config = config.get("analysis", {})
-            harmonic_orders = analysis_config.get(
-                "harmonic_orders", [2, 3, 5, 7, 11, 13]
-            )
+            harmonic_orders = analysis_config.get("harmonic_orders", [2, 3, 5, 7, 11, 13])
             thd_threshold = analysis_config.get("thd_threshold", 0.05)
             unbalance_threshold = analysis_config.get("unbalance_threshold", 0.02)
             measurements = config["measurements"]
@@ -189,9 +185,7 @@ class PowerQualityAnalysisAnalysis:
                 for order, value in measurements["harmonic_voltages"].items()
             }
             fundamental = float(measurements.get("fundamental_voltage", 1.0))
-            phase_voltages = [
-                float(value) for value in measurements["phase_voltages_pu"]
-            ]
+            phase_voltages = [float(value) for value in measurements["phase_voltages_pu"]]
             thd = self._calculate_thd(harmonic_voltages, fundamental=fundamental)
             unbalance = self._calculate_unbalance(*phase_voltages)
             quality = self._classify_power_quality(thd, unbalance)
@@ -223,9 +217,17 @@ class PowerQualityAnalysisAnalysis:
                 "data_source": "measurements",
                 "confidence_level": "measurement_derived",
                 "validation_status": "explicit_measurements_required",
+                "standard_basis": (
+                    "IEEE 519/IEC-style THD convention and NEMA "
+                    "maximum-deviation voltage unbalance convention"
+                ),
                 "assumptions": [
                     "harmonic_voltages are per-unit magnitudes relative to fundamental_voltage",
                     "phase_voltages_pu are simultaneous phase RMS voltage measurements",
+                ],
+                "limitations": [
+                    "The skill calculates THD and magnitude unbalance from supplied measurements only",
+                    "It does not run a harmonic power-flow simulation or compute sequence-component voltage unbalance",
                 ],
             }
 

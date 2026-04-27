@@ -66,7 +66,11 @@ class RenewableIntegrationAnalysis:
                 "renewable": {
                     "type": "object",
                     "properties": {
-                        "type": {"type": "string", "enum": ["pv", "wind", "hybrid"], "default": "pv"},
+                        "type": {
+                            "type": "string",
+                            "enum": ["pv", "wind", "hybrid"],
+                            "default": "pv",
+                        },
                         "capacity_mw": {"type": "number"},
                         "short_circuit_mva": {"type": "number"},
                         "point_of_interconnection": {"type": "string"},
@@ -234,6 +238,18 @@ class RenewableIntegrationAnalysis:
                 },
                 "confidence_level": "formula_derived_from_explicit_input",
                 "validation_status": "explicit_inputs_required",
+                "standard_basis": (
+                    "SCR grid-strength screening, IEEE 519/IEC-style THD "
+                    "convention, configured LVRT thresholds, and capacity-factor arithmetic"
+                ),
+                "assumptions": [
+                    "renewable.short_circuit_mva is supplied from a trusted upstream short-circuit study",
+                    "harmonics.orders, lvrt.profile, and renewable.capacity_series_mw are explicit measurements or study results",
+                ],
+                "limitations": [
+                    "The skill does not certify regional grid-code compliance or inverter control performance",
+                    "LVRT pass/fail checks the configured profile and thresholds only",
+                ],
                 "results": {
                     "scr": scr_result,
                     "harmonics": harmonic_result,
@@ -327,7 +343,9 @@ class RenewableIntegrationAnalysis:
         }
 
     def _analyze_lvrt(self, lvrt: dict[str, Any]) -> dict[str, Any]:
-        profile = sorted(lvrt.get("profile", []) or [], key=lambda item: _as_float(item.get("time_s", 0), 0))
+        profile = sorted(
+            lvrt.get("profile", []) or [], key=lambda item: _as_float(item.get("time_s", 0), 0)
+        )
         min_voltage_allowed = _as_float(lvrt.get("min_voltage_pu", 0.15), 0.15)
         max_recovery_time = _as_float(lvrt.get("max_recovery_time_s", 1.5), 1.5)
         min_voltage = min(_as_float(point.get("voltage_pu", 1.0), 1.0) for point in profile)
@@ -342,7 +360,10 @@ class RenewableIntegrationAnalysis:
         passed = min_voltage >= min_voltage_allowed and recovery_time <= max_recovery_time
         return {
             "profile": [
-                {"time_s": round(_as_float(point.get("time_s", 0), 0), 6), "voltage_pu": round(_as_float(point.get("voltage_pu", 0), 0), 6)}
+                {
+                    "time_s": round(_as_float(point.get("time_s", 0), 0), 6),
+                    "voltage_pu": round(_as_float(point.get("voltage_pu", 0), 0), 6),
+                }
                 for point in profile
             ],
             "minimum_voltage_observed": round(min_voltage, 6),
@@ -352,7 +373,9 @@ class RenewableIntegrationAnalysis:
             "passed": passed,
         }
 
-    def _analyze_capacity(self, renewable: dict[str, Any], analysis: dict[str, Any]) -> dict[str, Any]:
+    def _analyze_capacity(
+        self, renewable: dict[str, Any], analysis: dict[str, Any]
+    ) -> dict[str, Any]:
         capacity_mw = _as_float(renewable.get("capacity_mw", 0), 0)
         series = renewable.get("capacity_series_mw", []) or []
         capacity_series = [_as_float(value, 0) for value in series if _as_float(value, 0) >= 0]
@@ -377,16 +400,24 @@ class RenewableIntegrationAnalysis:
     ) -> list[str]:
         recommendations = []
         if not scr_result["passed"]:
-            recommendations.append("Increase short-circuit strength or reduce renewable capacity at the PCC")
+            recommendations.append(
+                "Increase short-circuit strength or reduce renewable capacity at the PCC"
+            )
         if not harmonic_result["passed"]:
             recommendations.append("Add harmonic filtering or update converter switching strategy")
         if not lvrt_result["passed"]:
-            recommendations.append("Tune LVRT controls to improve minimum voltage tolerance or recovery speed")
+            recommendations.append(
+                "Tune LVRT controls to improve minimum voltage tolerance or recovery speed"
+            )
         if not capacity_result["passed"]:
-            recommendations.append("Review energy yield assumptions and curtailment strategy for better utilization")
+            recommendations.append(
+                "Review energy yield assumptions and curtailment strategy for better utilization"
+            )
         return recommendations or ["All renewable integration checks passed"]
 
-    def _calculate_scr_at_buses(self, buses: list[dict[str, Any]], renewable_mw: float) -> list[dict[str, Any]]:
+    def _calculate_scr_at_buses(
+        self, buses: list[dict[str, Any]], renewable_mw: float
+    ) -> list[dict[str, Any]]:
         results = []
         for bus in buses:
             sc_mva = _as_float(bus.get("sc_mva", 0), 0)

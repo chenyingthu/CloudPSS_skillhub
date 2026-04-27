@@ -58,7 +58,9 @@ class ReactiveCompensationDesignAnalysis:
             errors.append("model.rid is required")
         if not config.get("weak_buses") and not config.get("vsi_result", {}).get("weak_buses"):
             errors.append("Either weak_buses or vsi_result.weak_buses is required")
-        for idx, bus in enumerate(self._extract_weak_buses(config) if isinstance(config, dict) else []):
+        for idx, bus in enumerate(
+            self._extract_weak_buses(config) if isinstance(config, dict) else []
+        ):
             if not isinstance(bus, dict):
                 errors.append(f"weak_buses[{idx}] must be an object")
                 continue
@@ -162,11 +164,16 @@ class ReactiveCompensationDesignAnalysis:
             "compensation_recommendations": recommendations,
             "total_recommended_capacity_mvar": round(total_capacity, 2),
             "data_source": "weak_buses",
-            "confidence_level": "formula_derived_from_explicit_input",
+            "confidence_level": "screening_design_from_explicit_inputs",
             "validation_status": "explicit_weak_bus_measurements_required",
+            "standard_basis": "Small-signal per-unit Q-V sensitivity approximation",
             "assumptions": [
                 "weak_buses entries provide SCR, voltage_pu, and x_pu from a trusted upstream study",
                 "required reactive power uses a simplified delta-V over Thevenin-reactance formula",
+            ],
+            "limitations": [
+                "The result is a screening size, not an optimized capacitor/SVC/SVG design",
+                "It ignores voltage limits, discrete device steps, losses, controller dynamics, and load-flow iteration",
             ],
         }
         return SkillResult(

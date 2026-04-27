@@ -88,6 +88,28 @@ def _run_skill(skill_name: str, config: dict[str, Any]):
     return result
 
 
+def _assert_trusted_output_metadata(data: dict[str, Any], case_id: str) -> None:
+    missing = []
+    for key in (
+        "data_source",
+        "confidence_level",
+        "assumptions",
+        "limitations",
+        "standard_basis",
+    ):
+        if not data.get(key):
+            missing.append(key)
+
+    assert missing == [], f"{case_id} missing trusted-output metadata: {missing}"
+    assert isinstance(data["assumptions"], list) and data["assumptions"], case_id
+    assert isinstance(data["limitations"], list) and data["limitations"], case_id
+    assert data["confidence_level"] in {
+        "formula_derived_from_explicit_input",
+        "measurement_derived",
+        "screening_design_from_explicit_inputs",
+    }
+
+
 def test_golden_config_artifacts_exist_for_all_current_cases():
     paths = {path.name for path in GOLDEN_CONFIG_DIR.glob("*.json")}
 
@@ -119,9 +141,7 @@ def test_skill_golden_configs_run_against_declared_skill_inputs():
         expected = artifact["expected"]
 
         if artifact["case_id"] == "thevenin_weak_grid":
-            assert result.data["z_th_pu"]["magnitude"] == pytest.approx(
-                expected["z_th_magnitude"]
-            )
+            assert result.data["z_th_pu"]["magnitude"] == pytest.approx(expected["z_th_magnitude"])
             assert result.data["short_circuit_capacity_mva"] == pytest.approx(
                 expected["short_circuit_capacity_mva"]
             )
@@ -135,28 +155,31 @@ def test_skill_golden_configs_run_against_declared_skill_inputs():
         elif artifact["case_id"] == "protection_iec_standard_inverse":
             setting = result.data["settings"][0]
             assert setting["pickup_current"] == pytest.approx(expected["pickup_current"])
-            assert setting["time_delay"] == pytest.approx(
-                expected["operating_time_s"], abs=1e-4
-            )
+            assert setting["time_delay"] == pytest.approx(expected["operating_time_s"], abs=1e-4)
         elif artifact["case_id"] == "reactive_compensation_weak_bus":
             recommendation = result.data["compensation_recommendations"][0]
-            assert recommendation["required_q_mvar"] == pytest.approx(
-                expected["required_q_mvar"]
-            )
+            assert recommendation["required_q_mvar"] == pytest.approx(expected["required_q_mvar"])
             assert recommendation["recommended_size_mvar"] == pytest.approx(
                 expected["recommended_size_mvar"]
             )
         elif artifact["case_id"] == "renewable_integration_passing":
             assert result.data["results"]["scr"]["scr"] == pytest.approx(expected["scr"])
-            assert result.data["results"]["harmonics"]["thd"] == pytest.approx(
-                expected["thd"]
-            )
+            assert result.data["results"]["harmonics"]["thd"] == pytest.approx(expected["thd"])
             assert result.data["results"]["capacity"]["capacity_factor"] == pytest.approx(
                 expected["capacity_factor"]
             )
             assert result.data["summary"]["overall_passed"] is expected["overall_passed"]
         else:
             raise AssertionError(f"unexpected golden config: {artifact['case_id']}")
+
+
+def test_formula_golden_configs_expose_trusted_output_metadata():
+    for artifact in _load_configs():
+        if "workflow" in artifact:
+            continue
+
+        result = _run_skill(artifact["skill"], copy.deepcopy(artifact["config"]))
+        _assert_trusted_output_metadata(result.data, artifact["case_id"])
 
 
 def test_two_bus_workflow_config_runs_builder_then_validator():

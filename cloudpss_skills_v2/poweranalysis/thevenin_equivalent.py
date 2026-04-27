@@ -198,19 +198,21 @@ class TheveninEquivalentAnalysis:
                 },
                 "short_circuit_capacity_mva": round(scc_mva, 2),
                 "short_circuit_ratio": round(scr, 2),
-                "grid_strength": "strong"
-                if scr > 3
-                else "weak"
-                if scr < 2
-                else "moderate",
-                "data_source": equivalent_config.get(
-                    "source", "explicit_thevenin_impedance"
-                ),
+                "grid_strength": "strong" if scr > 3 else "weak" if scr < 2 else "moderate",
+                "data_source": equivalent_config.get("source", "explicit_thevenin_impedance"),
                 "confidence_level": "formula_derived_from_explicit_input",
                 "validation_status": "explicit_input_required",
+                "standard_basis": (
+                    "IEC 60909 short-circuit capacity convention; per-unit "
+                    "Thevenin impedance arithmetic"
+                ),
                 "assumptions": [
                     "z_th_pu is supplied by the caller from a trusted short-circuit or Thevenin study",
                     "short-circuit capacity is calculated as base_mva / |z_th_pu|",
+                ],
+                "limitations": [
+                    "The skill does not derive z_th_pu from the network model",
+                    "Voltage correction factors, X/R effects, and current-source contributions are outside this calculation",
                 ],
             }
 

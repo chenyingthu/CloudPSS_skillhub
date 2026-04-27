@@ -29,6 +29,7 @@ Date: 2026-04-26
 | `voltage_stability` | Local pandapower scans could appear to run load-scaling studies while leaving pandapower `p_mw/q_mvar` load parameters unchanged. | Supports repository JSON model artifacts and updates pandapower load parameters directly before each scan point; local pandapower no longer needs fake auth. | Golden PV-curve test locks voltage values for load scales 1.0/2.0/4.0/8.0 and requires monotonically decreasing load-bus voltage. |
 | `n1_security` | Local pandapower paths required placeholder auth and lacked a golden benchmark tying typed N-1 output to a known post-contingency overload. | Supports repository JSON model artifacts, requires auth only for CloudPSS, and reports typed contingencies/violations from real pandapower topology-removal reruns. | Golden N-1 test locks two single-line outage failures, thermal violation ratio 1.414098, critical severity, and remaining-line loading 141.409807%. |
 | `short_circuit` | Local pandapower skill execution required placeholder auth and could not consume repository JSON model artifacts through `model.file`, so only the lower-level adapter had true golden coverage. | Requires auth only for CloudPSS, passes `model.file`/`model.path` to the short-circuit facade, and runs local pandapower skills without fake credentials. | Golden skill test locks Source/Load IEC 60909 currents 10.497278/6.537857 kA and short-circuit capacities 2000.00/1245.63 MVA on `pandapower_two_bus_radial`. |
+| `trusted-output contract` | Formula/measurement-derived outputs could still omit limits or standards basis even after hidden synthetic data was removed. | Trusted-analysis golden outputs must now expose `data_source`, `confidence_level`, `assumptions`, `limitations`, and `standard_basis`; `orthogonal_sensitivity` explicitly declares screening-proxy status. | Quality gate runs the relevant skills and rejects missing evidence-boundary metadata; golden-config tests check the same contract on reusable configs. |
 
 ## Current Risk Map
 
@@ -41,7 +42,7 @@ Date: 2026-04-26
 | `fault_clearing_scan`, `transient_stability_margin` | `TRACE_DRIVEN` / `FORMULA_DRIVEN` | Now require explicit stability/CCT inputs. Correctness depends on the upstream time-domain or stability study that produced those inputs. |
 | `fault_severity_scan` | `FORMULA_DRIVEN` / `HEURISTIC` | Bounded deterministic scans over explicit inputs. Should be documented as screening/estimation until connected to short-circuit or EMT results. |
 | `power_quality_analysis`, `renewable_integration`, `reactive_compensation_design`, `thevenin_equivalent`, `protection_coordination` | `FORMULA_DRIVEN` | Use deterministic formulas over explicit measurements/settings. They are not hidden simulations; output now marks source/confidence. |
-| `orthogonal_sensitivity` | `FORMULA_DRIVEN` / `NEEDS_REVIEW` | Uses configured engineering inputs. Needs domain validation against known cases before claiming full professional-grade correctness. |
+| `orthogonal_sensitivity` | `SCREENING_PROXY` / `NEEDS_REVIEW` | Uses configured levels and a deterministic screening score. Output now states that it does not rerun an engine for each case; do not treat it as professional numerical sensitivity until connected to real study results. |
 
 ## Next Correctness Work
 
@@ -92,6 +93,16 @@ Every artifact currently declares:
 - `engine_claim: none`
 
 This is deliberate. These are reusable skill-level golden configs, not CloudPSS or pandapower benchmark cases. Future engine-runnable golden cases must add a real CloudPSS or pandapower model artifact plus a dedicated engine verification test before setting `engine_runnable: true`.
+
+These formula/measurement-derived outputs now also have a trusted-output evidence boundary contract. Successful outputs in this lane must include:
+
+- `data_source`
+- `confidence_level`
+- `assumptions`
+- `limitations`
+- `standard_basis`
+
+This does not prove full professional correctness by itself. It prevents a weaker failure mode: returning a plausible result without disclosing what evidence produced it and what the result does not prove.
 
 ## Engine-Runnable Golden Benchmarks
 
@@ -199,3 +210,11 @@ The short-circuit skill benchmark uses the same two-bus radial artifact with a 2
   - PASS: 48 passed after adding the short-circuit skill golden path.
 - `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
   - PASS: 894 passed in 200.39s after adding the short-circuit skill golden benchmark.
+- `python -m pytest -q cloudpss_skills_v2/tests/test_golden_config_artifacts.py cloudpss_skills_v2/tests/test_integration_quality_gate.py cloudpss_skills_v2/tests/test_power_quality_analysis.py cloudpss_skills_v2/tests/test_protection_coordination.py cloudpss_skills_v2/tests/test_reactive_compensation_design.py cloudpss_skills_v2/tests/test_renewable_integration.py cloudpss_skills_v2/tests/test_orthogonal_sensitivity.py`
+  - PASS: 49 passed after adding the trusted-output evidence boundary contract.
+- `python -m compileall -q cloudpss_skills_v2`
+  - PASS: package compilation succeeded after metadata-contract updates.
+- `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py`
+  - PASS: 48 passed after metadata-contract updates.
+- `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
+  - PASS: 898 passed in 205.89s after metadata-contract updates.
