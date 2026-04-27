@@ -21,6 +21,7 @@ from cloudpss_skills_v2.powerapi.adapters.pandapower import (
     PandapowerPowerFlowAdapter,
     PandapowerShortCircuitAdapter,
 )
+from cloudpss_skills_v2.powerskill.presets.power_flow import PowerFlowPreset
 from cloudpss_skills_v2.powerskill import Engine
 
 
@@ -148,6 +149,61 @@ def _run_cloudpss_power_flow(case: dict[str, Any]):
     return pf.run_power_flow(**case["power_flow_config"], auth=auth)
 
 
+def _assert_cloudpss_ieee39_expected(data: dict[str, Any], case: dict[str, Any]) -> None:
+    expected = case["expected"]
+    tolerances = case["tolerances"]
+
+    assert data["model_rid"] == expected["model_rid"]
+    assert data["converged"] is expected["converged"]
+    assert data["bus_count"] == expected["bus_count"]
+    assert data["branch_count"] == expected["branch_count"]
+
+    summary = data["summary"]
+    expected_summary = expected["summary"]
+    assert summary["total_generation"]["p_mw"] == pytest.approx(
+        expected_summary["total_generation_p_mw"], abs=tolerances["power_mw"]
+    )
+    assert summary["total_generation"]["q_mvar"] == pytest.approx(
+        expected_summary["total_generation_q_mvar"], abs=tolerances["power_mvar"]
+    )
+    assert summary["total_load"]["p_mw"] == pytest.approx(
+        expected_summary["total_load_p_mw"], abs=tolerances["power_mw"]
+    )
+    assert summary["total_load"]["q_mvar"] == pytest.approx(
+        expected_summary["total_load_q_mvar"], abs=tolerances["power_mvar"]
+    )
+    assert summary["total_loss_mw"] == pytest.approx(
+        expected_summary["total_loss_mw"], abs=tolerances["loss_mw"]
+    )
+    assert summary["voltage_range"]["min_pu"] == pytest.approx(
+        expected_summary["min_voltage_pu"], abs=tolerances["voltage_pu"]
+    )
+    assert summary["voltage_range"]["max_pu"] == pytest.approx(
+        expected_summary["max_voltage_pu"], abs=tolerances["voltage_pu"]
+    )
+
+    buses = {bus["name"]: bus for bus in data["buses"]}
+    for sentinel in expected["sentinel_buses"]:
+        bus = buses[sentinel["name"]]
+        assert bus["voltage_pu"] == pytest.approx(
+            sentinel["voltage_pu"], abs=tolerances["voltage_pu"]
+        )
+        assert bus["generation_mw"] == pytest.approx(
+            sentinel["generation_mw"], abs=tolerances["power_mw"]
+        )
+        assert bus["load_mw"] == pytest.approx(
+            sentinel["load_mw"], abs=tolerances["power_mw"]
+        )
+
+    branches = {branch["name"]: branch for branch in data["branches"]}
+    for sentinel in expected["sentinel_branches"]:
+        branch = branches[sentinel["name"]]
+        assert branch["branch_type"] == sentinel["branch_type"]
+        assert branch["power_loss_mw"] == pytest.approx(
+            sentinel["power_loss_mw"], abs=tolerances["loss_mw"]
+        )
+
+
 def test_engine_golden_case_artifacts_declare_verified_engine_capability():
     paths = sorted(GOLDEN_ENGINE_CASE_DIR.glob("*.json"))
     assert [path.name for path in paths] == [
@@ -171,6 +227,8 @@ def test_engine_golden_case_artifacts_declare_verified_engine_capability():
             assert case["server"]["base_url"] == LOCAL_CLOUDPSS_BASE_URL
             assert case["model"]["rid"].startswith("model/chenying/")
             assert case["expected"]["converged"] is True
+            assert case["skill_config"]["skill"] == "power_flow"
+            assert case["skill_config"]["engine"] == "cloudpss"
 
 
 @pytest.mark.integration
@@ -244,58 +302,28 @@ def test_pandapower_two_bus_radial_short_circuit_engine_golden_case():
 @pytest.mark.cloudpss
 def test_cloudpss_ieee39_power_flow_live_engine_golden_case():
     case = _load_case("cloudpss_ieee39_powerflow")
-    expected = case["expected"]
-    tolerances = case["tolerances"]
-
     result = _run_cloudpss_power_flow(case)
 
     assert result.status == SimulationStatus.COMPLETED, result.errors
-    assert result.data["model_rid"] == expected["model_rid"]
-    assert result.data["converged"] is expected["converged"]
-    assert result.data["bus_count"] == expected["bus_count"]
-    assert result.data["branch_count"] == expected["branch_count"]
+    _assert_cloudpss_ieee39_expected(result.data, case)
 
-    summary = result.data["summary"]
-    expected_summary = expected["summary"]
-    assert summary["total_generation"]["p_mw"] == pytest.approx(
-        expected_summary["total_generation_p_mw"], abs=tolerances["power_mw"]
-    )
-    assert summary["total_generation"]["q_mvar"] == pytest.approx(
-        expected_summary["total_generation_q_mvar"], abs=tolerances["power_mvar"]
-    )
-    assert summary["total_load"]["p_mw"] == pytest.approx(
-        expected_summary["total_load_p_mw"], abs=tolerances["power_mw"]
-    )
-    assert summary["total_load"]["q_mvar"] == pytest.approx(
-        expected_summary["total_load_q_mvar"], abs=tolerances["power_mvar"]
-    )
-    assert summary["total_loss_mw"] == pytest.approx(
-        expected_summary["total_loss_mw"], abs=tolerances["loss_mw"]
-    )
-    assert summary["voltage_range"]["min_pu"] == pytest.approx(
-        expected_summary["min_voltage_pu"], abs=tolerances["voltage_pu"]
-    )
-    assert summary["voltage_range"]["max_pu"] == pytest.approx(
-        expected_summary["max_voltage_pu"], abs=tolerances["voltage_pu"]
-    )
 
-    buses = {bus["name"]: bus for bus in result.data["buses"]}
-    for sentinel in expected["sentinel_buses"]:
-        bus = buses[sentinel["name"]]
-        assert bus["voltage_pu"] == pytest.approx(
-            sentinel["voltage_pu"], abs=tolerances["voltage_pu"]
-        )
-        assert bus["generation_mw"] == pytest.approx(
-            sentinel["generation_mw"], abs=tolerances["power_mw"]
-        )
-        assert bus["load_mw"] == pytest.approx(
-            sentinel["load_mw"], abs=tolerances["power_mw"]
-        )
+@pytest.mark.integration
+@pytest.mark.cloudpss
+def test_cloudpss_ieee39_power_flow_skill_live_golden_case(tmp_path: Path):
+    case = _load_case("cloudpss_ieee39_powerflow")
+    reason = _cloudpss_skip_reason(case)
+    if reason:
+        pytest.skip(reason)
 
-    branches = {branch["name"]: branch for branch in result.data["branches"]}
-    for sentinel in expected["sentinel_branches"]:
-        branch = branches[sentinel["name"]]
-        assert branch["branch_type"] == sentinel["branch_type"]
-        assert branch["power_loss_mw"] == pytest.approx(
-            sentinel["power_loss_mw"], abs=tolerances["loss_mw"]
-        )
+    config = dict(case["skill_config"])
+    config["output"] = {**config["output"], "path": str(tmp_path)}
+    valid, errors = PowerFlowPreset().validate(config)
+    assert valid, errors
+
+    result = PowerFlowPreset().run(config)
+
+    assert result.status.name == "SUCCESS", result.error
+    _assert_cloudpss_ieee39_expected(result.data, case)
+    assert result.artifacts
+    assert Path(result.artifacts[0].path).exists()

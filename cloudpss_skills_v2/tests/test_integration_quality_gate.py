@@ -143,6 +143,11 @@ def test_engine_golden_cases_require_engine_artifacts_and_expected_results():
             model = data.get("model", {})
             if not str(model.get("rid", "")).startswith("model/chenying/"):
                 violations.append(f"{path.name}: CloudPSS golden model must be under model/chenying/")
+            skill_config = data.get("skill_config")
+            if not isinstance(skill_config, dict):
+                violations.append(f"{path.name}: CloudPSS golden cases require skill_config coverage")
+            elif skill_config.get("engine") != "cloudpss":
+                violations.append(f"{path.name}: CloudPSS skill_config must use cloudpss engine")
         if not data.get("model"):
             violations.append(f"{path.name}: model artifact is required")
         expected = data.get("expected")

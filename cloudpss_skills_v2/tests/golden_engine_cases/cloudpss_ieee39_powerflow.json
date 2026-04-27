@@ -22,6 +22,28 @@
     "source": "cloud",
     "timeout": 120
   },
+  "skill_config": {
+    "skill": "power_flow",
+    "engine": "cloudpss",
+    "auth": {
+      "token_file": ".cloudpss_token_internal",
+      "base_url": "http://166.111.60.76:50001"
+    },
+    "model": {
+      "rid": "model/chenying/IEEE39",
+      "source": "cloud"
+    },
+    "algorithm": {
+      "type": "newton_raphson",
+      "tolerance": 1e-6,
+      "max_iterations": 100
+    },
+    "output": {
+      "format": "json",
+      "prefix": "cloudpss_ieee39_powerflow",
+      "timestamp": false
+    }
+  },
   "expected": {
     "model_rid": "model/chenying/IEEE39",
     "converged": true,

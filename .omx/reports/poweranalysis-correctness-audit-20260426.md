@@ -97,9 +97,11 @@ The first true engine-runnable golden benchmark now exists under `cloudpss_skill
 | File | Engine | Coverage | Expected Outputs |
 | --- | --- | --- | --- |
 | `pandapower_two_bus_radial.json` | pandapower | Builds a two-bus radial net from the JSON artifact, then runs the pandapower power-flow and IEC 60909 short-circuit adapters. | Source/load bus voltages, load-bus angle, line loading/loss, grid P/Q, max/source/load short-circuit currents. |
-| `cloudpss_ieee39_powerflow.json` | CloudPSS local server | Runs `model/chenying/IEEE39` power flow through `http://166.111.60.76:50001` using `.cloudpss_token_internal`. | Bus/branch counts, convergence, total generation/load/loss, voltage range, sentinel bus voltages/generation/load, sentinel branch losses. |
+| `cloudpss_ieee39_powerflow.json` | CloudPSS local server | Runs `model/chenying/IEEE39` power flow through both the CloudPSS power-flow facade and the registered `power_flow` skill using `http://166.111.60.76:50001` and `.cloudpss_token_internal`. | Bus/branch counts, convergence, total generation/load/loss, voltage range, sentinel bus voltages/generation/load, sentinel branch losses, and skill output artifact creation. |
 
 The pandapower benchmark is fully local. The CloudPSS benchmark is gated, targets only `166.111.60.76`, and must not fall back to a public CloudPSS server.
+
+CloudPSS IEEE39 short-circuit was probed but not promoted to a golden case. The local server returned completed short-circuit jobs with empty `fault_currents`, no `bus_results`, and `max_fault_current_ka: 0`; that is not a physically meaningful short-circuit benchmark.
 
 ## Verification
 
@@ -151,3 +153,7 @@ The pandapower benchmark is fully local. The CloudPSS benchmark is gated, target
   - PASS: 48 passed.
 - `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
   - PASS: 885 passed, 0 skipped after adding the CloudPSS live engine golden benchmark.
+- `python -m pytest -q cloudpss_skills_v2/tests/test_golden_engine_cases.py`
+  - PASS: 5 passed after adding the CloudPSS `power_flow` skill golden path.
+- `python -m pytest -q cloudpss_skills_v2/tests/test_golden_engine_cases.py cloudpss_skills_v2/tests/test_integration_quality_gate.py`
+  - PASS: 12 passed after requiring CloudPSS live golden cases to include skill coverage.
