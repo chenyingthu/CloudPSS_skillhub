@@ -174,17 +174,16 @@ class ContingencyAnalysis:
         self.artifacts: list[Artifact] = []
 
     def _log(self, level: str, message: str) -> None:
-        self.logs.append(
-            LogEntry(timestamp=datetime.now(), level=level, message=message)
-        )
+        self.logs.append(LogEntry(timestamp=datetime.now(), level=level, message=message))
         getattr(logger, level.lower(), logger.info)(message)
 
     def validate(self, config: dict[str, Any]) -> tuple[bool, list[str]]:
         errors = []
         if not config.get("model", {}).get("rid"):
             errors.append("必须提供 model.rid")
+        engine = config.get("engine", "cloudpss")
         auth = config.get("auth", {})
-        if not auth.get("token") and not auth.get("token_file"):
+        if engine == "cloudpss" and not auth.get("token") and not auth.get("token_file"):
             errors.append("必须提供 auth.token 或 auth.token_file")
         return len(errors) == 0, errors
 
@@ -217,6 +216,7 @@ class ContingencyAnalysis:
             model_config = config["model"]
             model_rid = model_config["rid"]
             source = model_config.get("source", "cloud")
+            model_file = model_config.get("file") or model_config.get("path")
 
             contingency_config = config.get("contingency", {})
             analysis_config = config.get("analysis", {})
@@ -228,9 +228,7 @@ class ContingencyAnalysis:
             component_types = contingency_config.get("component_types", ["branch"])
             max_combinations = contingency_config.get("max_combinations", 100)
 
-            voltage_limit = analysis_config.get(
-                "voltage_limit", {"min": 0.95, "max": 1.05}
-            )
+            voltage_limit = analysis_config.get("voltage_limit", {"min": 0.95, "max": 1.05})
             thermal_limit = analysis_config.get("thermal_limit", 1.0)
             severity_threshold = analysis_config.get("severity_threshold", 0.8)
             top_n = ranking_config.get("top_n", 10)
@@ -240,7 +238,7 @@ class ContingencyAnalysis:
 
             self._log("INFO", "计算基态潮流...")
             base_result = api.run_power_flow(
-                model_id=model_rid, source=source, auth=auth
+                model_id=model_rid, source=source, auth=auth, model_file=model_file
             )
             if not base_result.is_success:
                 raise RuntimeError(
@@ -276,9 +274,7 @@ class ContingencyAnalysis:
 
             for i, contingency in enumerate(contingencies, 1):
                 try:
-                    self._log(
-                        "INFO", f"[{i}/{len(contingencies)}] {contingency['name']}"
-                    )
+                    self._log("INFO", f"[{i}/{len(contingencies)}] {contingency['name']}")
                     result = self._evaluate_contingency(
                         handle,
                         contingency,
@@ -288,6 +284,7 @@ class ContingencyAnalysis:
                         api,
                         source,
                         auth,
+                        model_file,
                     )
                     results.append(result)
                     if result["status"] == "PASS":
@@ -320,15 +317,9 @@ class ContingencyAnalysis:
                 "passed": passed,
                 "failed": failed,
                 "errors": len(contingencies) - passed - failed,
-                "pass_rate": round(passed / len(contingencies) * 100, 2)
-                if contingencies
-                else 0,
+                "pass_rate": round(passed / len(contingencies) * 100, 2) if contingencies else 0,
                 "severe_cases": len(
-                    [
-                        r
-                        for r in valid_results
-                        if r.get("severity", 0) >= severity_threshold
-                    ]
+                    [r for r in valid_results if r.get("severity", 0) >= severity_threshold]
                 ),
             }
 
@@ -404,9 +395,7 @@ class ContingencyAnalysis:
         elif level == "N-2":
             k = 2
 
-        available = self._discover_components(
-            handle, component_types, specified_components
-        )
+        available = self._discover_components(handle, component_types, specified_components)
         if not available:
             return []
 
@@ -444,9 +433,7 @@ class ContingencyAnalysis:
                     or c.name in specified_components
                     or c.key in specified_components
                 ):
-                    available.append(
-                        {"key": c.key, "name": c.name, "type": comp_type_str}
-                    )
+                    available.append({"key": c.key, "name": c.name, "type": comp_type_str})
 
         return available
 
@@ -460,6 +447,7 @@ class ContingencyAnalysis:
         api: PowerFlow,
         source: str,
         auth: dict,
+        model_file: str | None = None,
     ) -> dict:
         result = {
             "name": contingency["name"],
@@ -478,7 +466,7 @@ class ContingencyAnalysis:
                 working.remove_component(comp_key)
 
             sim_result = api.run_power_flow(
-                model_handle=working, source=source, auth=auth
+                model_handle=working, source=source, auth=auth, model_file=model_file
             )
 
             if not sim_result.is_success:
@@ -531,9 +519,7 @@ class ContingencyAnalysis:
                     round(max_voltage, 4) if max_voltage != float("-inf") else 1.0
                 )
 
-            if check_voltage and any(
-                v.get("type") == "VOLTAGE" for v in result["violations"]
-            ):
+            if check_voltage and any(v.get("type") == "VOLTAGE" for v in result["violations"]):
                 result["status"] = "VIOLATION"
 
             if check_thermal:
@@ -571,9 +557,7 @@ class ContingencyAnalysis:
 
         return result
 
-    def _calculate_severity(
-        self, result: dict, voltage_limit: dict, thermal_limit: float
-    ) -> float:
+    def _calculate_severity(self, result: dict, voltage_limit: dict, thermal_limit: float) -> float:
         if result.get("status") == "FAIL":
             return 1.0
 
@@ -582,9 +566,7 @@ class ContingencyAnalysis:
         max_v = result.get("max_voltage", 1.0)
 
         if min_v < voltage_limit["min"]:
-            severity = max(
-                severity, (voltage_limit["min"] - min_v) / voltage_limit["min"]
-            )
+            severity = max(severity, (voltage_limit["min"] - min_v) / voltage_limit["min"])
         if max_v > voltage_limit["max"]:
             severity = max(
                 severity,
@@ -607,9 +589,7 @@ class ContingencyAnalysis:
 
         return [
             {"component": comp, "critical_cases": count}
-            for comp, count in sorted(
-                component_count.items(), key=lambda x: x[1], reverse=True
-            )
+            for comp, count in sorted(component_count.items(), key=lambda x: x[1], reverse=True)
         ][:top_n]
 
     def _save_output(
@@ -656,9 +636,7 @@ class ContingencyAnalysis:
 
         if output_config.get("generate_report", True):
             report_path = output_path / f"{prefix}_report{ts_suffix}.md"
-            self._generate_report(
-                result_data, report_path, voltage_limit, thermal_limit
-            )
+            self._generate_report(result_data, report_path, voltage_limit, thermal_limit)
             self.artifacts.append(
                 Artifact(
                     name=f"{prefix}_report{ts_suffix}.md",
@@ -749,9 +727,7 @@ class ContingencyAnalysis:
         )
 
         for i, wp in enumerate(weak_points, 1):
-            lines.append(
-                f"| {i} | {wp.get('component', 'N/A')} | {wp.get('critical_cases', 0)} |"
-            )
+            lines.append(f"| {i} | {wp.get('component', 'N/A')} | {wp.get('critical_cases', 0)} |")
 
         lines.extend(
             [

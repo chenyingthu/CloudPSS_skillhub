@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
@@ -112,6 +113,19 @@ class PandapowerShortCircuitAdapter(EngineAdapter):
         if network is not None:
             self._net_cache[model_id] = network
             return network
+        model_file = config.get("model_file") or model_id
+        if (
+            isinstance(model_file, str)
+            and model_file.endswith(".json")
+            and Path(model_file).exists()
+        ):
+            from cloudpss_skills_v2.powerapi.adapters.pandapower.powerflow import (
+                load_net_from_json,
+            )
+
+            net = load_net_from_json(model_file)
+            self._net_cache[model_id] = net
+            return net
         if model_id.startswith("case"):
             from cloudpss_skills_v2.powerapi.adapters.pandapower.powerflow import (
                 _load_case,
@@ -132,9 +146,7 @@ class PandapowerShortCircuitAdapter(EngineAdapter):
     def _do_run_simulation(self, config: dict[str, Any]) -> SimulationResult:
         model_id = config.get("model_id") or self._current_model_id
         if not model_id:
-            return SimulationResult(
-                status=SimulationStatus.FAILED, errors=["No model_id provided"]
-            )
+            return SimulationResult(status=SimulationStatus.FAILED, errors=["No model_id provided"])
 
         started = datetime.now()
         job_id = str(uuid.uuid4())[:8]
@@ -166,9 +178,7 @@ class PandapowerShortCircuitAdapter(EngineAdapter):
             if hasattr(net_sc, "res_bus_sc") and not net_sc.res_bus_sc.empty:
                 for idx, row in net_sc.res_bus_sc.iterrows():
                     bus_name = (
-                        str(net_sc.bus.at[idx, "name"])
-                        if idx in net_sc.bus.index
-                        else f"Bus_{idx}"
+                        str(net_sc.bus.at[idx, "name"]) if idx in net_sc.bus.index else f"Bus_{idx}"
                     )
                     ikss = _safe_float(row.get("ikss_ka", 0))
                     ip = _safe_float(row.get("ip_ka", 0))
@@ -244,9 +254,7 @@ class PandapowerShortCircuitAdapter(EngineAdapter):
     def _do_validate_config(self, config: dict[str, Any]) -> ValidationResult:
         errors = []
         if not config.get("model_id"):
-            errors.append(
-                ValidationError(field="model_id", message="model_id is required")
-            )
+            errors.append(ValidationError(field="model_id", message="model_id is required"))
         return ValidationResult(valid=len(errors) == 0, errors=errors)
 
 

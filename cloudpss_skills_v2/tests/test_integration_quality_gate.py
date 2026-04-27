@@ -35,9 +35,7 @@ def test_no_weak_test_labels_remain():
     assert offenders == []
 
 
-def test_live_cloudpss_fixtures_target_local_server(
-    cloudpss_api_url: str, cloudpss_model_rid: str
-):
+def test_live_cloudpss_fixtures_target_local_server(cloudpss_api_url: str, cloudpss_model_rid: str):
     assert cloudpss_api_url == "http://166.111.60.76:50001"
     assert cloudpss_model_rid.startswith("model/chenying/")
 
@@ -110,7 +108,9 @@ def test_golden_config_artifacts_do_not_claim_unverified_engine_support():
         if capability.get("skill_runnable") is not True:
             violations.append(f"{path.name}: skill_runnable must be true")
         if capability.get("engine_runnable") is not False:
-            violations.append(f"{path.name}: engine_runnable must remain false until a real engine benchmark exists")
+            violations.append(
+                f"{path.name}: engine_runnable must remain false until a real engine benchmark exists"
+            )
         if capability.get("engine_claim") != "none":
             violations.append(f"{path.name}: engine_claim must be none")
         if not capability.get("engine_notes"):
@@ -137,15 +137,23 @@ def test_engine_golden_cases_require_engine_artifacts_and_expected_results():
         if engine == "cloudpss":
             server = data.get("server", {})
             if server.get("base_url") != "http://166.111.60.76:50001":
-                violations.append(f"{path.name}: CloudPSS golden cases must target only 166.111.60.76")
+                violations.append(
+                    f"{path.name}: CloudPSS golden cases must target only 166.111.60.76"
+                )
             if server.get("token_file") != ".cloudpss_token_internal":
-                violations.append(f"{path.name}: CloudPSS golden cases must use .cloudpss_token_internal")
+                violations.append(
+                    f"{path.name}: CloudPSS golden cases must use .cloudpss_token_internal"
+                )
             model = data.get("model", {})
             if not str(model.get("rid", "")).startswith("model/chenying/"):
-                violations.append(f"{path.name}: CloudPSS golden model must be under model/chenying/")
+                violations.append(
+                    f"{path.name}: CloudPSS golden model must be under model/chenying/"
+                )
             skill_config = data.get("skill_config")
             if not isinstance(skill_config, dict):
-                violations.append(f"{path.name}: CloudPSS golden cases require skill_config coverage")
+                violations.append(
+                    f"{path.name}: CloudPSS golden cases require skill_config coverage"
+                )
             elif skill_config.get("engine") != "cloudpss":
                 violations.append(f"{path.name}: CloudPSS skill_config must use cloudpss engine")
         if not data.get("model"):
@@ -157,7 +165,15 @@ def test_engine_golden_cases_require_engine_artifacts_and_expected_results():
         if engine == "pandapower" and (
             not expected.get("power_flow") or not expected.get("short_circuit")
         ):
-            violations.append(f"{path.name}: pandapower cases require power_flow and short_circuit expected results")
+            violations.append(
+                f"{path.name}: pandapower cases require power_flow and short_circuit expected results"
+            )
+        if data.get("capability", {}).get("skill_runnable") is True:
+            skill_config = data.get("skill_config")
+            if not isinstance(skill_config, dict):
+                violations.append(f"{path.name}: skill_runnable cases require skill_config")
+            elif skill_config.get("engine") != engine:
+                violations.append(f"{path.name}: skill_config engine must match capability engine")
         if engine == "cloudpss" and not data.get("power_flow_config"):
             violations.append(f"{path.name}: CloudPSS cases require power_flow_config")
 

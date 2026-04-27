@@ -1,0 +1,138 @@
+{
+  "case_id": "pandapower_parallel_lines_n1",
+  "description": "Two-bus pandapower benchmark with two parallel 110 kV lines sized so base-case loading is secure and either N-1 line outage overloads the remaining line.",
+  "capability": {
+    "skill_runnable": true,
+    "engine_runnable": true,
+    "engine": "pandapower",
+    "engine_claim": "pandapower_powerflow_short_circuit_and_contingency",
+    "engine_notes": "The tests load this repository JSON artifact through the pandapower adapter, run base-case power flow, IEC 60909 short-circuit, and the contingency_analysis skill."
+  },
+  "model": {
+    "format": "pandapower_network_spec_v1",
+    "sn_mva": 100.0,
+    "buses": [
+      {"id": "source", "name": "Source", "vn_kv": 110.0},
+      {"id": "load", "name": "Load", "vn_kv": 110.0}
+    ],
+    "external_grids": [
+      {
+        "bus": "source",
+        "name": "Grid",
+        "vm_pu": 1.02,
+        "va_degree": 0.0,
+        "s_sc_max_mva": 2000.0,
+        "s_sc_min_mva": 1500.0,
+        "rx_max": 0.1,
+        "rx_min": 0.1
+      }
+    ],
+    "lines": [
+      {
+        "from_bus": "source",
+        "to_bus": "load",
+        "name": "Parallel Line 1",
+        "length_km": 10.0,
+        "r_ohm_per_km": 0.05,
+        "x_ohm_per_km": 0.4,
+        "c_nf_per_km": 0.0,
+        "max_i_ka": 0.35
+      },
+      {
+        "from_bus": "source",
+        "to_bus": "load",
+        "name": "Parallel Line 2",
+        "length_km": 10.0,
+        "r_ohm_per_km": 0.05,
+        "x_ohm_per_km": 0.4,
+        "c_nf_per_km": 0.0,
+        "max_i_ka": 0.35
+      }
+    ],
+    "loads": [
+      {"bus": "load", "name": "Load", "p_mw": 90.0, "q_mvar": 30.0}
+    ]
+  },
+  "power_flow_config": {
+    "model_id": "pandapower_parallel_lines_n1",
+    "algorithm": "newton_raphson",
+    "tolerance": 1e-8,
+    "max_iterations": 20
+  },
+  "short_circuit_config": {
+    "model_id": "pandapower_parallel_lines_n1",
+    "fault_type": "3ph"
+  },
+  "skill_config": {
+    "skill": "contingency_analysis",
+    "engine": "pandapower",
+    "model": {
+      "rid": "pandapower_parallel_lines_n1",
+      "source": "local"
+    },
+    "contingency": {
+      "level": "N-1",
+      "components": ["line:0", "line:1"],
+      "component_types": ["branch"],
+      "max_combinations": 2
+    },
+    "analysis": {
+      "check_voltage": true,
+      "check_thermal": true,
+      "voltage_limit": {"min": 0.95, "max": 1.05},
+      "thermal_limit": 1.0,
+      "severity_threshold": 0.4
+    },
+    "ranking": {"method": "severity", "top_n": 2},
+    "output": {
+      "format": "json",
+      "prefix": "pandapower_parallel_lines_n1_contingency",
+      "generate_report": false
+    }
+  },
+  "expected": {
+    "power_flow": {
+      "converged": true,
+      "bus_count": 2,
+      "branch_count": 2,
+      "source_bus_voltage_pu": 1.02,
+      "load_bus_voltage_pu": 1.013173,
+      "load_bus_angle_degree": -0.790417,
+      "line_loading_percent": 70.207922,
+      "line_loss_mw": 0.090573,
+      "grid_p_mw": 90.181146,
+      "grid_q_mvar": 31.449171
+    },
+    "short_circuit": {
+      "standard": "IEC 60909",
+      "fault_type": "3ph",
+      "bus_count": 2,
+      "max_ikss_ka": 10.497278,
+      "source_bus_ikss_ka": 10.497278,
+      "load_bus_ikss_ka": 8.057512
+    },
+    "contingency": {
+      "total_cases": 2,
+      "passed": 0,
+      "failed": 2,
+      "errors": 0,
+      "pass_rate": 0.0,
+      "severe_cases": 2,
+      "case_status": "VIOLATION",
+      "remaining_line_loading_percent": 141.409807,
+      "post_contingency_load_voltage_pu": 1.0061,
+      "post_contingency_source_voltage_pu": 1.02,
+      "severity": 0.4141,
+      "violation_type": "THERMAL",
+      "weak_points": ["line:0", "line:1"]
+    }
+  },
+  "tolerances": {
+    "voltage_pu": 1e-6,
+    "angle_degree": 1e-6,
+    "power_mw": 1e-6,
+    "current_ka": 1e-6,
+    "percent": 1e-6,
+    "severity": 1e-4
+  }
+}

@@ -28,7 +28,6 @@ class TestContingencyAnalysis:
         result = instance.run(
             {
                 "engine": "pandapower",
-                "auth": {"token": "local-pandapower-token"},
                 "model": {"rid": "case14", "source": "local"},
                 "contingency": {
                     "level": "N-1",

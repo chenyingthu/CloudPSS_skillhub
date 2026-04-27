@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import copy
+import json
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
 from cloudpss_skills_v2.powerapi.base import (
@@ -105,10 +107,69 @@ def _load_case(case_name: str):
 
     if not hasattr(nw, case_name):
         available = [a for a in dir(nw) if a.startswith("case")]
-        raise ValueError(
-            f"Unknown pandapower case: {case_name}. Available: {available}"
-        )
+        raise ValueError(f"Unknown pandapower case: {case_name}. Available: {available}")
     return getattr(nw, case_name)()
+
+
+def build_net_from_spec(model: dict[str, Any]):
+    """Build a pandapower network from a repository JSON model artifact."""
+    import pandapower as pp
+
+    if model.get("format") != "pandapower_network_spec_v1":
+        raise ValueError(f"unsupported model format: {model.get('format')}")
+
+    net = pp.create_empty_network(sn_mva=float(model["sn_mva"]))
+    bus_index: dict[str, int] = {}
+
+    for bus in model.get("buses", []):
+        bus_index[bus["id"]] = pp.create_bus(
+            net,
+            vn_kv=float(bus["vn_kv"]),
+            name=bus.get("name", bus["id"]),
+        )
+
+    for grid in model.get("external_grids", []):
+        pp.create_ext_grid(
+            net,
+            bus=bus_index[grid["bus"]],
+            vm_pu=float(grid["vm_pu"]),
+            va_degree=float(grid.get("va_degree", 0.0)),
+            name=grid.get("name", "Grid"),
+            s_sc_max_mva=float(grid["s_sc_max_mva"]),
+            s_sc_min_mva=float(grid["s_sc_min_mva"]),
+            rx_max=float(grid["rx_max"]),
+            rx_min=float(grid["rx_min"]),
+        )
+
+    for line in model.get("lines", []):
+        pp.create_line_from_parameters(
+            net,
+            from_bus=bus_index[line["from_bus"]],
+            to_bus=bus_index[line["to_bus"]],
+            length_km=float(line["length_km"]),
+            r_ohm_per_km=float(line["r_ohm_per_km"]),
+            x_ohm_per_km=float(line["x_ohm_per_km"]),
+            c_nf_per_km=float(line["c_nf_per_km"]),
+            max_i_ka=float(line["max_i_ka"]),
+            name=line.get("name", "Line"),
+        )
+
+    for load in model.get("loads", []):
+        pp.create_load(
+            net,
+            bus=bus_index[load["bus"]],
+            p_mw=float(load["p_mw"]),
+            q_mvar=float(load["q_mvar"]),
+            name=load.get("name", "Load"),
+        )
+
+    return net
+
+
+def load_net_from_json(path: str | Path):
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    model = data.get("model", data)
+    return build_net_from_spec(model)
 
 
 def _determine_bus_type(idx, net) -> str:
@@ -191,21 +252,31 @@ def _branch_rows(net) -> list[dict]:
                     "to_bus": int(row.get("to_bus", -1)),
                     "branch_type": "line",
                     "loading_pct": loading,
-                    "p_from_mw": _safe_float(net.res_line.at[idx, "p_from_mw"])
-                    if idx in net.res_line.index
-                    else None,
-                    "q_from_mvar": _safe_float(net.res_line.at[idx, "q_from_mvar"])
-                    if idx in net.res_line.index
-                    else None,
-                    "p_to_mw": _safe_float(net.res_line.at[idx, "p_to_mw"])
-                    if idx in net.res_line.index
-                    else None,
-                    "q_to_mvar": _safe_float(net.res_line.at[idx, "q_to_mvar"])
-                    if idx in net.res_line.index
-                    else None,
-                    "pl_mw": _safe_float(net.res_line.at[idx, "pl_mw"])
-                    if idx in net.res_line.index
-                    else None,
+                    "p_from_mw": (
+                        _safe_float(net.res_line.at[idx, "p_from_mw"])
+                        if idx in net.res_line.index
+                        else None
+                    ),
+                    "q_from_mvar": (
+                        _safe_float(net.res_line.at[idx, "q_from_mvar"])
+                        if idx in net.res_line.index
+                        else None
+                    ),
+                    "p_to_mw": (
+                        _safe_float(net.res_line.at[idx, "p_to_mw"])
+                        if idx in net.res_line.index
+                        else None
+                    ),
+                    "q_to_mvar": (
+                        _safe_float(net.res_line.at[idx, "q_to_mvar"])
+                        if idx in net.res_line.index
+                        else None
+                    ),
+                    "pl_mw": (
+                        _safe_float(net.res_line.at[idx, "pl_mw"])
+                        if idx in net.res_line.index
+                        else None
+                    ),
                     "engine_id": idx,
                 }
             )
@@ -223,9 +294,11 @@ def _branch_rows(net) -> list[dict]:
                     "to_bus": int(row.get("lv_bus", -1)),
                     "branch_type": "transformer",
                     "loading_pct": loading,
-                    "pl_mw": _safe_float(net.res_trafo.at[idx, "pl_mw"])
-                    if idx in net.res_trafo.index
-                    else None,
+                    "pl_mw": (
+                        _safe_float(net.res_trafo.at[idx, "pl_mw"])
+                        if idx in net.res_trafo.index
+                        else None
+                    ),
                     "engine_id": idx,
                 }
             )
@@ -297,6 +370,15 @@ class PandapowerPowerFlowAdapter(EngineAdapter):
         if network is not None:
             self._net_cache[model_id] = network
             return network
+        model_file = config.get("model_file") or model_id
+        if (
+            isinstance(model_file, str)
+            and model_file.endswith(".json")
+            and Path(model_file).exists()
+        ):
+            net = load_net_from_json(model_file)
+            self._net_cache[model_id] = net
+            return net
         if model_id in _CASE_NAMES or model_id.startswith("case"):
             net = _load_case(model_id)
             self._net_cache[model_id] = net
@@ -317,9 +399,7 @@ class PandapowerPowerFlowAdapter(EngineAdapter):
     def _do_run_simulation(self, config: dict[str, Any]) -> SimulationResult:
         model_id = config.get("model_id") or self._current_model_id
         if not model_id:
-            return SimulationResult(
-                status=SimulationStatus.FAILED, errors=["No model_id provided"]
-            )
+            return SimulationResult(status=SimulationStatus.FAILED, errors=["No model_id provided"])
 
         started = datetime.now()
         job_id = str(uuid.uuid4())[:8]
@@ -493,9 +573,7 @@ class PandapowerPowerFlowAdapter(EngineAdapter):
         errors = []
         model_id = config.get("model_id")
         if not model_id:
-            errors.append(
-                ValidationError(field="model_id", message="model_id is required")
-            )
+            errors.append(ValidationError(field="model_id", message="model_id is required"))
         algorithm = config.get("algorithm")
         if algorithm and algorithm not in (
             "newton_raphson",
@@ -504,11 +582,13 @@ class PandapowerPowerFlowAdapter(EngineAdapter):
             "acpf",
         ):
             errors.append(
-                ValidationError(
-                    field="algorithm", message=f"Unknown algorithm: {algorithm}"
-                )
+                ValidationError(field="algorithm", message=f"Unknown algorithm: {algorithm}")
             )
         return ValidationResult(valid=len(errors) == 0, errors=errors)
 
 
-__all__ = ["PandapowerPowerFlowAdapter"]
+__all__ = [
+    "PandapowerPowerFlowAdapter",
+    "build_net_from_spec",
+    "load_net_from_json",
+]

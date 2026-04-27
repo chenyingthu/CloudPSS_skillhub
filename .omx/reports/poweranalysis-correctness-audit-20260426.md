@@ -97,11 +97,14 @@ The first true engine-runnable golden benchmark now exists under `cloudpss_skill
 | File | Engine | Coverage | Expected Outputs |
 | --- | --- | --- | --- |
 | `pandapower_two_bus_radial.json` | pandapower | Builds a two-bus radial net from the JSON artifact, then runs the pandapower power-flow and IEC 60909 short-circuit adapters. | Source/load bus voltages, load-bus angle, line loading/loss, grid P/Q, max/source/load short-circuit currents. |
+| `pandapower_parallel_lines_n1.json` | pandapower | Loads a two-bus two-parallel-line JSON artifact through the pandapower adapters, verifies base-case power-flow/short-circuit values, then runs the registered `contingency_analysis` skill with either line removed. | Base-case voltage/angle, per-line loading/loss, IEC 60909 currents, N-1 case count, post-contingency voltage range, remaining-line thermal overload, severity, ranking, weak points, and artifact creation. |
 | `cloudpss_ieee39_powerflow.json` | CloudPSS local server | Runs `model/chenying/IEEE39` power flow through both the CloudPSS power-flow facade and the registered `power_flow` skill using `http://166.111.60.76:50001` and `.cloudpss_token_internal`. | Bus/branch counts, convergence, total generation/load/loss, voltage range, sentinel bus voltages/generation/load, sentinel branch losses, and skill output artifact creation. |
 
 The pandapower benchmark is fully local. The CloudPSS benchmark is gated, targets only `166.111.60.76`, and must not fall back to a public CloudPSS server.
 
 CloudPSS IEEE39 short-circuit was probed but not promoted to a golden case. The local server returned completed short-circuit jobs with empty `fault_currents`, no `bus_results`, and `max_fault_current_ka: 0`; that is not a physically meaningful short-circuit benchmark.
+
+The N-1 pandapower benchmark is intentionally simple: two equal parallel lines share a 90 MW / 30 Mvar load securely in the base case, and either single-line outage transfers the full flow to the remaining line, causing a deterministic thermal violation. This locks the physical meaning of `contingency_analysis` output instead of merely checking that the skill returns a JSON shape.
 
 ## Verification
 
@@ -157,3 +160,11 @@ CloudPSS IEEE39 short-circuit was probed but not promoted to a golden case. The 
   - PASS: 5 passed after adding the CloudPSS `power_flow` skill golden path.
 - `python -m pytest -q cloudpss_skills_v2/tests/test_golden_engine_cases.py cloudpss_skills_v2/tests/test_integration_quality_gate.py`
   - PASS: 12 passed after requiring CloudPSS live golden cases to include skill coverage.
+- `python -m pytest -q cloudpss_skills_v2/tests/test_golden_engine_cases.py cloudpss_skills_v2/tests/test_integration_quality_gate.py cloudpss_skills_v2/tests/test_contingency_analysis.py`
+  - PASS: 20 passed after adding the pandapower parallel-lines N-1 golden benchmark and removing fake local pandapower auth from contingency tests.
+- `python -m compileall -q cloudpss_skills_v2 && python -m pytest -q cloudpss_skills_v2/tests/test_golden_engine_cases.py cloudpss_skills_v2/tests/test_golden_config_artifacts.py cloudpss_skills_v2/tests/test_golden_trusted_analysis_cases.py cloudpss_skills_v2/tests/test_integration_quality_gate.py cloudpss_skills_v2/tests/test_model_validator.py cloudpss_skills_v2/tests/test_contingency_analysis.py`
+  - PASS: compile plus 37 targeted tests passed.
+- `timeout 300s python -m pytest -q cloudpss_skills_v2/tests/test_integration_registry_matrix.py`
+  - PASS: 48 passed.
+- `timeout 600s python -m pytest -q cloudpss_skills_v2/tests -rs`
+  - PASS: 889 passed, 0 skipped in 200.86s after adding the pandapower N-1 golden benchmark.
