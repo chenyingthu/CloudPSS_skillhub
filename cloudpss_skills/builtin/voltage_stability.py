@@ -526,13 +526,22 @@ class VoltageStabilitySkill(SkillBase):
         for row in bus_rows:
             bus_id = str(row.get("Bus", "") or "")
             bus_name = str(row.get("Node", "") or row.get("name", "") or "")
+
             vm = row.get("Vm")
             if vm is None:
                 vm = row.get("<i>V</i><sub>m</sub> / pu")
+            if vm is None:
+                vm = row.get("Vm (pu)")
+            if vm is None:
+                vm = row.get("Vm pu")
 
             try:
                 vm_value = float(vm)
             except (TypeError, ValueError):
+                continue
+
+            if vm_value <= 0 or vm_value > 2.0:
+                logger.warning(f"跳过异常电压值 {vm_value} pu (bus={bus_id or bus_name})")
                 continue
 
             for target_bus in target_buses:

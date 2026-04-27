@@ -431,6 +431,7 @@ class RenewableIntegrationSkill(SkillBase):
         分析电压波动
         对比新能源接入前后的电压变化
         """
+        from cloudpss import Model
 
         model_with_renewable = load_or_fetch_model({"rid": model_rid}, config)
         renewable_components = self._find_renewable_components(

@@ -384,7 +384,42 @@ class N2SecuritySkill(SkillBase):
                     )
                     continue
 
-                job_result = run_powerflow_and_wait(working_model, analysis_config)
+                try:
+                    job_result = run_powerflow_and_wait(working_model, analysis_config)
+                except TimeoutError:
+                    logger.warning(f"  -> N-2超时: {branch1['name']} + {branch2['name']}")
+                    results.append(
+                        N2ContingencyResult(
+                            branch1_id=branch1["id"],
+                            branch1_name=branch1["name"],
+                            branch2_id=branch2["id"],
+                            branch2_name=branch2["name"],
+                            status="error",
+                            converged=False,
+                            violation="执行超时",
+                            max_voltage_pu=None,
+                            min_voltage_pu=None,
+                            max_loading_pu=None,
+                        )
+                    )
+                    continue
+                except Exception as e:
+                    logger.warning(f"  -> N-2异常: {e}")
+                    results.append(
+                        N2ContingencyResult(
+                            branch1_id=branch1["id"],
+                            branch1_name=branch1["name"],
+                            branch2_id=branch2["id"],
+                            branch2_name=branch2["name"],
+                            status="error",
+                            converged=False,
+                            violation=str(e),
+                            max_voltage_pu=None,
+                            min_voltage_pu=None,
+                            max_loading_pu=None,
+                        )
+                    )
+                    continue
 
                 if not job_result.success:
                     results.append(

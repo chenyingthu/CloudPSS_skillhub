@@ -186,12 +186,12 @@ class TransientStabilitySkill(SkillBase):
             base_model = load_or_fetch_model(model_config, config)
             log("INFO", f"模型: {base_model.name}")
 
-            fault_config = config["fault"]
+            fault_config = config.get("fault", {})
             gen_config = config.get("generators", {})
             assessment_config = config.get("assessment", {})
             output_config = config.get("output", {})
 
-            fe_values = fault_config["fe_values"]
+            fe_values = fault_config.get("fe_values", [2.7, 2.8, 2.9])
             fs = fault_config.get("fs", 2.5)
             chg = fault_config.get("chg", 0.01)
             fault_location = fault_config["location"]
@@ -527,7 +527,7 @@ class TransientStabilitySkill(SkillBase):
 
         stabilities = [r["stability"].get("is_stable", False) for r in results]
         deviations = [r["stability"].get("max_speed_deviation", 0) for r in results]
-        fes = [r["fe"] for r in results]
+        fes = [r.get("fe") for r in results if "fe" in r]
 
         # 随着切除时间推迟，稳定性通常变差
         if all(stabilities):
