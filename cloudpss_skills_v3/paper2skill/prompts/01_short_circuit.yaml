@@ -1,0 +1,37 @@
+---
+# ShortCircuit提取模板
+# 针对短路计算相关论文的提取prompt
+
+category: ShortCircuit
+
+extract_focus: |
+  从论文中提取以下信息：
+
+  1. 核心方法：新的短路计算算法/模型
+  2. 数学公式：求解方程
+  3. 实现步骤：算法伪代码
+  4. 适用场景：什么类型的系统/故障
+  5. 测试案例：用哪些IEEE算例验证
+
+skill_template: |
+  ## Core Concept
+  [用2-3句话描述核心方法]
+
+  ## Architecture Overview
+  - 关键组件1
+  - 关键组件2
+  - 数据流
+
+  ## Implementation
+  ```python
+  [实现的Python代码]
+  ```
+
+  ## Practical Guidance
+  - 何时使用
+  - 注意事项
+  - 参数设置
+
+reference: |
+  论文链接: {url}
+  算例: IEEE-xx

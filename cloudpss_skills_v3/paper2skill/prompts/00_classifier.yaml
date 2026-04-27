@@ -1,0 +1,29 @@
+---
+# CloudPSS Paper2Skill - 论文分类Prompt
+# 用于将电力系统论文分类到对应的技能类别
+
+instruction: |
+  你是一个电力系统仿真专家。请阅读以下论文的标题和摘要，判断它属于哪个类别。
+  只输出一个类别名称，不要输出其他内容。
+
+categories: |
+  1. PowerFlow - 潮流计算相关（Newton-Raphson, 潮流收敛等）
+  2. ShortCircuit - 短路计算相关
+  3. EMT - 电磁暂态仿真
+  4. Stability - 稳定性分析（电压/暂态/频率）
+  5. Protection - 继电保护
+  6. Optimization - 最优潮流/优化
+  7. Measurement - 量测/状态估计
+  8. Converter - 电力电子变流器
+  9. Renewable - 新能源并网
+  10. Other - 其他
+
+output_format: |
+  输出格式：只输出类别编号和名称，如：
+  1. PowerFlow
+
+quality_check: |
+  请同时评估这篇论文是否适合提取为可执行的技能：
+  - high: 有明确的算法/方法，可以实现
+  - medium: 有方法但描述不够详细
+  - low: 纯理论/概念性论文，难以落地

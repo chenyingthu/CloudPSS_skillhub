@@ -1,0 +1,52 @@
+---
+name: {skill_name}
+title: "{paper_title}"
+version: 0.0.1
+engine: paper2skill-v0.0.1
+license: MIT
+url: "{paper_url}"
+keywords: [{keywords}]
+description: "{description}"
+---
+
+# {skill_name}
+
+## Core Concept
+
+[用2-3句话描述这个技能的核心方法和适用场景]
+
+## Architecture Overview
+
+- **组件1**: [描述]
+- **组件2**: [描述]
+- **数据流**: [描述]
+
+## Implementation
+
+```python
+# Python实现代码
+# 展示核心算法
+```
+
+## Practical Guidance
+
+### 何时使用
+
+- 场景1
+- 场景2
+
+### 注意事项
+
+- 注意1
+- 注意2
+
+### 参数设置
+
+| 参数 | 描述 | 推荐值 |
+|------|------|--------|
+| param1 | 说明 | value |
+
+## Reference
+
+- 论文: {paper_title}
+- DOI: {paper_url}
