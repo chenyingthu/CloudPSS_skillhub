@@ -24,6 +24,7 @@ from cloudpss_skills_v2.powerapi.adapters.pandapower import (
 )
 from cloudpss_skills_v2.poweranalysis.contingency_analysis import ContingencyAnalysis
 from cloudpss_skills_v2.poweranalysis.n1_security import N1SecurityAnalysis
+from cloudpss_skills_v2.poweranalysis.short_circuit import ShortCircuitAnalysis
 from cloudpss_skills_v2.poweranalysis.voltage_stability import VoltageStabilityAnalysis
 from cloudpss_skills_v2.powerskill.presets.power_flow import PowerFlowPreset
 from cloudpss_skills_v2.powerskill import Engine
@@ -282,6 +283,52 @@ def test_pandapower_two_bus_radial_short_circuit_engine_golden_case():
     assert buses["Load"]["ikss_ka"] == pytest.approx(
         expected["load_bus_ikss_ka"], abs=tolerances["current_ka"]
     )
+
+
+@pytest.mark.integration
+@pytest.mark.pandapower
+def test_pandapower_two_bus_radial_short_circuit_skill_golden_case(tmp_path: Path):
+    case = _load_case("pandapower_two_bus_radial")
+    expected = case["expected"]["short_circuit"]
+    tolerances = case["tolerances"]
+    config = dict(case["skill_configs"]["short_circuit"])
+    config["model"] = {
+        **config["model"],
+        "file": str(GOLDEN_ENGINE_CASE_DIR / "pandapower_two_bus_radial.json"),
+    }
+    config["output"] = {**config["output"], "path": str(tmp_path)}
+
+    result = ShortCircuitAnalysis().run(config)
+
+    assert result.status == SkillStatus.SUCCESS
+    assert result.error is None
+    assert result.metrics == {
+        "fault_type": expected["fault_type"],
+        "fault_location": config["fault"]["location"],
+        "channels_analyzed": expected["skill_channels_analyzed"],
+    }
+
+    analysis = result.data["analysis"]
+    assert set(analysis) == {"Source", "Load"}
+    assert analysis["Source"]["current_ka"] == pytest.approx(
+        expected["source_bus_ikss_ka"], abs=tolerances["current_ka"]
+    )
+    assert analysis["Load"]["current_ka"] == pytest.approx(
+        expected["load_bus_ikss_ka"], abs=tolerances["current_ka"]
+    )
+    for values in analysis.values():
+        assert values["steady_current"] == values["current_ka"]
+        assert values["peak_current"] == values["current_ka"]
+
+    capacities = result.data["short_circuit_mva"]
+    assert capacities["Source"]["short_circuit_mva"] == pytest.approx(
+        expected["source_bus_short_circuit_mva"], abs=0.01
+    )
+    assert capacities["Load"]["short_circuit_mva"] == pytest.approx(
+        expected["load_bus_short_circuit_mva"], abs=0.01
+    )
+    assert len(result.artifacts) == 1
+    assert Path(result.artifacts[0].path).exists()
 
 
 @pytest.mark.integration

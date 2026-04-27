@@ -67,6 +67,8 @@ class ShortCircuitAnalysis:
                     "properties": {
                         "rid": {"type": "string"},
                         "source": {"enum": ["cloud", "local"], "default": "cloud"},
+                        "file": {"type": "string"},
+                        "path": {"type": "string"},
                     },
                 },
                 "fault": {
@@ -176,9 +178,7 @@ class ShortCircuitAnalysis:
         self.artifacts: list[Artifact] = []
 
     def _log(self, level: str, message: str) -> None:
-        self.logs.append(
-            LogEntry(timestamp=datetime.now(), level=level, message=message)
-        )
+        self.logs.append(LogEntry(timestamp=datetime.now(), level=level, message=message))
         getattr(logger, level.lower(), logger.info)(message)
 
     def _get_api(self, config: dict[str, Any]) -> ShortCircuit:
@@ -198,8 +198,9 @@ class ShortCircuitAnalysis:
         fault_config = config.get("fault", {})
         if not fault_config.get("location"):
             errors.append("必须提供 fault.location (短路位置)")
+        engine = config.get("engine", "cloudpss")
         auth = config.get("auth", {})
-        if not auth.get("token") and not auth.get("token_file"):
+        if engine == "cloudpss" and not auth.get("token") and not auth.get("token_file"):
             errors.append("必须提供 auth.token 或 auth.token_file")
         return len(errors) == 0, errors
 
@@ -225,6 +226,7 @@ class ShortCircuitAnalysis:
 
             model_config = config["model"]
             model_rid = model_config["rid"]
+            model_file = model_config.get("file") or model_config.get("path")
             source = model_config.get("source", "cloud")
             auth = config.get("auth", {})
 
@@ -258,6 +260,7 @@ class ShortCircuitAnalysis:
                 bus_id=fault_location,
                 source=source,
                 auth=auth,
+                model_file=model_file,
             )
 
             if not sim_result.is_success:
@@ -299,9 +302,7 @@ class ShortCircuitAnalysis:
 
             self._log("INFO", f"短路计算完成: {len(analysis)} 个通道分析")
 
-            has_currents = any(
-                "peak_current" in v or "current_ka" in v for v in analysis.values()
-            )
+            has_currents = any("peak_current" in v or "current_ka" in v for v in analysis.values())
             status = SkillStatus.SUCCESS if has_currents else SkillStatus.FAILED
 
             return SkillResult(
@@ -418,9 +419,7 @@ class ShortCircuitAnalysis:
                             currents = [d[1] for d in fault_data]
                             times = [d[0] for d in fault_data]
 
-                            peak_current = (
-                                max(abs(v) for v in currents) if currents else 0
-                            )
+                            peak_current = max(abs(v) for v in currents) if currents else 0
                             steady_current = (
                                 sum(currents[-10:]) / len(currents[-10:])
                                 if len(currents) >= 10
@@ -597,8 +596,7 @@ class ShortCircuitAnalysis:
 
         if data.get("short_circuit_mva"):
             max_scc = max(
-                scc.get("short_circuit_mva", 0)
-                for scc in data["short_circuit_mva"].values()
+                scc.get("short_circuit_mva", 0) for scc in data["short_circuit_mva"].values()
             )
             lines.extend(
                 [

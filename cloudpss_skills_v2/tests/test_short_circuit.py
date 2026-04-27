@@ -44,11 +44,22 @@ class TestShortCircuitAnalysis:
         assert analysis["Bus 1"]["peak_current"] == 10.0
         assert analysis["Bus 1"]["thermal_current"] == 8.0
 
+    def test_pandapower_validation_does_not_require_auth(self, instance):
+        valid, errors = instance.validate(
+            {
+                "engine": "pandapower",
+                "model": {"rid": "case14", "source": "local"},
+                "fault": {"location": "0", "type": "3ph"},
+            }
+        )
+
+        assert valid
+        assert errors == []
+
     def test_pandapower_short_circuit_has_positive_currents_and_capacity(self, instance, tmp_path):
         result = instance.run(
             {
                 "engine": "pandapower",
-                "auth": {"token": "local-pandapower-token"},
                 "model": {"rid": "case14", "source": "local"},
                 "fault": {"location": "0", "type": "3ph"},
                 "calculation": {"base_voltage": 135.0, "base_capacity": 100},

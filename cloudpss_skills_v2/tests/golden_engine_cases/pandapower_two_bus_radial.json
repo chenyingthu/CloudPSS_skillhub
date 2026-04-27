@@ -6,7 +6,7 @@
     "engine_runnable": true,
     "engine": "pandapower",
     "engine_claim": "pandapower_powerflow_short_circuit_and_voltage_stability",
-    "engine_notes": "The tests load this repository JSON artifact through the pandapower adapter, run power-flow and IEC 60909 short-circuit adapters, and run the voltage_stability skill over explicit load-scaling levels."
+    "engine_notes": "The tests load this repository JSON artifact through the pandapower adapter, run power-flow and IEC 60909 short-circuit adapters, run the short_circuit skill, and run the voltage_stability skill over explicit load-scaling levels."
   },
   "model": {
     "format": "pandapower_network_spec_v1",
@@ -54,6 +54,28 @@
     "fault_type": "3ph"
   },
   "skill_configs": {
+    "short_circuit": {
+      "skill": "short_circuit",
+      "engine": "pandapower",
+      "model": {
+        "rid": "pandapower_two_bus_radial",
+        "source": "local"
+      },
+      "fault": {
+        "location": "Load",
+        "type": "3ph",
+        "resistance": 0.0
+      },
+      "calculation": {
+        "base_voltage": 110.0,
+        "base_capacity": 100.0
+      },
+      "output": {
+        "format": "json",
+        "prefix": "pandapower_two_bus_short_circuit",
+        "generate_report": false
+      }
+    },
     "voltage_stability": {
       "skill": "voltage_stability",
       "engine": "pandapower",
@@ -96,7 +118,10 @@
       "bus_count": 2,
       "max_ikss_ka": 10.497278,
       "source_bus_ikss_ka": 10.497278,
-      "load_bus_ikss_ka": 6.537857
+      "load_bus_ikss_ka": 6.537857,
+      "source_bus_short_circuit_mva": 2000.0,
+      "load_bus_short_circuit_mva": 1245.63,
+      "skill_channels_analyzed": 2
     },
     "voltage_stability": {
       "total_cases": 4,
