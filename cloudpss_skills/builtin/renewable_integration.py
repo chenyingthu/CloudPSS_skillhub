@@ -40,6 +40,7 @@ from cloudpss_skills.core.network_equivalent import (
     normalize_bus_name,
 )
 from cloudpss_skills.core.utils import parse_cloudpss_table
+from cloudpss import Model
 
 logger = logging.getLogger(__name__)
 

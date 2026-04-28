@@ -238,7 +238,7 @@ class TransientStabilitySkill(SkillBase):
 
                 # 运行EMT
                 emt_result = run_emt(working_model, config)
-                log("INFO", f"  Job ID: {emt_result.job.id}")
+                log("INFO", f"  Job ID: {emt_result.id}")
 
                 result = emt_result.result
 
@@ -253,7 +253,7 @@ class TransientStabilitySkill(SkillBase):
 
                 case_result = {
                     "fe": fe,
-                    "job_id": emt_result.job.id,
+                    "job_id": emt_result.id,
                     "stability": stability_metrics,
                 }
                 results.append(case_result)

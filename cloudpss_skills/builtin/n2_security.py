@@ -242,7 +242,7 @@ class N2SecuritySkill(SkillBase):
             TimeoutError,
             FileNotFoundError,
             ValueError,
-            TypeError,
+            TypeError
         ) as e:
             logger.error(f"N-2安全校核失败: {e}", exc_info=True)
             return SkillResult(
