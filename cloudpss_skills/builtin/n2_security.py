@@ -232,6 +232,7 @@ class N2SecuritySkill(SkillBase):
                 start_time=start_time,
                 end_time=datetime.now(),
                 data=report,
+            error=f"N-2安全校核发现 {failed_count}/{len(results)} 个场景未通过" if failed_count > 0 else None,
             )
 
         except (
