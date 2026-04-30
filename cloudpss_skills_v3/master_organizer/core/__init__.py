@@ -34,6 +34,8 @@ from .path_manager import PathManager, get_path_manager
 from .config_manager import ConfigManager, get_config_manager, UserConfig, UserPreferences, StorageQuotas
 from .crypto import CryptoManager, MockCryptoManager, get_crypto_manager
 from .registry_base import RegistryBase, RegistryEntry
+from .models import Server, Case, Task, Result, Variant, EntityStatus, TaskStatus
+from .registries import ServerRegistry, CaseRegistry, TaskRegistry, ResultRegistry
 
 __all__ = [
     # ID 生成器
@@ -59,9 +61,24 @@ __all__ = [
     'MockCryptoManager',
     'get_crypto_manager',
 
-    # 注册表
+    # 注册表基类
     'RegistryBase',
     'RegistryEntry',
+
+    # 数据模型
+    'Server',
+    'Case',
+    'Task',
+    'Result',
+    'Variant',
+    'EntityStatus',
+    'TaskStatus',
+
+    # 具体注册表
+    'ServerRegistry',
+    'CaseRegistry',
+    'TaskRegistry',
+    'ResultRegistry',
 ]
 
 __version__ = '1.0.0'
