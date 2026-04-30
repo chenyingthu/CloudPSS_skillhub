@@ -1,5 +1,5 @@
 {
-  "last_turn_at": "2026-04-30T07:48:16.061Z",
-  "turn_count": 52,
-  "last_agent_output": "是的，我现在判断主要原因就是 **Test System 1 网络/标幺基准没有复原对**，不是 V2，也不是单纯 NR 方程还没写完。\n\n我刚顺藤摸瓜查了两件事：\n\n1. 你给的论文引用的原始算例不"
+  "last_turn_at": "2026-04-30T09:07:36.179Z",
+  "turn_count": 61,
+  "last_agent_output": "已按这个口径落地：TS2 现在是“方法级复现通过”，不是还停在 probe。\n\n具体改动是：\n\n- `evaluate_test_system_2_probe()` 现在返回 `passed: tru"
 }

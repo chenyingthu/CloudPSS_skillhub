@@ -24,7 +24,7 @@ class DUDVCurveAnalysis:
             "type": "object",
             "required": ["skill", "model"],
             "properties": {
-                "skill": {"type": "string", "const": "dudv_curve"},
+                "skill": {"type": "string", "const": "dudv_curve", "default": "dudv_curve"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
@@ -33,17 +33,25 @@ class DUDVCurveAnalysis:
                 "model": {
                     "type": "object",
                     "required": ["rid"],
-                    "properties": {"rid": {"type": "string"}},
+                    "properties": {"rid": {"type": "string", "default": "model/holdme/IEEE39"}},
                 },
                 "bus": {"type": "object", "properties": {"key": {"type": "string"}}},
                 "scan": {
                     "type": "object",
                     "properties": {
-                        "voltage_range": {"type": "array", "items": {"type": "number"}},
+                        "voltage_range": {"type": "array", "items": {"type": "number"}, "default": []},
                         "num_points": {"type": "number", "default": 20},
                     },
                 },
             },
+        }
+
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "engine": "pandapower",
+            "model": {"rid": "model/holdme/IEEE39"},
+            "scan": {"voltage_range": [], "num_points": 20},
         }
 
     def __init__(self):

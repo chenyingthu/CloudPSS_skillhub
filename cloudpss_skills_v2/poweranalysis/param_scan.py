@@ -29,7 +29,7 @@ class ParamScanAnalysis:
             "type": "object",
             "required": ["skill", "model", "scan"],
             "properties": {
-                "skill": {"type": "string", "const": "param_scan"},
+                "skill": {"type": "string", "const": "param_scan", "default": "param_scan"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
@@ -38,7 +38,7 @@ class ParamScanAnalysis:
                 "model": {
                     "type": "object",
                     "required": ["rid"],
-                    "properties": {"rid": {"type": "string"}},
+                    "properties": {"rid": {"type": "string", "default": ""}},
                 },
                 "scan": {
                     "type": "object",
@@ -47,14 +47,28 @@ class ParamScanAnalysis:
                         "parameter": {
                             "type": "string",
                             "description": "e.g., load.p_mw, gen.p_mw",
+                            "default": "",
                         },
-                        "values": {"type": "array", "items": {"type": "number"}},
+                        "values": {"type": "array", "items": {"type": "number"}, "default": []},
                         "component": {
                             "type": "string",
                             "description": "Component key to modify",
+                            "default": "",
                         },
                     },
                 },
+            },
+        }
+
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "engine": "pandapower",
+            "model": {"rid": ""},
+            "scan": {
+                "parameter": "",
+                "values": [],
+                "component": "",
             },
         }
 

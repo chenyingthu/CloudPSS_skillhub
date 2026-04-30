@@ -29,7 +29,7 @@ class MaintenanceSecurityAnalysis:
             "type": "object",
             "required": ["skill", "model", "maintenance"],
             "properties": {
-                "skill": {"type": "string", "const": "maintenance_security"},
+                "skill": {"type": "string", "const": "maintenance_security", "default": "maintenance_security"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
@@ -39,7 +39,7 @@ class MaintenanceSecurityAnalysis:
                     "type": "object",
                     "required": ["rid"],
                     "properties": {
-                        "rid": {"type": "string"},
+                        "rid": {"type": "string", "default": "model/holdme/IEEE39"},
                         "source": {"enum": ["cloud", "local"], "default": "cloud"},
                     },
                 },

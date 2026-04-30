@@ -30,7 +30,7 @@ class TheveninEquivalentAnalysis:
             "type": "object",
             "required": ["skill", "model", "pcc"],
             "properties": {
-                "skill": {"type": "string", "const": "thevenin_equivalent"},
+                "skill": {"type": "string", "const": "thevenin_equivalent", "default": "thevenin_equivalent"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
@@ -40,14 +40,14 @@ class TheveninEquivalentAnalysis:
                     "type": "object",
                     "required": ["rid"],
                     "properties": {
-                        "rid": {"type": "string"},
+                        "rid": {"type": "string", "default": "model/holdme/IEEE39"},
                     },
                 },
                 "pcc": {
                     "type": "object",
                     "required": ["bus"],
                     "properties": {
-                        "bus": {"type": "string"},
+                        "bus": {"type": "string", "default": ""},
                         "base_mva": {"type": "number", "default": 100},
                     },
                 },
@@ -67,6 +67,14 @@ class TheveninEquivalentAnalysis:
                     },
                 },
             },
+        }
+
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "engine": "cloudpss",
+            "model": {"rid": "model/holdme/IEEE39"},
+            "pcc": {"bus": "", "base_mva": 100},
         }
 
     def __init__(self):

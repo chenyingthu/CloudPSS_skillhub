@@ -591,7 +591,7 @@ class PaperFaithfulShortCircuitSolver:
                 if converter.control_mode == "PV":
                     residual[row] = abs(voltage) - converter.u_ref
                 elif converter.control_mode == "GS":
-                    residual[row] = reactive_power - (converter.q_ref + converter.k_isp * (converter.u_ref_gs - abs(voltage)))
+                    residual[row] = reactive_power - self._reactive_power_reference(converter, voltage)
                 else:
                     residual[row] = reactive_power - converter.q_ref
                 row += 1

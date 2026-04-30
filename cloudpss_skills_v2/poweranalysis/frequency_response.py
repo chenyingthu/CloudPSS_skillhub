@@ -26,7 +26,7 @@ class FrequencyResponseAnalysis:
             "type": "object",
             "required": ["skill", "model"],
             "properties": {
-                "skill": {"type": "string", "const": "frequency_response"},
+                "skill": {"type": "string", "const": "frequency_response", "default": "frequency_response"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
@@ -35,7 +35,7 @@ class FrequencyResponseAnalysis:
                 "model": {
                     "type": "object",
                     "required": ["rid"],
-                    "properties": {"rid": {"type": "string"}},
+                    "properties": {"rid": {"type": "string", "default": "model/holdme/IEEE39"}},
                 },
                 "disturbance": {
                     "type": "object",

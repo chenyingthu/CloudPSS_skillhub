@@ -49,6 +49,14 @@ class TransientStabilityMarginAnalysis:
             },
         }
 
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "model": {"rid": ""},
+            "fault_scenarios": [],
+            "target_margin": 10.0,
+        }
+
     def validate(self, config: dict[str, Any] | None = None) -> tuple[bool, list[str]]:
         errors: list[str] = []
         if not isinstance(config, dict):

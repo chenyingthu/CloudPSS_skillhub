@@ -24,7 +24,7 @@ class FaultClearingScanAnalysis:
             "type": "object",
             "required": ["skill", "model"],
             "properties": {
-                "skill": {"type": "string", "const": "fault_clearing_scan"},
+                "skill": {"type": "string", "const": "fault_clearing_scan", "default": "fault_clearing_scan"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
@@ -33,7 +33,7 @@ class FaultClearingScanAnalysis:
                 "model": {
                     "type": "object",
                     "required": ["rid"],
-                    "properties": {"rid": {"type": "string"}},
+                    "properties": {"rid": {"type": "string", "default": "model/holdme/IEEE39"}},
                 },
                 "fault": {
                     "type": "object",
@@ -63,6 +63,16 @@ class FaultClearingScanAnalysis:
                     },
                 },
             },
+        }
+
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "engine": "cloudpss",
+            "model": {"rid": ""},
+            "fault": {"bus": "", "type": "3ph"},
+            "scan": {"clearing_times": []},
+            "stability_results": [],
         }
 
     def __init__(self):

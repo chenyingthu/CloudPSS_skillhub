@@ -39,7 +39,7 @@ class N2SecurityAnalysis:
             "type": "object",
             "required": ["skill", "model"],
             "properties": {
-                "skill": {"type": "string", "const": "n2_security"},
+                "skill": {"type": "string", "const": "n2_security", "default": "n2_security"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
@@ -52,7 +52,7 @@ class N2SecurityAnalysis:
                 "analysis": {
                     "type": "object",
                     "properties": {
-                        "branches": {"type": "array", "items": {"type": "string"}},
+                        "branches": {"type": "array", "items": {"type": "string"}, "default": []},
                         "check_voltage": {"type": "boolean", "default": True},
                         "voltage_threshold": {"type": "number", "default": 0.05},
                         "thermal_threshold": {"type": "number", "default": 1.0},

@@ -90,13 +90,13 @@ class ProtectionCoordinationAnalysis:
             "type": "object",
             "required": ["skill", "model"],
             "properties": {
-                "skill": {"type": "string", "const": "protection_coordination"},
+                "skill": {"type": "string", "const": "protection_coordination", "default": "protection_coordination"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
                     "default": "pandapower",
                 },
-                "model": {"type": "object", "required": ["rid"]},
+                "model": {"type": "object", "required": ["rid"], "properties": {"rid": {"type": "string", "default": "case14"}}},
                 "relays": {"type": "array", "items": {"type": "object"}},
                 "coordination_pairs": {"type": "array", "items": {"type": "object"}},
                 "analysis": {

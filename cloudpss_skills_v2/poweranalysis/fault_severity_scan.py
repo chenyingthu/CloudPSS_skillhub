@@ -46,6 +46,14 @@ class FaultSeverityScanAnalysis:
             },
         }
 
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "model": {"rid": ""},
+            "fault": {"location": "", "reference_voltage": 1.0},
+            "scan": {"chg_values": [], "voltage_drops": []},
+        }
+
     def validate(self, config: dict[str, Any] | None = None) -> tuple[bool, list[str]]:
         errors: list[str] = []
         if not isinstance(config, dict):

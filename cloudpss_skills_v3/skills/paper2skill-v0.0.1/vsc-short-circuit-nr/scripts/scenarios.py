@@ -1,6 +1,11 @@
 import numpy as np
 from numpy.typing import NDArray
 
+TEST_SYSTEM_2_VSC_BUSES = [1, 2, 5, 7, 9, 11, 12, 13]
+TEST_SYSTEM_2_SYSTEM_BASE_MVA = 100.0
+TEST_SYSTEM_2_FAULT_BUS = 10
+TEST_SYSTEM_2_FAULT_BUS_KV_ASSUMPTION = 110.0
+
 
 LOCAL_VALIDATION_SCENARIOS = {
     "baseline_ieee14_fault": {
@@ -116,8 +121,12 @@ PAPER_VALIDATION_TARGETS = {
         "name": "IEEE 14 bus based system",
         "vsc_count": 8,
         "penetration_levels": [0.25, 0.5, 0.75],
-        "explicit_fault": {"location": "CCP of VSC1", "impedance_pu": "j0.05"},
+        "explicit_fault": {"location": "bus 11", "type": "bolted three-phase-to-ground", "u_ft": 0.0},
         "fault_description": "three-phase bolted fault at bus 11 with u_ft = 0",
+        "method_level_acceptance": {
+            "max_error_percent": 5.0,
+            "scope": "public IEEE14 reconstruction with documented voltage-base and converter-base assumptions",
+        },
         "table_10_parameters": {
             "p_ref_pu": 0.75,
             "q_ref_pu": 0.008,
@@ -161,10 +170,9 @@ MISSING_REPRODUCTION_PARAMETERS = {
         "Unambiguous fault-type wording for the Section 4.1 study",
     ],
     "test_system_2": [
-        "Full benchmark topology and one-line data for the comparison system",
-        "Exact bus/transformer/converter placement behind the 25/50/75% penetration cases",
-        "Clear interpretation of whether the 11.3/22.7/34 MVA values are system base or converter penetration capacity",
-        "Pre-fault operating point and non-converter network data needed for blind numerical reproduction",
+        "PowerFactory-specific VSC transformer impedances, if any, behind the Figure 4 converter insertions",
+        "Exact kA voltage-base convention used by the commercial-model comparison",
+        "Pre-fault operating point and non-converter equivalent modeling choices needed for strict commercial-model reproduction",
     ],
 }
 
@@ -206,3 +214,67 @@ def build_ieee14_admittance_matrix() -> tuple[NDArray[np.complex128], int]:
         admittance_matrix[second_index, first_index] -= branch_admittance
 
     return admittance_matrix, 0
+
+
+def build_ieee14_full_admittance_matrix() -> tuple[NDArray[np.complex128], int]:
+    branch_data = [
+        (1, 2, 0.01938, 0.05917, 0.0528, 0.0),
+        (1, 5, 0.05403, 0.22304, 0.0492, 0.0),
+        (2, 3, 0.04699, 0.19797, 0.0438, 0.0),
+        (2, 4, 0.05811, 0.17632, 0.0340, 0.0),
+        (2, 5, 0.05695, 0.17388, 0.0346, 0.0),
+        (3, 4, 0.06701, 0.17103, 0.0128, 0.0),
+        (4, 5, 0.01335, 0.04211, 0.0, 0.0),
+        (4, 7, 0.0, 0.20912, 0.0, 0.978),
+        (4, 9, 0.0, 0.55618, 0.0, 0.969),
+        (5, 6, 0.0, 0.25202, 0.0, 0.932),
+        (6, 11, 0.09498, 0.19890, 0.0, 0.0),
+        (6, 12, 0.12291, 0.25581, 0.0, 0.0),
+        (6, 13, 0.06615, 0.13027, 0.0, 0.0),
+        (7, 8, 0.0, 0.17615, 0.0, 0.0),
+        (7, 9, 0.0, 0.11001, 0.0, 0.0),
+        (9, 10, 0.03181, 0.08450, 0.0, 0.0),
+        (9, 14, 0.12711, 0.27038, 0.0, 0.0),
+        (10, 11, 0.08205, 0.19207, 0.0, 0.0),
+        (12, 13, 0.22092, 0.19988, 0.0, 0.0),
+        (13, 14, 0.17093, 0.34802, 0.0, 0.0),
+    ]
+    bus_count = 14
+    admittance_matrix: NDArray[np.complex128] = np.zeros((bus_count, bus_count), dtype=np.complex128)
+
+    for from_bus, to_bus, resistance, reactance, line_charging, tap_ratio in branch_data:
+        branch_admittance = 1 / complex(resistance, reactance)
+        first_index = from_bus - 1
+        second_index = to_bus - 1
+        tap = tap_ratio if tap_ratio else 1.0
+        admittance_matrix[first_index, first_index] += branch_admittance / (tap * tap) + 0.5j * line_charging
+        admittance_matrix[second_index, second_index] += branch_admittance + 0.5j * line_charging
+        admittance_matrix[first_index, second_index] -= branch_admittance / tap
+        admittance_matrix[second_index, first_index] -= branch_admittance / tap
+
+    return admittance_matrix, 0
+
+
+def get_test_system_2_converters(
+    penetration_capacity_mva: float,
+    system_base_mva: float = TEST_SYSTEM_2_SYSTEM_BASE_MVA,
+) -> list[dict[str, float | int | str]]:
+    scale = penetration_capacity_mva / system_base_mva
+    parameters = PAPER_VALIDATION_TARGETS["test_system_2"]["table_10_parameters"]
+    return [
+        {
+            "bus": bus,
+            "p_ref": float(parameters["p_ref_pu"]) * scale,
+            "q_ref": float(parameters["q_ref_pu"]) * scale,
+            "i_max": float(parameters["i_vsc_max_pu"]) * scale,
+            "control_mode": "PQ",
+            "saturation_preference": "PSS",
+            "k_isp": float(parameters["k_isp"]),
+            "u_ref_gs": 1.0,
+        }
+        for bus in TEST_SYSTEM_2_VSC_BUSES
+    ]
+
+
+def per_unit_current_to_ka(current_pu: float, system_base_mva: float, voltage_base_kv: float) -> float:
+    return current_pu * system_base_mva / (np.sqrt(3.0) * voltage_base_kv)

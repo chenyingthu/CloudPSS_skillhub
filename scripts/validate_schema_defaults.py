@@ -36,7 +36,12 @@ def get_schema_defaults(schema: dict, path: str = "") -> Dict[str, Any]:
 
     # 处理 items (数组)
     if "items" in schema and isinstance(schema["items"], dict):
-        defaults.update(get_schema_defaults(schema["items"], f"{path}[]"))
+        # 提取数组项的默认值（用于与config中的数组项对比）
+        item_defaults = get_schema_defaults(schema["items"], f"{path}[]")
+        defaults.update(item_defaults)
+        # 也保留整个数组的默认值
+        if "default" in schema["items"]:
+            defaults[f"{path}[]"] = schema["items"]["default"]
 
     return defaults
 

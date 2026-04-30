@@ -44,6 +44,24 @@ Current expected strict status:
 - Test System 1 numerical reproduction: fail
 - `python scripts/run_validation.py`: exit code `1`
 
+Current TS1 reconstruction audit:
+
+- `python scripts/audit_ts1_reconstruction.py` should report `model.sn_mva = 1.0`, matching `pandapower.networks.create_cigre_network_mv(with_der=False)`.
+- Name-matched line records should have no mismatch against the pandapower CIGRE MV reference.
+- The remaining expected audit finding is the omitted transformer switch records; this is bookkeeping until transformer/islanded semantics are added.
+- The severe `j0.05` strict case currently passes modes and current magnitudes; the moderate `j0.2` case remains red because VSC1 enters FSS early.
+- Eq. (5) load impedance conversion is available as an explicit reconstruction option, but remains off by default because the paper-confirmed load base and pre-fault `u_no` map are still missing.
+
+Current TS2 method-level reproduction:
+
+- `test_system_2_probe` should be present in `python scripts/run_validation.py` output.
+- It should use Figure 4 VSC buses `[2, 3, 6, 8, 10, 12, 13, 14]` and fault bus `11`.
+- It should converge for the `25%`, `50%`, and `75%` capacity cases.
+- It should return `passed: true` because all three table-current errors are below the documented `5%` method-level acceptance threshold.
+- It should still include `strict_reproduction_gap` because VSC transformer impedances and the paper's PowerFactory kA voltage-base convention remain unrecovered.
+- `python scripts/analyze_ts2_sensitivity.py` should complete a compact screening scan. The current expected baseline is `1.7316 / 1.7505 / 1.7245 kA` versus paper `1.706 / 1.820 / 1.761 kA`, with mean error about `2.46%`.
+- The sensitivity scan is diagnostic only. It supports the current method-level acceptance boundary, but must not be used to bless a PowerFactory-strict pass unless a source-backed PowerFactory/IEEE14 modeling convention explains the selected assumptions.
+
 # Non-Claims
 
 This package does not currently claim:
@@ -51,3 +69,4 @@ This package does not currently claim:
 - exact numerical agreement with the paper's published result tables
 - complete reconstruction of all paper test-system parameters
 - a complete machine-readable extraction of every paper mode-switching rule or appendix table
+- PowerFactory-strict reproduction of Test System 2 transformer and voltage-base implementation details

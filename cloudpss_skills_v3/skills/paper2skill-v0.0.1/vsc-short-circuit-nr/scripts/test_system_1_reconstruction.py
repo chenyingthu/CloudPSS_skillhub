@@ -15,15 +15,32 @@ def _line_series_admittance(line: dict[str, Any], from_kv: float, system_base_mv
     return 1 / series_impedance_pu
 
 
+def _load_shunt_admittance(
+    load: dict[str, Any],
+    load_base_mva: float,
+    pre_fault_voltage_pu: float,
+) -> complex:
+    if pre_fault_voltage_pu <= 0.0:
+        raise ValueError("pre_fault_voltage_pu must be positive for load impedance conversion")
+    load_power_pu = complex(float(load["p_mw"]) / load_base_mva, float(load["q_mvar"]) / load_base_mva)
+    return np.conj(load_power_pu) / (pre_fault_voltage_pu**2)
+
+
 def load_test_system_1_artifact() -> dict[str, Any]:
     artifact_path = Path(__file__).resolve().with_name("test_system_1_network.json")
     return json.loads(artifact_path.read_text(encoding="utf-8"))
 
 
-def build_test_system_1_admittance_matrix(islanded: bool = True) -> tuple[NDArray[np.complex128], int, dict[str, int]]:
+def build_test_system_1_admittance_matrix(
+    islanded: bool = True,
+    include_load_impedances: bool = False,
+    load_base_mva: float | None = None,
+    pre_fault_voltage_pu_by_bus: dict[str, float] | None = None,
+) -> tuple[NDArray[np.complex128], int, dict[str, int]]:
     artifact = load_test_system_1_artifact()
     model = artifact["model"]
     system_base_mva = float(model["sn_mva"])
+    load_admittance_base_mva = float(load_base_mva) if load_base_mva is not None else system_base_mva
     closed_lines = list(model["lines"])
     active_bus_ids = {
         bus_id
@@ -55,6 +72,19 @@ def build_test_system_1_admittance_matrix(islanded: bool = True) -> tuple[NDArra
         ybus[to_bus, to_bus] += series_admittance
         ybus[from_bus, to_bus] -= series_admittance
         ybus[to_bus, from_bus] -= series_admittance
+
+    if include_load_impedances:
+        pre_fault_voltage_pu_by_bus = pre_fault_voltage_pu_by_bus or {}
+        for load in model.get("loads", []):
+            bus_id = load["bus"]
+            if bus_id not in bus_index:
+                continue
+            pre_fault_voltage_pu = float(pre_fault_voltage_pu_by_bus.get(bus_id, 1.0))
+            ybus[bus_index[bus_id], bus_index[bus_id]] += _load_shunt_admittance(
+                load,
+                load_admittance_base_mva,
+                pre_fault_voltage_pu,
+            )
 
     if not islanded:
         for trafo in model.get("trafos", []):

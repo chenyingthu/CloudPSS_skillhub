@@ -26,7 +26,7 @@ class DisturbanceSeverityAnalysis:
             "type": "object",
             "required": ["skill", "model"],
             "properties": {
-                "skill": {"type": "string", "const": "disturbance_severity"},
+                "skill": {"type": "string", "const": "disturbance_severity", "default": "disturbance_severity"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
@@ -35,7 +35,7 @@ class DisturbanceSeverityAnalysis:
                 "model": {
                     "type": "object",
                     "required": ["rid"],
-                    "properties": {"rid": {"type": "string"}},
+                    "properties": {"rid": {"type": "string", "default": "model/holdme/IEEE39"}},
                 },
                 "simulation": {
                     "type": "object",

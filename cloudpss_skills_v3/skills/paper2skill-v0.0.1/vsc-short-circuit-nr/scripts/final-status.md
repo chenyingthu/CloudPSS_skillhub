@@ -35,17 +35,16 @@
 
 **Symptom**: the strict paper regression now converges numerically on the current reconstruction, but it does not match the paper tables.
 
-Current strict deltas:
+Current strict deltas after CIGRE base repair:
 
-- Moderate fault `j0.2`: VSC3 resolves to `FSS`, but the paper expects `PSS`; VSC1 current is `0.5991 pu` vs `2.204 pu`.
-- Severe fault `j0.05`: VSC1 remains `USS`, but the paper expects `FSS`; VSC1 current is `1.0720 pu` vs `2.5 pu`.
-- VSC2/VSC3 current limits reach `1.0 pu`, so the current-limit equations are no longer the main blocker.
+- Severe fault `j0.05`: now passes strict modes and current magnitudes; fault voltage is close to the paper (`0.2239 pu` vs `0.222 pu`).
+- Moderate fault `j0.2`: VSC2/VSC3 now match paper modes and current magnitudes, but VSC1 enters `FSS` at `2.5 pu`; the paper expects VSC1 to remain `USS` at `2.204 pu`.
+- `scripts/audit_ts1_reconstruction.py` shows the artifact now matches pandapower CIGRE MV base and name-matched line records; remaining audit finding is omitted transformer switch records.
 
 **Root cause hypothesis**:
-1. Current CIGRE MV skeleton is not the paper-exact Test System 1 network.
-2. Load impedance modeling from paper Eq. (5) is not yet included in the reconstruction.
-3. Switch semantics and islanded transformer/external-grid treatment remain unverified against paper Figure 1.
-4. Per-unit base mapping may differ from the artifact.
+1. Paper Eq. (5) load impedance modeling is now available behind an explicit option, but blindly applying all pandapower loads on `model.sn_mva = 1.0` collapses the voltage and is not paper-faithful.
+2. The first all-USS moderate-fault solve gives `u12 ≈ 0.903 pu`, while Table 2 gives `u12 = 0.722 pu`; the fault-side equivalent network is still too strong or otherwise not the paper-exact model.
+3. Single-factor probes of load base, transformer inclusion/base conversion, fault-impedance scaling, and global line-base scaling do not jointly reproduce Table 2, so the likely missing piece is the original paper authors' exact CIGRE-derived equivalent network or switch/branch parameterization.
 
 ### Secondary Issue: Network Mismatch
 
@@ -56,8 +55,8 @@ Current strict deltas:
 
 **Our Reconstructed Network** (`test_system_1_reconstruction.py`):
 - `islanded=True` **removes transformers**
-- **Loads not in admittance matrix**
-- Approximate line impedances
+- Loads are optional via `include_load_impedances`, but no paper-confirmed load base and `u_no` map has been recovered
+- Line records match pandapower by name, but the resulting fault-side voltage is still too high versus the paper table
 
 **Result**: paper-table matching should stay red until the exact benchmark data are recovered. The validation command now enforces this by exiting `1`.
 
@@ -84,7 +83,9 @@ Current strict deltas:
 
 ## Next Steps
 
-1. Recover the exact Test System 1 network/base data used by the paper.
-2. Confirm switch semantics against Figure 1 before changing topology code.
-3. Add load impedances from Eq. (5) if the paper benchmark uses the pre-fault load model.
-4. Keep `python scripts/run_validation.py` red until strict table agreement is real.
+1. Recover the exact CIGRE-derived Test System 1 equivalent used by the paper authors, not just the open pandapower skeleton.
+2. Use the new Eq. (5) load-impedance option only with a paper-confirmed load base and pre-fault voltage map.
+3. Treat the IEEE14 Test System 2 route as a passed method-level reproduction: the current probe is within the documented `<5%` acceptance gate for Tables 4-6 under explicit assumptions.
+4. Use `scripts/analyze_ts2_sensitivity.py` before changing TS2 assumptions. The first scan shows no single simple assumption improves all 25%/50%/75% rows; the documented 110 kV bolted-fault baseline remains the most defensible method-level reproduction.
+5. Keep `model.sn_mva = 1.0` unless a paper-specific base citation says otherwise.
+6. Keep `python scripts/run_validation.py` red until the moderate `j0.2` case also matches the paper table or the strict gate is intentionally scoped away from TS1.

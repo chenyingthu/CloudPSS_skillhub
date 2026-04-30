@@ -26,7 +26,7 @@ class SmallSignalStabilityAnalysis:
             "type": "object",
             "required": ["skill", "model"],
             "properties": {
-                "skill": {"type": "string", "const": "small_signal_stability"},
+                "skill": {"type": "string", "const": "small_signal_stability", "default": "small_signal_stability"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
@@ -35,7 +35,7 @@ class SmallSignalStabilityAnalysis:
                 "model": {
                     "type": "object",
                     "required": ["rid"],
-                    "properties": {"rid": {"type": "string"}},
+                    "properties": {"rid": {"type": "string", "default": "model/holdme/IEEE39"}},
                 },
                 "analysis": {
                     "type": "object",
@@ -53,8 +53,18 @@ class SmallSignalStabilityAnalysis:
                 "state_matrix": {
                     "type": "array",
                     "items": {"type": "array", "items": {"type": "number"}},
+                    "default": [],
                 },
             },
+        }
+
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "engine": "pandapower",
+            "model": {"rid": "model/holdme/IEEE39"},
+            "analysis": {"damping_threshold": 0.05},
+            "state_matrix": [],
         }
 
     def __init__(self):

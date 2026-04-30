@@ -39,16 +39,26 @@ Deliver a v3 cloudpss-skills package implementing paper doi:10.1016/j.ijepes.202
 
 ### Verification evidence
 - `python3 -m py_compile ...` passed for the v3 solver, validation runner, reconstruction helper, and new pytest file.
-- `pytest tests/test_cloudpss_skills_v3_vsc_solver.py -q` passed: `2 passed`.
-- `python3 cloudpss_skills_v3/skills/paper2skill-v0.0.1/vsc-short-circuit-nr/scripts/run_validation.py` now exits with code `1`, as intended, because strict Test System 1 reproduction still fails.
+- `pytest tests/test_cloudpss_skills_v3_vsc_solver.py -q` passed: `4 passed`.
+- `python3 cloudpss_skills_v3/skills/paper2skill-v0.0.1/vsc-short-circuit-nr/scripts/run_validation.py` exits with code `1`, as intended, because strict Test System 1 reproduction still fails.
 
 ### Current strict-regression deltas
-- Moderate fault `j0.2`: solver converges, but VSC3 is `FSS` instead of paper `PSS`; VSC1 current is `0.5991 pu` vs paper `2.204 pu`.
-- Severe fault `j0.05`: solver converges, but VSC1 remains `USS` instead of paper `FSS`; VSC1 current is `1.0720 pu` vs paper `2.5 pu`.
-- VSC2/VSC3 current limits do hit `1.0 pu` in the converged strict cases, so the current-limit equations are no longer the primary blocker.
+- Fixed `test_system_1_network.json` system base from `25.0` to `1.0`, matching `pandapower.networks.create_cigre_network_mv(with_der=False)` / CIGRE TB 575 network base rather than transformer MVA rating.
+- Synchronized artifact load values with the scaled pandapower CIGRE MV load table.
+- Added `scripts/audit_ts1_reconstruction.py` to compare the TS1 artifact against the pandapower CIGRE MV reference by line name, base, loads, and switch counts.
+- Added an explicit `include_load_impedances` option in `test_system_1_reconstruction.py` for paper Eq. (5), with a configurable load base and pre-fault bus voltage map.
+- Fixed the GS converter USS equation to use the same Eq. (2) reactive-power reference as the saturation-state update logic.
+- Added a Test System 2 IEEE14 probe using Figure 4 VSC buses `[2, 3, 6, 8, 10, 12, 13, 14]`, standard IEEE14 branch charging/tap data, Table 10 VSC parameters, and capacity-to-system-base current scaling.
+- Corrected the Test System 2 fault metadata: the paper's Section 4.2 fault is a bolted three-phase-to-ground fault at IEEE14 bus 11 (`u_ft = 0`), not the Test System 3 VSC1-CCP `j0.05 pu` case.
+- Added `scripts/analyze_ts2_sensitivity.py` to rank recoverable Test System 2 assumptions across load impedance inclusion, VSC transformer reactance, small fault reactance, and kA voltage-base choices.
+- Severe fault `j0.05`: now passes strict mode and current checks (`FSS/FSS/FSS`, `[2.5, 1.0, 1.0]`) and fault voltage is close to the paper table (`0.2239 pu` vs `0.222 pu`).
+- Moderate fault `j0.2`: still red because VSC1 enters `FSS` with `2.5 pu`, while the paper expects VSC1 to remain `USS` with `2.204 pu`. VSC2/VSC3 modes and current magnitudes now match the paper (`FSS/PSS`, `[1.0, 1.0]`).
+- Test System 2 method-level reproduction: passes the documented `<5% max error` acceptance gate for all three penetration capacities, with `1.732 / 1.751 / 1.724 kA` versus paper `1.706 / 1.820 / 1.761 kA` under the documented 110 kV current-base assumption.
+- Test System 2 sensitivity result: the documented baseline has mean error `2.46%` and max error `3.82%`. The best screened alternatives improve 50%/75% but worsen 25% above 4%, so there is no evidence yet that a single voltage base, VSC transformer reactance, or small nonzero fault reactance recovers all Tables 4-6.
+- A least-squares-only kA voltage-base fit gives about `108.3 kV`, but case-by-case inferred bases are `111.65 / 105.80 / 107.72 kV`, so the residual mismatch is not explained by a single current-base convention.
 
 ### Current blocker
-The remaining blocker is paper-exact benchmark reconstruction, not generic NR execution. The recovered CIGRE skeleton, `test_system_1_network_corrected.json`, and `test_system_1_network_v3.json` were probed and all miss the paper tables by large margins. The next productive work is to recover or infer the exact Test System 1 network/base data used in the paper, including topology/switch semantics, load-as-impedance treatment, transformer/external-grid handling, and per-unit base mapping.
+The remaining blocker is narrowed to the moderate-fault operating point. The system base error was material and is now fixed. Follow-up probes show that mechanically adding all pandapower loads with `model.sn_mva = 1.0` collapses the case unrealistically, while transformer inclusion, transformer base conversion, fault-impedance rescaling, and a single global line-base multiplier do not jointly match Table 2. The first all-USS iteration still produces `u12 ≈ 0.903 pu` instead of the paper's `0.722 pu`, so the fault-side equivalent network is still too strong or otherwise not paper-exact.
 
 ## Superseded Blocker: Jacobian Singularity
 
@@ -161,18 +171,19 @@ The validation run with Test System 1 also gave singular matrix, but that might 
 ## Next Steps (Priority Order)
 
 ### Step1: Recover paper-exact Test System 1 data
-- Confirm whether the benchmark is the open pandapower CIGRE MV network unchanged or a modified CIGRE-derived case.
-- Confirm switch semantics from the paper Figure 1 before applying switch pruning in code.
-- Add load impedances from pre-fault load data if the paper uses the equivalent-load model from Eq. (5).
-- Confirm per-unit base values for the islanded system and VSC current bases.
+- Recover the exact Test System 1 equivalent network used by the paper or by the authors' simulation model; the open pandapower CIGRE MV skeleton alone is not enough to reproduce Table 2.
+- Use `include_load_impedances=True` only when the load base and pre-fault `u_no` values are known; do not default to `model.sn_mva = 1.0` for all loads.
+- Confirm switch semantics from Figure 1 and the original CIGRE TB 575 tables, especially whether the open-ring branches are retained as drawn in the paper figure.
+- Keep `model.sn_mva = 1.0`; do not revert it to transformer `25 MVA` rating without a paper-specific base citation.
 
 ### Step2: Keep strict regression red until paper agreement is real
 - Do not mark `run_validation.py` successful while `strict_paper_regression.passed` is false.
 - Use `evaluate_test_system_1_regression(verbose=False)` for programmatic checks.
 - Only flip the red test after converter modes and currents match the paper tables within tolerance.
 
-### Step3: Extend strict data coverage
-- Once Test System 1 is resolved, add strict checks for Test System 2 fault-current tables at 25%, 50%, and 75% penetration.
+### Step3: Preserve the layered reproduction boundary
+- Treat Test System 2 as a passed method-level reproduction under the source-backed Figure 4 topology, Table 10 VSC bases, 110 kV current-base assumption, and `<5%` table-current error gate.
+- Tighten Test System 2 further only if the paper's PowerFactory VSC transformer impedances and voltage-base convention can be confirmed.
 - Keep source-backed targets in `scenarios.py`; do not rely on mock-only claims.
 
 ### Step4: Implement Warm-Start Properly
@@ -190,7 +201,7 @@ The validation run with Test System 1 also gave singular matrix, but that might 
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Package structure | ✅ Complete | v3 format, SKILL.md, scripts/ |
-| Test System 1 network | ⚠️ Partial | CIGRE MV skeleton, missing impedances |
+| Test System 1 network | ⚠️ Partial | CIGRE MV skeleton base fixed; load impedance and transformer/island semantics still missing |
 | Paper targets embedded | ✅ Complete | Table 2/3/10 in scenarios.py |
 | Solver structure | ✅ Complete | Outer loop + inner NR |
 | Mode classification | ⚠️ Partial | Runs, but cannot be fully validated before paper-exact network recovery |

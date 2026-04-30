@@ -23,8 +23,15 @@ class ScenariosModule(Protocol):
     PAPER_VALIDATION_TARGETS: dict[str, Any]
     LOCAL_VALIDATION_SCENARIOS: dict[str, Any]
     MISSING_REPRODUCTION_PARAMETERS: dict[str, Any]
+    TEST_SYSTEM_2_FAULT_BUS: int
+    TEST_SYSTEM_2_FAULT_BUS_KV_ASSUMPTION: float
+    TEST_SYSTEM_2_SYSTEM_BASE_MVA: float
+    TEST_SYSTEM_2_VSC_BUSES: list[int]
 
     def build_ieee14_admittance_matrix(self) -> tuple[NDArray[Any], int]: ...
+    def build_ieee14_full_admittance_matrix(self) -> tuple[NDArray[Any], int]: ...
+    def get_test_system_2_converters(self, penetration_capacity_mva: float, system_base_mva: float = ...) -> list[dict[str, Any]]: ...
+    def per_unit_current_to_ka(self, current_pu: float, system_base_mva: float, voltage_base_kv: float) -> float: ...
 
 
 class SolverModule(Protocol):
@@ -50,6 +57,13 @@ PAPER_VALIDATION_TARGETS = _scenarios.PAPER_VALIDATION_TARGETS
 LOCAL_VALIDATION_SCENARIOS = _scenarios.LOCAL_VALIDATION_SCENARIOS
 MISSING_REPRODUCTION_PARAMETERS = _scenarios.MISSING_REPRODUCTION_PARAMETERS
 build_ieee14_admittance_matrix = _scenarios.build_ieee14_admittance_matrix
+build_ieee14_full_admittance_matrix = _scenarios.build_ieee14_full_admittance_matrix
+get_test_system_2_converters = _scenarios.get_test_system_2_converters
+per_unit_current_to_ka = _scenarios.per_unit_current_to_ka
+TEST_SYSTEM_2_FAULT_BUS = _scenarios.TEST_SYSTEM_2_FAULT_BUS
+TEST_SYSTEM_2_FAULT_BUS_KV_ASSUMPTION = _scenarios.TEST_SYSTEM_2_FAULT_BUS_KV_ASSUMPTION
+TEST_SYSTEM_2_SYSTEM_BASE_MVA = _scenarios.TEST_SYSTEM_2_SYSTEM_BASE_MVA
+TEST_SYSTEM_2_VSC_BUSES = _scenarios.TEST_SYSTEM_2_VSC_BUSES
 PaperFaithfulShortCircuitSolver = _solver_module.PaperFaithfulShortCircuitSolver
 VSCConverter = _solver_module.VSCConverter
 build_test_system_1_admittance_matrix = _reconstruction_module.build_test_system_1_admittance_matrix
@@ -224,6 +238,86 @@ def run_test_system_1_regression() -> bool:
     return bool(evaluate_test_system_1_regression(verbose=True)["passed"])
 
 
+def evaluate_test_system_2_probe(verbose: bool = True) -> dict[str, Any]:
+    if verbose:
+        print("=" * 60)
+        print("Test System 2 IEEE14 Probe Against Paper Tables")
+        print("=" * 60)
+
+    ybus, slack_bus = build_ieee14_full_admittance_matrix()
+    solver = PaperFaithfulShortCircuitSolver(tolerance=1e-8, max_iter=200, max_outer_iter=20)
+    targets = PAPER_VALIDATION_TARGETS["test_system_2"]
+    max_error_percent = float(targets["method_level_acceptance"]["max_error_percent"])
+    cases = []
+    for label, capacity_mva in targets["table_10_parameters"]["penetration_capacity_mva"].items():
+        converters = [
+            VSCConverter(**converter_definition)
+            for converter_definition in get_test_system_2_converters(float(capacity_mva))
+        ]
+        result = solver.solve(
+            admittance_matrix=ybus,
+            slack_bus=slack_bus,
+            fault_bus=TEST_SYSTEM_2_FAULT_BUS,
+            fault_impedance=1e-6j,
+            converters=converters,
+            slack_voltage=1.0 + 0.0j,
+        )
+        fault_current_pu = abs(result.fault_current)
+        fault_current_ka = per_unit_current_to_ka(
+            fault_current_pu,
+            TEST_SYSTEM_2_SYSTEM_BASE_MVA,
+            TEST_SYSTEM_2_FAULT_BUS_KV_ASSUMPTION,
+        )
+        target_ka = float(targets["short_circuit_tables"][label]["this_paper_ka"])
+        error_percent = abs(fault_current_ka - target_ka) / max(target_ka, 1e-9) * 100.0
+        case = {
+            "case": label,
+            "penetration_capacity_mva": float(capacity_mva),
+            "converged": result.converged,
+            "fault_current_pu": fault_current_pu,
+            "fault_current_ka": fault_current_ka,
+            "paper_fault_current_ka": target_ka,
+            "error_percent": error_percent,
+            "converter_states": {str(bus + 1): state for bus, state in result.converter_states.items()},
+            "mode_history": [
+                {str(bus + 1): state for bus, state in mode_by_bus.items()}
+                for mode_by_bus in result.mode_history
+            ],
+        }
+        cases.append(case)
+        if verbose:
+            print(
+                f"  {label}: got={fault_current_ka:.3f} kA, paper={target_ka:.3f} kA, "
+                f"error={error_percent:.1f}%, converged={result.converged}"
+            )
+
+    all_converged = all(case["converged"] for case in cases)
+    max_observed_error = max(case["error_percent"] for case in cases)
+    passed = bool(all_converged and max_observed_error <= max_error_percent)
+
+    return {
+        "passed": passed,
+        "cases": cases,
+        "acceptance": {
+            "scope": targets["method_level_acceptance"]["scope"],
+            "max_error_percent": max_error_percent,
+            "max_observed_error_percent": max_observed_error,
+        },
+        "assumptions": {
+            "ieee14_source": "standard MATPOWER/pandapower IEEE 14 branch data with taps and line charging",
+            "vsc_buses_from_figure_4": [bus + 1 for bus in TEST_SYSTEM_2_VSC_BUSES],
+            "fault_bus_from_paper": TEST_SYSTEM_2_FAULT_BUS + 1,
+            "fault_impedance_pu": "approximated as j1e-6 for bolted u_ft = 0",
+            "system_base_mva": TEST_SYSTEM_2_SYSTEM_BASE_MVA,
+            "fault_current_voltage_base_kv": TEST_SYSTEM_2_FAULT_BUS_KV_ASSUMPTION,
+        },
+        "blocking_reason": None
+        if passed
+        else "Test System 2 method-level reproduction exceeded the documented error bound",
+        "strict_reproduction_gap": "PowerFactory transformer data, voltage-base convention, and exact commercial-model setup remain unrecovered",
+    }
+
+
 def main() -> None:
     admittance_matrix, slack_bus = build_ieee14_admittance_matrix()
     solver = PaperFaithfulShortCircuitSolver()
@@ -291,6 +385,7 @@ def main() -> None:
             "max_residual": vsc_result.max_residual,
         },
         "test_system_1_reconstruction": test_system_1_reconstruction,
+        "test_system_2_probe": evaluate_test_system_2_probe(verbose=False),
         "limitations": [
             "Paper-native regression tables are now embedded in the package, but the benchmark network definitions remain incomplete for blind end-to-end reproduction.",
             "This runner verifies a paper-faithful solver structure with an outer mode loop and an inner Newton-Raphson solve, but it still does not claim numerical agreement with the paper benchmarks.",
