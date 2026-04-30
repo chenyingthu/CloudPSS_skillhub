@@ -70,7 +70,7 @@
 
 #### 1.3.1 Server（服务器）
 - **定义**: CloudPSS 计算资源实例
-- **存储位置**: `~/.cloudpss/config/servers.yaml`
+- **存储位置**: `~/.cloudpss/registry/servers.yaml`
 - **关键属性**:
   - `id`: 唯一标识 (server_{hash8})
   - `name`: 人类可读名称
@@ -126,10 +126,14 @@
 
 ### 2.1 ID 生成规范
 
-所有 ID 遵循统一格式：
+ID 分为“资源定位 ID”和“轻量成员 ID”两类：
 
 ```
+资源定位 ID:
 {entity}_{YYYYMMDD}_{HHMMSS}_{hash8}
+
+轻量成员 ID:
+{entity}_{hash8}
 
 示例:
 - server_a3f7b2d9
@@ -141,9 +145,11 @@
 
 **生成规则**:
 1. `entity`: 小写实体名称 (server/case/task/result/variant)
-2. `YYYYMMDD`: 创建日期
-3. `HHMMSS`: 创建时间
-4. `hash8`: 8位随机十六进制字符串
+2. `server` 和 `variant` 使用轻量成员 ID：`{entity}_{hash8}`
+3. `case`、`task`、`result` 使用资源定位 ID：`{entity}_{YYYYMMDD}_{HHMMSS}_{hash8}`
+4. `YYYYMMDD`: 创建日期
+5. `HHMMSS`: 创建时间
+6. `hash8`: 8位随机十六进制字符串
 
 ### 2.2 时间戳规范
 
@@ -208,12 +214,12 @@ metadata:
 ```
 ~/.cloudpss/
 ├── config/                    # 配置文件
-│   ├── servers.yaml          # 服务器注册表
 │   ├── defaults.yaml         # 默认设置
 │   └── user.yaml             # 用户偏好
 │
 ├── registry/                  # 注册表
 │   ├── index.yaml            # 总索引
+│   ├── servers.yaml          # 服务器注册表
 │   ├── cases.yaml            # 算例注册表
 │   ├── tasks.yaml            # 任务注册表
 │   ├── results.yaml          # 结果注册表
@@ -263,7 +269,9 @@ metadata:
 ```python
 # 命名规则
 RULES = {
-    "id_pattern": r"^(server|case|task|result|variant)_[0-9]{8}_[0-9]{6}_[a-f0-9]{8}$",
+    "server_id_pattern": r"^server_[a-f0-9]{8}$",
+    "variant_id_pattern": r"^variant_[a-f0-9]{8}$",
+    "timestamped_id_pattern": r"^(case|task|result)_[0-9]{8}_[0-9]{6}_[a-f0-9]{8}$",
     "name_pattern": r"^[a-zA-Z0-9_\-\s]{1,64}$",
     "filename_pattern": r"^[a-zA-Z0-9_\-]+\.(yaml|json|csv|h5|cfg)$",
 }
@@ -1115,9 +1123,9 @@ $ cloudpss query dashboard
 |------|------|--------|----------|
 | 1 | 目录结构设计 | `~/.cloudpss/` 结构 | 目录创建成功 |
 | 2 | ID生成器 | `id_generator.py` | ID格式正确 |
-| 3 | 注册表基类 | `registry/base.py` | CRUD操作正常 |
-| 4 | 加密模块 | `crypto.py` | 认证信息安全存储 |
-| 5 | 配置管理 | `config/manager.py` | 配置读写正常 |
+| 3 | 注册表基类 | `master_organizer/core/registry_base.py` | CRUD操作、原子写入、基础并发保护正常 |
+| 4 | 加密模块 | `master_organizer/core/crypto.py` | 认证信息安全存储，生产路径不允许静默降级到 mock |
+| 5 | 配置管理 | `master_organizer/core/config_manager.py` | 配置读写正常 |
 
 **依赖**: 无  
 **风险**: 低  

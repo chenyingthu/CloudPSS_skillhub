@@ -37,13 +37,19 @@ class TransientStabilityMarginAnalysis:
             "type": "object",
             "required": ["model", "fault_scenarios"],
             "properties": {
-                "model": {"type": "object", "required": ["rid"]},
+                "skill": {"type": "string", "const": "transient_stability_margin", "default": "transient_stability_margin"},
+                "model": {
+                    "type": "object",
+                    "required": ["rid"],
+                    "properties": {"rid": {"type": "string", "default": ""}},
+                },
                 "fault_scenarios": {
                     "type": "array",
                     "items": {
                         "type": "object",
                         "required": ["clearing_time", "cct"],
                     },
+                    "default": [],
                 },
                 "target_margin": {"type": "number", "default": 10.0},
             },

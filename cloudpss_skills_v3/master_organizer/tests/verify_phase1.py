@@ -120,7 +120,7 @@ def main():
         test_crypto_manager()
 
         print("=" * 60)
-        print("✅ 所有测试通过！Phase 1 完成")
+        print("✅ 所有 Phase 1 基础设施自检通过")
         print("=" * 60)
         return 0
 

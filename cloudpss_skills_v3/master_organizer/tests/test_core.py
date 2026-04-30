@@ -4,15 +4,24 @@
 
 import pytest
 from datetime import datetime
+from dataclasses import asdict
 from pathlib import Path
 import tempfile
 import shutil
 
 from cloudpss_skills_v3.master_organizer.core import (
-    IDGenerator, EntityType, validate_id,
-    PathManager, get_path_manager,
-    ConfigManager, UserConfig,
-    CryptoManager, MockCryptoManager
+    ConfigManager,
+    CryptoManager,
+    EntityType,
+    IDGenerator,
+    MockCryptoManager,
+    PathManager,
+    RegistryBase,
+    RegistryEntry,
+    UserConfig,
+    get_crypto_manager,
+    get_path_manager,
+    validate_id,
 )
 
 
@@ -36,6 +45,12 @@ class TestIDGenerator:
         server_id = IDGenerator.generate(EntityType.SERVER)
         assert server_id.startswith("server_")
         assert len(server_id.split("_")) == 2  # server_hash8
+
+    def test_generate_variant_id(self):
+        """测试生成变体ID"""
+        variant_id = IDGenerator.generate(EntityType.VARIANT)
+        assert variant_id.startswith("variant_")
+        assert len(variant_id.split("_")) == 2  # variant_hash8
 
     def test_validate_valid_id(self):
         """测试验证有效ID"""
@@ -171,6 +186,57 @@ class TestCryptoManager:
 
         decrypted = self.cm.decrypt_dict(encrypted)
         assert decrypted == data
+
+    def test_get_crypto_manager_uses_real_manager_by_default(self):
+        """生产入口默认不静默降级到 mock"""
+        manager = get_crypto_manager(self.key_path)
+        assert isinstance(manager, CryptoManager)
+
+    def test_get_crypto_manager_allows_explicit_mock_only_for_tests(self):
+        """测试入口可显式请求 mock"""
+        manager = get_crypto_manager(self.key_path, allow_mock=True)
+        assert isinstance(manager, CryptoManager)
+
+
+class DummyRegistry(RegistryBase[RegistryEntry]):
+    @property
+    def registry_name(self) -> str:
+        return "dummy"
+
+    @property
+    def entity_type(self) -> str:
+        return "case"
+
+    def _serialize_data(self) -> dict:
+        return {entity_id: asdict(entry) for entity_id, entry in self._data.items()}
+
+    def _deserialize_data(self, data: dict) -> dict[str, RegistryEntry]:
+        return {
+            entity_id: RegistryEntry(**entry)
+            for entity_id, entry in data.get(self.registry_name, {}).items()
+        }
+
+
+class TestRegistryBase:
+    """测试注册表基类"""
+
+    def setup_method(self):
+        self.temp_dir = Path(tempfile.mkdtemp())
+        self.registry = DummyRegistry(self.temp_dir)
+
+    def teardown_method(self):
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def test_create_saves_registry_atomically_readable(self):
+        entity_id = IDGenerator.generate(EntityType.CASE)
+        assert self.registry.create(entity_id, RegistryEntry(id=entity_id, name="case-a"))
+
+        registry_path = self.temp_dir / "dummy.yaml"
+        assert registry_path.exists()
+
+        reloaded = DummyRegistry(self.temp_dir)
+        assert reloaded.exists(entity_id)
+        assert reloaded.get(entity_id).name == "case-a"
 
 
 if __name__ == "__main__":

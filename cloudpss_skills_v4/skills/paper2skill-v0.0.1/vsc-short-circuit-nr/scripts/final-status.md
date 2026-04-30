@@ -25,7 +25,7 @@
 ### 3. Minimal Tests Pass
 - Local IEEE14 baseline scenario: ✅ converges
 - Local IEEE14 single-VSC scenario: ✅ converges
-- New pytest gate: ✅ `pytest tests/test_cloudpss_skills_v3_vsc_solver.py -q` gives `2 passed`
+- New pytest gate: ✅ `pytest tests/test_cloudpss_skills_v4_vsc_solver.py -q`
 
 ---
 

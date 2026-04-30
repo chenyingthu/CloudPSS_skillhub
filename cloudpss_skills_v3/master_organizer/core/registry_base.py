@@ -6,7 +6,10 @@
 """
 
 import re
+import os
+import tempfile
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -65,6 +68,28 @@ class RegistryBase(ABC, Generic[T]):
 
         self._load()
 
+    @contextmanager
+    def _file_lock(self):
+        """Best-effort local lock around registry writes."""
+        lock_path = self._registry_dir / f"{self.registry_name}.lock"
+        self._registry_dir.mkdir(parents=True, exist_ok=True)
+        with open(lock_path, "w", encoding="utf-8") as lock_file:
+            try:
+                import fcntl
+
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            except (ImportError, OSError):
+                pass
+            try:
+                yield
+            finally:
+                try:
+                    import fcntl
+
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                except (ImportError, OSError):
+                    pass
+
     @property
     @abstractmethod
     def registry_name(self) -> str:
@@ -108,8 +133,23 @@ class RegistryBase(ABC, Generic[T]):
         }
 
         self._registry_dir.mkdir(parents=True, exist_ok=True)
-        with open(self._registry_path, 'w', encoding='utf-8') as f:
-            yaml.dump(data, f, allow_unicode=True, sort_keys=False)
+        with self._file_lock():
+            fd, temp_name = tempfile.mkstemp(
+                prefix=f".{self.registry_name}.",
+                suffix=".tmp",
+                dir=self._registry_dir,
+                text=True,
+            )
+            temp_path = Path(temp_name)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    yaml.dump(data, f, allow_unicode=True, sort_keys=False)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(temp_path, self._registry_path)
+            finally:
+                if temp_path.exists():
+                    temp_path.unlink()
 
     @abstractmethod
     def _serialize_data(self) -> dict:

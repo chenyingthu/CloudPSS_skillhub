@@ -26,6 +26,8 @@ class TaskStatus(Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    EXPORTED = "exported"
+    REGISTERED = "registered"
 
 
 @dataclass
@@ -38,7 +40,7 @@ class Server:
     status: str = "active"
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     last_used: Optional[str] = None
-    is_default: bool = False
+    default: bool = False
     capabilities: List[str] = field(default_factory=list)
 
 
@@ -77,7 +79,7 @@ class Task:
     name: str
     case_id: str
     variant_id: Optional[str] = None
-    task_type: str = ""  # powerflow/emt/stability
+    type: str = ""  # powerflow/emt/stability
     job_id: Optional[str] = None
     server_id: str = ""
     status: str = "created"
@@ -96,7 +98,7 @@ class Result:
     name: str
     task_id: str
     case_id: str
-    result_format: str = "json"
+    format: str = "json"
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     size_bytes: int = 0
     files: List[str] = field(default_factory=list)

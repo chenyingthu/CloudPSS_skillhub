@@ -21,6 +21,30 @@ class HarmonicAnalysisAnalysis:
         self.logs: list[LogEntry] = []
         self.artifacts: list[Artifact] = []
 
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "skill": {"type": "string", "const": "harmonic_analysis", "default": "harmonic_analysis"},
+                "waveform": {
+                    "type": "object",
+                    "properties": {
+                        "values": {"type": "array", "items": {"type": "number"}, "default": []},
+                        "sample_rate": {"type": "number", "default": 1000},
+                    },
+                },
+                "output": {
+                    "type": "object",
+                    "properties": {
+                        "format": {"enum": ["json", "csv"], "default": "json"},
+                        "path": {"type": "string", "default": "./results/"},
+                        "prefix": {"type": "string", "default": "harmonic_analysis"},
+                    },
+                },
+            },
+        }
+
     def get_default_config(self) -> dict[str, Any]:
         return {
             "skill": self.name,

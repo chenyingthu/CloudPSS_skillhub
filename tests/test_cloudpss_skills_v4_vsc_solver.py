@@ -5,7 +5,7 @@ from typing import Any
 
 VSC_SKILL_SCRIPTS = (
     Path(__file__).resolve().parents[1]
-    / "cloudpss_skills_v3"
+    / "cloudpss_skills_v4"
     / "skills"
     / "paper2skill-v0.0.1"
     / "vsc-short-circuit-nr"
@@ -23,9 +23,9 @@ def _load_script_module(module_name: str, file_name: str) -> Any:
     return module
 
 
-def test_v3_vsc_local_validation_scenario_converges():
-    scenarios = _load_script_module("v3_vsc_scenarios_test", "scenarios.py")
-    solver_module = _load_script_module("v3_vsc_solver_test", "vsc_nr_solver.py")
+def test_v4_vsc_local_validation_scenario_converges():
+    scenarios = _load_script_module("v4_vsc_scenarios_test", "scenarios.py")
+    solver_module = _load_script_module("v4_vsc_solver_test", "vsc_nr_solver.py")
 
     admittance_matrix, slack_bus = scenarios.build_ieee14_admittance_matrix()
     scenario = scenarios.LOCAL_VALIDATION_SCENARIOS["single_vsc_pss_fault"]
@@ -48,8 +48,8 @@ def test_v3_vsc_local_validation_scenario_converges():
     assert result.mode_history
 
 
-def test_v3_vsc_test_system_1_strict_regression_stays_red_until_network_is_recovered():
-    validation = _load_script_module("v3_vsc_validation_test", "run_validation.py")
+def test_v4_vsc_test_system_1_strict_regression_stays_red_until_network_is_recovered():
+    validation = _load_script_module("v4_vsc_validation_test", "run_validation.py")
 
     report = validation.evaluate_test_system_1_regression(verbose=False)
 
@@ -59,8 +59,8 @@ def test_v3_vsc_test_system_1_strict_regression_stays_red_until_network_is_recov
     assert any(not case["passed"] for case in report["cases"])
 
 
-def test_v3_vsc_load_impedance_option_uses_paper_equation_5():
-    reconstruction = _load_script_module("v3_vsc_reconstruction_test", "test_system_1_reconstruction.py")
+def test_v4_vsc_load_impedance_option_uses_paper_equation_5():
+    reconstruction = _load_script_module("v4_vsc_reconstruction_test", "test_system_1_reconstruction.py")
 
     base_ybus, _, bus_index = reconstruction.build_test_system_1_admittance_matrix()
     loaded_ybus, _, _ = reconstruction.build_test_system_1_admittance_matrix(
@@ -80,8 +80,8 @@ def test_v3_vsc_load_impedance_option_uses_paper_equation_5():
     assert abs(actual_bus1_delta - expected_bus1_delta) < 1e-12
 
 
-def test_v3_vsc_grid_support_reactive_reference_matches_equation_2():
-    solver_module = _load_script_module("v3_vsc_solver_equation_test", "vsc_nr_solver.py")
+def test_v4_vsc_grid_support_reactive_reference_matches_equation_2():
+    solver_module = _load_script_module("v4_vsc_solver_equation_test", "vsc_nr_solver.py")
     solver = solver_module.PaperFaithfulShortCircuitSolver()
     converter = solver_module.VSCConverter(
         bus=0,
@@ -96,9 +96,9 @@ def test_v3_vsc_grid_support_reactive_reference_matches_equation_2():
     assert abs(solver._reactive_power_reference(converter, 0.722 + 0.0j) - 0.384826) < 1e-6
 
 
-def test_v3_vsc_test_system_2_probe_uses_figure_4_ieee14_assumptions():
-    scenarios = _load_script_module("v3_vsc_scenarios_ts2_test", "scenarios.py")
-    validation = _load_script_module("v3_vsc_validation_ts2_test", "run_validation.py")
+def test_v4_vsc_test_system_2_probe_uses_figure_4_ieee14_assumptions():
+    scenarios = _load_script_module("v4_vsc_scenarios_ts2_test", "scenarios.py")
+    validation = _load_script_module("v4_vsc_validation_ts2_test", "run_validation.py")
 
     assert [bus + 1 for bus in scenarios.TEST_SYSTEM_2_VSC_BUSES] == [2, 3, 6, 8, 10, 12, 13, 14]
     assert scenarios.TEST_SYSTEM_2_FAULT_BUS + 1 == 11

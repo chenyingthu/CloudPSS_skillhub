@@ -59,13 +59,14 @@ cloudpss-run = "cloudpss_skills.__main__:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["cloudpss_skills*"]
+exclude = ["cloudpss_skills_v4.papers*"]
 
 [tool.black]
 line-length = 100
 target-version = ['py38']
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "cloudpss_skills_v3/master_organizer/tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

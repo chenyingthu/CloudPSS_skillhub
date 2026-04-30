@@ -25,21 +25,27 @@ class FaultSeverityScanAnalysis:
             "type": "object",
             "required": ["model", "scan"],
             "properties": {
-                "model": {"type": "object", "required": ["rid"]},
+                "skill": {"type": "string", "const": "fault_severity_scan", "default": "fault_severity_scan"},
+                "model": {
+                    "type": "object",
+                    "required": ["rid"],
+                    "properties": {"rid": {"type": "string", "default": ""}},
+                },
                 "fault": {
                     "type": "object",
                     "properties": {
-                        "location": {"type": "string"},
+                        "location": {"type": "string", "default": ""},
                         "reference_voltage": {"type": "number", "default": 1.0},
                     },
                 },
                 "scan": {
                     "type": "object",
                     "properties": {
-                        "chg_values": {"type": "array", "items": {"type": "number"}},
+                        "chg_values": {"type": "array", "items": {"type": "number"}, "default": []},
                         "voltage_drops": {
                             "type": "array",
                             "items": {"type": "number"},
+                            "default": [],
                         },
                     },
                 },

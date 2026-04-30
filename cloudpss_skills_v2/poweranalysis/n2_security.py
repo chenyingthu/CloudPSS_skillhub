@@ -43,20 +43,30 @@ class N2SecurityAnalysis:
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
-                    "default": "cloudpss",
+                    "default": "pandapower",
+                },
+                "auth": {
+                    "type": "object",
+                    "properties": {
+                        "token": {"type": "string", "default": "local-pandapower-token"},
+                    },
                 },
                 "model": {
                     "type": "object",
                     "required": ["rid"],
+                    "properties": {
+                        "rid": {"type": "string", "default": "case14"},
+                        "source": {"enum": ["cloud", "local"], "default": "local"},
+                    },
                 },
                 "analysis": {
                     "type": "object",
                     "properties": {
-                        "branches": {"type": "array", "items": {"type": "string"}, "default": []},
+                        "branches": {"type": "array", "items": {"type": "string"}, "default": ["line:0", "line:1"]},
                         "check_voltage": {"type": "boolean", "default": True},
                         "voltage_threshold": {"type": "number", "default": 0.05},
                         "thermal_threshold": {"type": "number", "default": 1.0},
-                        "max_scenarios": {"type": "integer", "default": 100},
+                        "max_scenarios": {"type": "integer", "default": 1},
                     },
                 },
             },

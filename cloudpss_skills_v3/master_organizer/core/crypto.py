@@ -8,7 +8,7 @@
 import base64
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 
 class CryptoManager:
@@ -242,7 +242,7 @@ class MockCryptoManager:
 
     def encrypt_dict(self, data: dict) -> dict:
         """模拟加密字典"""
-        return {k: f"MOCK:{self.encrypt(v)}" if isinstance(v, str) else v
+        return {k: self.encrypt(v) if isinstance(v, str) else v
                 for k, v in data.items()}
 
     def decrypt_dict(self, data: dict) -> dict:
@@ -251,21 +251,22 @@ class MockCryptoManager:
                 for k, v in data.items()}
 
 
-def get_crypto_manager(key_path: Optional[Path] = None) -> CryptoManager:
+def get_crypto_manager(key_path: Optional[Path] = None, *, allow_mock: bool = False) -> Union[CryptoManager, MockCryptoManager]:
     """
     获取加密管理器实例
 
-    如果 cryptography 包未安装，返回 MockCryptoManager。
+    生产路径必须使用 CryptoManager。测试需要 mock 时显式传入
+    allow_mock=True。
     """
     try:
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        del AESGCM
         return CryptoManager(key_path)
     except ImportError:
-        import warnings
-        warnings.warn(
-            "cryptography package not installed. "
-            "Using mock encryption (NOT SECURE for production). "
-            "Install with: pip install cryptography",
-            RuntimeWarning
+        if allow_mock:
+            return MockCryptoManager(key_path)
+        raise ImportError(
+            "cryptography package is required for production encryption. "
+            "Install with: pip install cryptography, or pass allow_mock=True "
+            "only in tests."
         )
-        return MockCryptoManager(key_path)

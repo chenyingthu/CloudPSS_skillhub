@@ -63,7 +63,6 @@ class ConfigManager:
     # 配置文件名
     CONFIG_FILES = {
         "user": "user.yaml",
-        "servers": "servers.yaml",
         "defaults": "defaults.yaml",
     }
 

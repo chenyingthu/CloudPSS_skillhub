@@ -33,12 +33,12 @@ class FaultClearingScanAnalysis:
                 "model": {
                     "type": "object",
                     "required": ["rid"],
-                    "properties": {"rid": {"type": "string", "default": "model/holdme/IEEE39"}},
+                    "properties": {"rid": {"type": "string", "default": ""}},
                 },
                 "fault": {
                     "type": "object",
                     "properties": {
-                        "bus": {"type": "string"},
+                        "bus": {"type": "string", "default": ""},
                         "type": {"type": "string", "default": "3ph"},
                     },
                 },
@@ -48,6 +48,7 @@ class FaultClearingScanAnalysis:
                         "clearing_times": {
                             "type": "array",
                             "items": {"type": "number"},
+                            "default": [],
                         },
                     },
                 },
@@ -61,6 +62,7 @@ class FaultClearingScanAnalysis:
                             "stable": {"type": "boolean"},
                         },
                     },
+                    "default": [],
                 },
             },
         }

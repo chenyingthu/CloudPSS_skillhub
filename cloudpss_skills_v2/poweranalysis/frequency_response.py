@@ -30,12 +30,21 @@ class FrequencyResponseAnalysis:
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
-                    "default": "cloudpss",
+                    "default": "pandapower",
+                },
+                "auth": {
+                    "type": "object",
+                    "properties": {
+                        "token": {"type": "string", "default": "local-pandapower-token"},
+                    },
                 },
                 "model": {
                     "type": "object",
                     "required": ["rid"],
-                    "properties": {"rid": {"type": "string", "default": "model/holdme/IEEE39"}},
+                    "properties": {
+                        "rid": {"type": "string", "default": "case14"},
+                        "source": {"enum": ["cloud", "local"], "default": "local"},
+                    },
                 },
                 "disturbance": {
                     "type": "object",
@@ -47,16 +56,17 @@ class FrequencyResponseAnalysis:
                                 "generator_trip",
                                 "step_load_change",
                             ],
+                            "default": "step_load_change",
                         },
-                        "magnitude": {"type": "number"},
+                        "magnitude": {"type": "number", "default": 0.05},
                     },
                 },
                 "frequency_trace": {
                     "type": "object",
                     "required": ["time", "frequency_hz"],
                     "properties": {
-                        "time": {"type": "array", "items": {"type": "number"}},
-                        "frequency_hz": {"type": "array", "items": {"type": "number"}},
+                        "time": {"type": "array", "items": {"type": "number"}, "default": [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]},
+                        "frequency_hz": {"type": "array", "items": {"type": "number"}, "default": [50.0, 49.95, 49.88, 49.92, 49.98, 50.0]},
                     },
                 },
             },

@@ -30,12 +30,21 @@ class DisturbanceSeverityAnalysis:
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
-                    "default": "cloudpss",
+                    "default": "pandapower",
+                },
+                "auth": {
+                    "type": "object",
+                    "properties": {
+                        "token": {"type": "string", "default": "local-pandapower-token"},
+                    },
                 },
                 "model": {
                     "type": "object",
                     "required": ["rid"],
-                    "properties": {"rid": {"type": "string", "default": "model/holdme/IEEE39"}},
+                    "properties": {
+                        "rid": {"type": "string", "default": "case14"},
+                        "source": {"enum": ["cloud", "local"], "default": "local"},
+                    },
                 },
                 "simulation": {
                     "type": "object",
@@ -56,8 +65,8 @@ class DisturbanceSeverityAnalysis:
                     "type": "object",
                     "required": ["time", "voltage_pu"],
                     "properties": {
-                        "time": {"type": "array", "items": {"type": "number"}},
-                        "voltage_pu": {"type": "array", "items": {"type": "number"}},
+                        "time": {"type": "array", "items": {"type": "number"}, "default": [0.0, 1.0, 2.0, 3.0, 3.9, 4.0, 4.1, 4.5, 5.0, 6.0]},
+                        "voltage_pu": {"type": "array", "items": {"type": "number"}, "default": [1.0, 1.0, 1.0, 1.0, 1.0, 0.5, 0.6, 0.85, 0.98, 1.0]},
                     },
                 },
             },

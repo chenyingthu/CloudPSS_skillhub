@@ -1,56 +1,51 @@
-# CloudPSS SkillHub V3 - Paper to Skills Pipeline
+# CloudPSS SkillHub V3 - Master Organizer
 
-## 愿景
+## 定位
 
-将电力系统领域的学术论文自动转换为可执行的仿真技能（skills）。
+`cloudpss_skills_v3` 只承载 CloudPSS SkillHub 的“收纳大师”管理平台实现。
 
-## 目录结构
+它的目标是把 CloudPSS 的本地工作对象统一整理为五类实体：
 
-```
+- Server
+- Case
+- Variant
+- Task
+- Result
+
+详细设计见 `docs/CLOUDPSS_MASTER_ORGANIZER_PLAN.md`。
+
+## 当前范围
+
+当前目录只包含 Phase 1 基础设施：
+
+```text
 cloudpss_skills_v3/
-├── skills/                          # 生成的skill库
-│   ├── paper2skill-v0.0.1/        # 自动提取的技能
-│   │   └── <skill-name>/
-│   │       ├── SKILL.md
-│   │       └── scripts/
-│   └── human/                     # 手动编写的技能
-├── papers/                         # 论文库
-│   ├── to-read/                   # 待处理论文
-│   ├── reading/                  # 正在处理的
-│   └── processed/                # 已处理
-├── paper2skill/                   # 提取引擎
-│   ├── prompts/                  # Prompt模板
-│   └── workflows/                # 工作流定义
-└── config.yaml
+├── README.md
+├── __init__.py
+└── master_organizer/
+    ├── __init__.py
+    ├── __main__.py
+    ├── core/
+    │   ├── config_manager.py
+    │   ├── crypto.py
+    │   ├── id_generator.py
+    │   ├── models.py
+    │   ├── path_manager.py
+    │   └── registry_base.py
+    └── tests/
+        ├── test_core.py
+        └── verify_phase1.py
 ```
 
-## 论文来源
-
-- IEEE PES Transactions
-- Elsevier International Journal of Electrical Power and Energy Systems
-- arXiv (power systems相关)
-
-## 工作流
-
-1. **论文分类** → 判断属于哪个类别（潮流/EMT/故障分析/稳定性等）
-2. **提取** → 使用类别专属prompt提取核心方法
-3. **生成** → 输出SKILL.md格式
-4. **验证** → 用CloudPSS SDK测试验证
-
-## 使用方式
+## 验证
 
 ```bash
-# 放入论文
-cp paper.pdf cloudpss_skills_v3/papers/to-read/
-
-# 运行提取pipeline
-python -m paper2skill extract <paper-id>
-
-# 查看生成的skill
-cat skills/paper2skill-v0.0.1/<skill-name>/SKILL.md
+pytest cloudpss_skills_v3/master_organizer/tests -q
+python cloudpss_skills_v3/master_organizer/tests/verify_phase1.py
+python -m cloudpss_skills_v3.master_organizer
 ```
 
----
+## 边界
 
-*Version: 0.0.1*
-*Date: 2026-04-27*
+论文学习、论文复现、paper2skill 生成技能等研究工作已经迁移到
+`cloudpss_skills_v4/`。不要把新的 paper2skill 资产放回 v3。

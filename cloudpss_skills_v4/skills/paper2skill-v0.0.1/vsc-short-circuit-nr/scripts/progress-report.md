@@ -6,7 +6,7 @@ Deliver a v3 cloudpss-skills package implementing paper doi:10.1016/j.ijepes.202
 ## Completed Work
 
 ### 1. Structure Implementation ✓
-- Built v3 skill package: `cloudpss_skills_v3/skills/paper2skill-v0.0.1/vsc-short-circuit-nr/`
+- Built paper-to-skill package now located at `cloudpss_skills_v4/skills/paper2skill-v0.0.1/vsc-short-circuit-nr/`
 - Implemented `PaperFaithfulShortCircuitSolver` with outer mode loop + inner NR
 - Embedded paper validation targets (Table 2/3/10) in `scenarios.py`
 - Reconstructed Test System 1 network artifact (`test_system_1_network.json`)
@@ -35,12 +35,12 @@ Deliver a v3 cloudpss-skills package implementing paper doi:10.1016/j.ijepes.202
 - Fixed the initial-voltage KCL sign for converter current injections.
 - Added a `verbose` flag so the solver no longer floods validation output by default.
 - Converted the Test System 1 paper-table comparison from a print-only check into a strict, machine-readable regression gate.
-- Added `tests/test_cloudpss_skills_v3_vsc_solver.py` to lock the local convergent validation case and the current strict red paper-reproduction state.
+- Added `tests/test_cloudpss_skills_v4_vsc_solver.py` to lock the local convergent validation case and the current strict red paper-reproduction state.
 
 ### Verification evidence
 - `python3 -m py_compile ...` passed for the v3 solver, validation runner, reconstruction helper, and new pytest file.
-- `pytest tests/test_cloudpss_skills_v3_vsc_solver.py -q` passed: `4 passed`.
-- `python3 cloudpss_skills_v3/skills/paper2skill-v0.0.1/vsc-short-circuit-nr/scripts/run_validation.py` exits with code `1`, as intended, because strict Test System 1 reproduction still fails.
+- `pytest tests/test_cloudpss_skills_v4_vsc_solver.py -q` passes.
+- `python3 cloudpss_skills_v4/skills/paper2skill-v0.0.1/vsc-short-circuit-nr/scripts/run_validation.py` exits with code `1`, as intended, because strict Test System 1 reproduction still fails.
 
 ### Current strict-regression deltas
 - Fixed `test_system_1_network.json` system base from `25.0` to `1.0`, matching `pandapower.networks.create_cigre_network_mv(with_der=False)` / CIGRE TB 575 network base rather than transformer MVA rating.

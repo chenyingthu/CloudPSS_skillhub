@@ -33,22 +33,28 @@ class MaintenanceSecurityAnalysis:
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
-                    "default": "cloudpss",
+                    "default": "pandapower",
+                },
+                "auth": {
+                    "type": "object",
+                    "properties": {
+                        "token": {"type": "string", "default": "local-pandapower-token"},
+                    },
                 },
                 "model": {
                     "type": "object",
                     "required": ["rid"],
                     "properties": {
-                        "rid": {"type": "string", "default": "model/holdme/IEEE39"},
-                        "source": {"enum": ["cloud", "local"], "default": "cloud"},
+                        "rid": {"type": "string", "default": "case14"},
+                        "source": {"enum": ["cloud", "local"], "default": "local"},
                     },
                 },
                 "maintenance": {
                     "type": "object",
                     "required": ["branch_id"],
                     "properties": {
-                        "branch_id": {"type": "string"},
-                        "description": {"type": "string", "default": ""},
+                        "branch_id": {"type": "string", "default": "line:0"},
+                        "description": {"type": "string", "default": "Default N-1 branch outage"},
                         "duration_hours": {"type": "number", "default": 8},
                     },
                 },
