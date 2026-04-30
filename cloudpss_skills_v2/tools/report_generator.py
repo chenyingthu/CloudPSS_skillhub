@@ -61,6 +61,21 @@ class ReportGeneratorTool:
         self.logs = []
         self.artifacts = []
 
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "report": {
+                "title": "CloudPSS Analysis Report",
+                "author": "CloudPSS Toolkit",
+                "skills": [],
+                "skill_results": [],
+            },
+            "output": {
+                "format": "markdown",
+                "path": "/tmp/cloudpss_reports",
+            },
+        }
+
     def _log(self, level: str, message: str) -> None:
         self.logs.append(
             {

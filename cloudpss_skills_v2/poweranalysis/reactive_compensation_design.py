@@ -65,6 +65,7 @@ class ReactiveCompensationDesignAnalysis:
     def get_default_config(self):
         return {
             "skill": self.name,
+            "engine": "cloudpss",
             "auth": {"token_file": ".cloudpss_token"},
             "model": {"rid": "", "source": "cloud"},
             "weak_buses": [],

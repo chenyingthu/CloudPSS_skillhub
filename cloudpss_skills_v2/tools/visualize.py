@@ -122,6 +122,17 @@ class VisualizeTool:
         self.logs = []
         self.artifacts = []
 
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "engine": "pandapower",
+            "model": {"rid": "case14", "source": "local"},
+            "plot": {
+                "type": ["time_series", "bus_voltages"],
+                "channels": [],
+            },
+        }
+
     def _log(self, level: str, message: str) -> None:
         self.logs.append(
             {

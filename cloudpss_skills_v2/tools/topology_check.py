@@ -52,6 +52,18 @@ class TopologyCheckTool:
         self.logs = []
         self.artifacts = []
 
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "engine": "pandapower",
+            "model": {"rid": "case14", "source": "local"},
+            "checks": {
+                "islands": True,
+                "dangling": True,
+                "isolated": True,
+            },
+        }
+
     def _log(self, level: str, message: str) -> None:
         self.logs.append(
             {

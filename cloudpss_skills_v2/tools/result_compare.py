@@ -67,6 +67,18 @@ class ResultCompareTool:
         self.logs = []
         self.artifacts = []
 
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "sources": [],
+            "compare": {
+                "metrics": ["max", "min", "mean"],
+            },
+            "output": {
+                "format": "json",
+            },
+        }
+
     def _log(self, level: str, message: str) -> None:
         self.logs.append(
             {
