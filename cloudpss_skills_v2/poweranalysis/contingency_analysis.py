@@ -83,6 +83,7 @@ class ContingencyAnalysis:
                         "components": {
                             "type": "array",
                             "items": {"type": "string"},
+                            "default": [],
                         },
                         "component_types": {
                             "type": "array",

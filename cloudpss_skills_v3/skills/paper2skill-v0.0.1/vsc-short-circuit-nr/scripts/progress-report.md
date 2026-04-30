@@ -24,7 +24,33 @@ Deliver a v3 cloudpss-skills package implementing paper doi:10.1016/j.ijepes.202
 - Understood PSS = active-power-priority saturation
 - Understood FSS = reactive/fault-support priority saturation
 
-## Current Blocker: Jacobian Singularity
+## Current Status After 2026-04-30 Repair Pass
+
+### What moved
+- Re-read the local paper PDF with `pdftotext` and corrected the mode equations against Section 2.1:
+  - PQ/GS PSS now regulates `|I|` and `Q`, not active power.
+  - PV PSS regulates `|I|` and voltage magnitude.
+  - PQ/PV/GS FSS now regulates `|I|` and `P=0`.
+  - GFM FSS now regulates `|I|` and voltage angle.
+- Fixed the initial-voltage KCL sign for converter current injections.
+- Added a `verbose` flag so the solver no longer floods validation output by default.
+- Converted the Test System 1 paper-table comparison from a print-only check into a strict, machine-readable regression gate.
+- Added `tests/test_cloudpss_skills_v3_vsc_solver.py` to lock the local convergent validation case and the current strict red paper-reproduction state.
+
+### Verification evidence
+- `python3 -m py_compile ...` passed for the v3 solver, validation runner, reconstruction helper, and new pytest file.
+- `pytest tests/test_cloudpss_skills_v3_vsc_solver.py -q` passed: `2 passed`.
+- `python3 cloudpss_skills_v3/skills/paper2skill-v0.0.1/vsc-short-circuit-nr/scripts/run_validation.py` now exits with code `1`, as intended, because strict Test System 1 reproduction still fails.
+
+### Current strict-regression deltas
+- Moderate fault `j0.2`: solver converges, but VSC3 is `FSS` instead of paper `PSS`; VSC1 current is `0.5991 pu` vs paper `2.204 pu`.
+- Severe fault `j0.05`: solver converges, but VSC1 remains `USS` instead of paper `FSS`; VSC1 current is `1.0720 pu` vs paper `2.5 pu`.
+- VSC2/VSC3 current limits do hit `1.0 pu` in the converged strict cases, so the current-limit equations are no longer the primary blocker.
+
+### Current blocker
+The remaining blocker is paper-exact benchmark reconstruction, not generic NR execution. The recovered CIGRE skeleton, `test_system_1_network_corrected.json`, and `test_system_1_network_v3.json` were probed and all miss the paper tables by large margins. The next productive work is to recover or infer the exact Test System 1 network/base data used in the paper, including topology/switch semantics, load-as-impedance treatment, transformer/external-grid handling, and per-unit base mapping.
+
+## Superseded Blocker: Jacobian Singularity
 
 ### Problem
 Even after fixing equation bugs, NR solver fails with "Singular matrix" at iteration 1.
@@ -134,22 +160,20 @@ The validation run with Test System 1 also gave singular matrix, but that might 
 
 ## Next Steps (Priority Order)
 
-### Step1: Test with Proper Network (Unblock Convergence)
-- Run validation with **actual Test System 1 network** (not simple chain)
-- Add diagnostic prints to see voltages/currents at start of NR iteration
-- If voltages are near zero, need to improve initial guess (maybe use power flow solution as starting point)
+### Step1: Recover paper-exact Test System 1 data
+- Confirm whether the benchmark is the open pandapower CIGRE MV network unchanged or a modified CIGRE-derived case.
+- Confirm switch semantics from the paper Figure 1 before applying switch pruning in code.
+- Add load impedances from pre-fault load data if the paper uses the equivalent-load model from Eq. (5).
+- Confirm per-unit base values for the islanded system and VSC current bases.
 
-### Step2: Re-examine PSS Equations from Paper
-- The power-factor equation `P*q_ref - Q*p_ref = 0` is likely wrong
-- Paper Table 2: VSC3 PSS has P=-0.572, Q=0.403 → Q/P = -0.703
-- Original Q_ref/P_ref = -0.023/-0.8 = 0.0288 → **Completely different!**
-- **Need to find paper's exact PSS formulation for GS converter**
+### Step2: Keep strict regression red until paper agreement is real
+- Do not mark `run_validation.py` successful while `strict_paper_regression.passed` is false.
+- Use `evaluate_test_system_1_regression(verbose=False)` for programmatic checks.
+- Only flip the red test after converter modes and currents match the paper tables within tolerance.
 
-### Step3: Fix GFM-FSS Voltage Treatment
-- Paper shows VSC1 GFM-FSS has U=0.556∠0° (voltage collapses)
-- GFM-FSS should have 2 equations: `|I|² = I_max²` and some constraint on voltage
-- Currently, GFM at slack bus has special treatment: only 1 equation (`|I|² = I_max²` or `|U| = u_ref`)
-- Need to allow GFM voltage magnitude to vary in FSS
+### Step3: Extend strict data coverage
+- Once Test System 1 is resolved, add strict checks for Test System 2 fault-current tables at 25%, 50%, and 75% penetration.
+- Keep source-backed targets in `scenarios.py`; do not rely on mock-only claims.
 
 ### Step4: Implement Warm-Start Properly
 - When outer loop switches modes, reuse previous solution
@@ -169,31 +193,13 @@ The validation run with Test System 1 also gave singular matrix, but that might 
 | Test System 1 network | ⚠️ Partial | CIGRE MV skeleton, missing impedances |
 | Paper targets embedded | ✅ Complete | Table 2/3/10 in scenarios.py |
 | Solver structure | ✅ Complete | Outer loop + inner NR |
-| Mode classification | ⚠️ Partial | PV→FSS fixed, GFM logic OK |
-| PSS equations | ❌ Wrong | Power-factor equation not paper-faithful |
-| FSS equations | ⚠️ Partial | Current limit OK, GFM-FSS incomplete |
-| Initial guess | ❌ Broken | Causes singularity for saturated modes |
+| Mode classification | ⚠️ Partial | Runs, but cannot be fully validated before paper-exact network recovery |
+| PSS equations | ✅ Repaired | Aligned to paper Eq. (1)/(3): current plus Q or U |
+| FSS equations | ✅ Repaired | Aligned to paper Eq. (1)/(3)/(4): current plus P=0 or theta |
+| Initial guess | ✅ Repaired | Converter-current KCL sign fixed; local validation converges |
 | Numerical reproduction | ❌ Failed | Convergence fails, no paper agreement |
-
-## Estimated Effort
-- Step 1 (warm start): 1-2 hours
-- Step 2 (PSS equations): 2-4 hours (may need paper re-reading)
-- Step 3 (GFM-FSS): 1-2 hours
-- Step 4 (validation): 2-3 hours
-
-**Total remaining**: 6-11 hours of focused debugging.
-
-## Critical Dependencies
-1. **Paper Section 2.2-2.4**: Need exact PSS/FSS/GFM equations
-2. **Test System 1 network**: Need complete impedance data for blind reproduction
-3. **Mode transition logic**: Need to match paper's iterative algorithm
-
-## User Confirmation Needed
-Before proceeding with Steps 1-4, please confirm:
-1. Should I focus on **warm-start fix** first (to unblock convergence)?
-2. Or should I **re-derive all PSS/FSS equations** from paper first?
-3. Do you have **clearer paper excerpts** for PSS (GS converter) and GFM-FSS equations?
+| Strict validation exit code | ✅ Repaired | `run_validation.py` exits `1` while strict paper reproduction is false |
 
 ---
-*Report generated: 2026-04-30*
-*Next update: After fixing initial guess or obtaining paper equations*
+*Updated: 2026-04-30*
+*Next update: after recovering paper-exact Test System 1 network/base data*

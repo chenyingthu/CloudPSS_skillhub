@@ -52,9 +52,9 @@ class BatchPowerFlowAnalysis:
                     "items": {
                         "type": "object",
                         "properties": {
-                            "rid": {"type": "string", "default": "model/holdme/IEEE39"},
-                            "name": {"type": "string", "default": ""},
-                            "source": {"enum": ["cloud", "local"], "default": "cloud"},
+                            "rid": {"type": "string", "default": "case14"},
+                            "name": {"type": "string", "default": "IEEE14"},
+                            "source": {"enum": ["cloud", "local"], "default": "local"},
                         },
                         "required": ["rid"],
                     },

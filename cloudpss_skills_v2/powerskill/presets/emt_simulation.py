@@ -54,7 +54,7 @@ class EMTPreset:
                     "type": "object",
                     "required": ["rid"],
                     "properties": {
-                        "rid": {"type": "string", "default": "model/holdme/IEEE39"},
+                        "rid": {"type": "string", "default": "model/holdme/IEEE3"},
                         "source": {"enum": ["cloud", "local"], "default": "cloud"},
                     },
                 },
@@ -88,6 +88,7 @@ class EMTPreset:
                         "channels": {
                             "type": "array",
                             "items": {"type": "string"},
+                            "default": ["*"],
                         },
                     },
                 },

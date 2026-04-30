@@ -30,6 +30,13 @@ class TransientStabilityAnalysis:
                     "enum": ["cloudpss", "pandapower"],
                     "default": "cloudpss",
                 },
+                "auth": {
+                    "type": "object",
+                    "properties": {
+                        "token": {"type": "string"},
+                        "token_file": {"type": "string", "default": ".cloudpss_token"},
+                    },
+                },
                 "model": {
                     "type": "object",
                     "required": ["rid"],
@@ -43,7 +50,7 @@ class TransientStabilityAnalysis:
                         "fault": {
                             "type": "object",
                             "properties": {
-                                "bus": {"type": "string"},
+                                "bus": {"type": "string", "default": ""},
                                 "type": {"type": "string", "default": "3ph"},
                                 "duration": {"type": "number", "default": 0.1},
                             },
@@ -54,10 +61,31 @@ class TransientStabilityAnalysis:
                     "type": "object",
                     "required": ["angles_deg"],
                     "properties": {
-                        "time": {"type": "array", "items": {"type": "number"}},
-                        "angles_deg": {"type": "array", "items": {"type": "number"}},
+                        "time": {"type": "array", "items": {"type": "number"}, "default": []},
+                        "angles_deg": {"type": "array", "items": {"type": "number"}, "default": []},
                     },
                 },
+            },
+        }
+
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "engine": "cloudpss",
+            "auth": {"token_file": ".cloudpss_token"},
+            "model": {"rid": "model/holdme/IEEE39"},
+            "simulation": {
+                "duration": 10.0,
+                "time_step": 0.01,
+                "fault": {
+                    "bus": "",
+                    "type": "3ph",
+                    "duration": 0.1,
+                },
+            },
+            "rotor_angle_trace": {
+                "time": [],
+                "angles_deg": [],
             },
         }
 

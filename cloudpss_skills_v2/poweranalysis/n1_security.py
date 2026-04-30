@@ -83,6 +83,7 @@ class N1SecurityAnalysis:
                         "branches": {
                             "type": "array",
                             "items": {"type": "string"},
+                            "default": [],
                         },
                         "check_voltage": {"type": "boolean", "default": True},
                         "check_thermal": {"type": "boolean", "default": True},

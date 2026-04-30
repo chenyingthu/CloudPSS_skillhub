@@ -10,7 +10,14 @@ This package currently validates two things:
 
 # Expected Runner Behavior
 
-Running `python scripts/run_validation.py` should produce JSON containing:
+Running `python scripts/run_validation.py` now has two layers:
+
+1. It prints the standalone package validation JSON.
+2. It runs a strict Test System 1 regression against the paper tables.
+
+The command must return a non-zero exit code while strict paper reproduction remains unresolved. This is intentional: previous versions printed `SOME FAILURES` while still exiting successfully, which allowed false-green handoffs between agents.
+
+The first JSON report should contain:
 
 - `paper_targets.test_system_1` with bus 12 and fault impedances `j0.2 pu` and `j0.05 pu`
 - `paper_targets.test_system_2` with 8 VSCs and penetration levels `0.25`, `0.5`, `0.75`
@@ -22,6 +29,20 @@ Running `python scripts/run_validation.py` should produce JSON containing:
 - `mode_history` for the VSC case
 - a difference between baseline and VSC fault current magnitude
 - an explicit `limitations` list
+
+The strict regression output should contain `strict_paper_regression` with:
+
+- `passed: false` until paper-exact Test System 1 network/base data are recovered
+- one case record for `moderate_fault`
+- one case record for `severe_fault`
+- per-converter mode checks and current-magnitude checks
+- the blocking reason: paper-exact Test System 1 network/base data are not yet reconstructed well enough for numerical reproduction
+
+Current expected strict status:
+
+- local IEEE14 validation: pass
+- Test System 1 numerical reproduction: fail
+- `python scripts/run_validation.py`: exit code `1`
 
 # Non-Claims
 

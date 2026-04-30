@@ -72,6 +72,7 @@ class PaperFaithfulShortCircuitSolver:
         exit_tolerance: float = 1e-4,
         damping_factor: float = 0.5,
         use_damping: bool = True,
+        verbose: bool = False,
     ) -> None:
         self.tolerance = tolerance
         self.max_iter = max_iter
@@ -79,6 +80,7 @@ class PaperFaithfulShortCircuitSolver:
         self.exit_tolerance = exit_tolerance
         self.damping_factor = damping_factor  # Damped Newton: x_new = x_old + damping * delta
         self.use_damping = use_damping
+        self.verbose = verbose
 
     def solve(
         self,
@@ -122,7 +124,13 @@ class PaperFaithfulShortCircuitSolver:
             )
             if last_inner.converged:
                 last_state_vector = last_inner.internal_state_vector  # Save for warm-start
-            updated_modes = self._classify_modes(converters, last_inner.voltages, last_inner.current_injections, modes)
+            updated_modes = self._classify_modes(
+                converters,
+                last_inner.voltages,
+                last_inner.current_injections,
+                modes,
+                inner_converged=last_inner.converged,
+            )
             if updated_modes == modes:
                 return self._build_result(
                     outer_iterations=outer_iteration,
@@ -206,8 +214,17 @@ class PaperFaithfulShortCircuitSolver:
                     converter = converters[converter_index]
                     voltage = voltages[converter.bus]
                     angle = np.angle(voltage) if abs(voltage) > 1e-9 else 0.0
-                    active_currents[position] = converter.i_max * np.exp(1j * angle)
+                    active_currents[position] = self._limited_current_initial_guess(converter, voltage, mode)
                     modified = True
+                else:
+                    converter = converters[converter_index]
+                    voltage = voltages[converter.bus]
+                    if mode == "FSS" and converter.control_mode != "GFM":
+                        active_currents[position] = self._limited_current_initial_guess(converter, voltage, mode)
+                        modified = True
+                    else:
+                        active_currents[position] = converter.i_max * current / abs(current)
+                        modified = True
             if modified:
                 state_vector[layout.current_real_slice] = active_currents.real
                 state_vector[layout.current_imag_slice] = active_currents.imag
@@ -225,7 +242,7 @@ class PaperFaithfulShortCircuitSolver:
                 layout=layout,
             )
             max_residual = float(np.max(np.abs(residual))) if residual.size else 0.0
-            if iteration <= 3 or iteration % 10 == 0:  # Debug output
+            if self.verbose and (iteration <= 3 or iteration % 10 == 0):
                 voltages_debug, active_currents_debug = self._decode_solution(state_vector, layout)
                 debug_msg = f"  Iter {iteration}: |res|={max_residual:.6f}, V[0]={voltages_debug[0]:.6f}"
                 if len(voltages_debug) > 5:
@@ -394,7 +411,7 @@ class PaperFaithfulShortCircuitSolver:
                 continue
             bus_voltage = voltages[bus]  # Initial guess: slack_voltage
             if mode in ("PSS", "FSS"):
-                current_injections[bus] = converter.i_max * np.exp(1j * np.angle(bus_voltage))
+                current_injections[bus] = self._limited_current_initial_guess(converter, bus_voltage, mode)
             else:
                 # USS: I = conj(S_ref / V)
                 s_ref = complex(converter.p_ref, converter.q_ref)
@@ -402,7 +419,7 @@ class PaperFaithfulShortCircuitSolver:
         # Adjust RHS for buses with converter injections
         for position, bus in enumerate(layout.non_reference_buses):
             if bus in current_injections:
-                rhs[position] -= current_injections[bus]
+                rhs[position] += current_injections[bus]
         solved_non_reference = np.linalg.solve(reduced_matrix, rhs)
         for position, bus in enumerate(layout.non_reference_buses):
             voltages[bus] = solved_non_reference[position]
@@ -416,8 +433,7 @@ class PaperFaithfulShortCircuitSolver:
                 currents[position] = 0.0 + 0.0j
                 continue
             if mode in ("PSS", "FSS"):
-                voltage_angle = np.angle(bus_voltage)
-                currents[position] = converter.i_max * np.exp(1j * voltage_angle)
+                currents[position] = self._limited_current_initial_guess(converter, bus_voltage, mode)
             else:
                 complex_power = complex(converter.p_ref, converter.q_ref)
                 currents[position] = np.conj(complex_power / bus_voltage)
@@ -437,6 +453,32 @@ class PaperFaithfulShortCircuitSolver:
         state_vector[layout.current_real_slice] = currents.real
         state_vector[layout.current_imag_slice] = currents.imag
         return state_vector
+
+    def _reactive_power_reference(self, converter: VSCConverterSpec, voltage: complex) -> float:
+        voltage_magnitude = abs(voltage)
+        if converter.control_mode == "GS":
+            return voltage_magnitude * (
+                converter.q_ref + converter.k_isp * (converter.u_ref_gs - voltage_magnitude)
+            )
+        return converter.q_ref
+
+    def _reactive_power_reference_derivative(self, converter: VSCConverterSpec, voltage: complex) -> float:
+        if converter.control_mode != "GS":
+            return 0.0
+        voltage_magnitude = abs(voltage)
+        del voltage_magnitude
+        return converter.q_ref + converter.k_isp * converter.u_ref_gs - 2.0 * converter.k_isp * abs(voltage)
+
+    def _limited_current_initial_guess(
+        self,
+        converter: VSCConverterSpec,
+        voltage: complex,
+        mode: ModeName,
+    ) -> complex:
+        voltage_angle = np.angle(voltage) if abs(voltage) > 1e-9 else 0.0
+        if mode == "FSS" and converter.control_mode != "GFM":
+            return converter.i_max * np.exp(1j * (voltage_angle - math.pi / 2.0))
+        return converter.i_max * np.exp(1j * voltage_angle)
 
     def _decode_solution(
         self,
@@ -527,9 +569,8 @@ class PaperFaithfulShortCircuitSolver:
                 residual[row] = I_ref.real**2 + I_ref.imag**2 - ref_conv.i_max**2
             # Second equation for slack bus with GFM converter
             if ref_conv.control_mode == "GFM" and modes[reference_converter_index] == "FSS":
-                # GFM-FSS: P = 0 (gives up active power), angle fixed at 0
-                v_slack = voltages[slack_bus]
-                residual[row + 1] = v_slack.real * I_ref.real + v_slack.imag * I_ref.imag  # P = 0
+                # Paper Eq. (4): GFM-FSS regulates current magnitude and voltage angle.
+                residual[row + 1] = voltages[slack_bus].imag
             else:
                 # For non-GFM or USS: fix angle at 0 (slack reference)
                 residual[row + 1] = voltages[slack_bus].imag  # V_imag = 0
@@ -555,18 +596,20 @@ class PaperFaithfulShortCircuitSolver:
                     residual[row] = reactive_power - converter.q_ref
                 row += 1
             elif mode == "PSS":
-                # PSS: |I| = I_max, P = P_ref
-                residual[row] = current_square - converter.i_max**2
-                residual[row + 1] = active_power - converter.p_ref  # P = P_ref
-                row += 2
-            else:  # FSS
-                # FSS: |I| = I_max, P = 0 (give up active power)
+                # Paper Eq. (1)/(3): PSS regulates current magnitude plus Q (PQ/GS) or U (PV).
                 residual[row] = current_square - converter.i_max**2
                 if converter.control_mode == "PV":
-                    residual[row + 1] = active_power  # P = 0 for PV-FSS
+                    residual[row + 1] = abs(voltage) - converter.u_ref
                 else:
-                    # GFM-FSS: Q = 0 (pure active, power factor = 1.0)
-                    residual[row + 1] = reactive_power  # Q = 0
+                    residual[row + 1] = reactive_power - self._reactive_power_reference(converter, voltage)
+                row += 2
+            else:  # FSS
+                # Paper Eq. (1)/(3): GFL-FSS regulates current magnitude and gives up active power.
+                residual[row] = current_square - converter.i_max**2
+                if converter.control_mode == "GFM":
+                    residual[row + 1] = voltage.imag
+                else:
+                    residual[row + 1] = active_power
                 row += 2
         return residual
 
@@ -634,16 +677,7 @@ class PaperFaithfulShortCircuitSolver:
                     jacobian[row, vi_start + col_bus] = 2.0 * (ref_current.imag * y.real - ref_current.real * y.imag)
             # Second row: GFM-FSS: P=0 (gives up active power); non-GFM: V_imag=0
             if reference_converter.control_mode == "GFM" and modes[reference_converter_index] == "FSS":
-                ref_current = currents[reference_converter_index]
-                ref_voltage = voltages[slack_bus]
-                for col_bus in range(layout.bus_count):
-                    y = network_matrix[slack_bus, col_bus]
-                    jacobian[row + 1, vr_start + col_bus] = (
-                        (ref_current.real if col_bus == slack_bus else 0.0) + ref_voltage.real * y.real + ref_voltage.imag * y.imag
-                    )
-                    jacobian[row + 1, vi_start + col_bus] = (
-                        (ref_current.imag if col_bus == slack_bus else 0.0) + ref_voltage.real * (-y.imag) + ref_voltage.imag * y.real
-                    )
+                jacobian[row + 1, vi_start + slack_bus] = 1.0
             else:
                 jacobian[row + 1, vi_start + slack_bus] = 1.0
         row += 2
@@ -669,9 +703,9 @@ class PaperFaithfulShortCircuitSolver:
                     jacobian[row, vi_col] = voltage.imag / voltage_magnitude
                 elif converter.control_mode == "GS":
                     voltage_magnitude = max(abs(voltage), 1e-12)
-                    support_slope = converter.k_isp
-                    jacobian[row, vr_col] = -current.imag + support_slope * voltage.real / voltage_magnitude
-                    jacobian[row, vi_col] = current.real + support_slope * voltage.imag / voltage_magnitude
+                    dqref_du = self._reactive_power_reference_derivative(converter, voltage)
+                    jacobian[row, vr_col] = -current.imag - dqref_du * voltage.real / voltage_magnitude
+                    jacobian[row, vi_col] = current.real - dqref_du * voltage.imag / voltage_magnitude
                     jacobian[row, ir_col] = voltage.imag
                     jacobian[row, ii_col] = -voltage.real
                 else:
@@ -681,44 +715,35 @@ class PaperFaithfulShortCircuitSolver:
                     jacobian[row, ii_col] = -voltage.real
                 row += 1
             elif mode == "PSS":
-                # PSS = Power-Supporting System: maintain P = P_ref, |I| = I_max
-                eps = 1e-8
-                jacobian[row, vr_col] = 2.0 * max(abs(current.real), eps)
-                jacobian[row, vi_col] = 2.0 * max(abs(current.imag), eps)
-                # Second equation: P = P_ref (maintain active power)
-                # P = V_r*I_r + V_i*I_i
-                jacobian[row + 1, vr_col] = current.real
-                jacobian[row + 1, vi_col] = current.imag
-                jacobian[row + 1, ir_col] = voltage.real
-                jacobian[row + 1, ii_col] = voltage.imag
+                jacobian[row, ir_col] = 2.0 * current.real
+                jacobian[row, ii_col] = 2.0 * current.imag
+                if converter.control_mode == "PV":
+                    voltage_magnitude = max(abs(voltage), 1e-12)
+                    jacobian[row + 1, vr_col] = voltage.real / voltage_magnitude
+                    jacobian[row + 1, vi_col] = voltage.imag / voltage_magnitude
+                else:
+                    voltage_magnitude = max(abs(voltage), 1e-12)
+                    dqref_du = self._reactive_power_reference_derivative(converter, voltage)
+                    jacobian[row + 1, vr_col] = -current.imag - dqref_du * voltage.real / voltage_magnitude
+                    jacobian[row + 1, vi_col] = current.real - dqref_du * voltage.imag / voltage_magnitude
+                    jacobian[row + 1, ir_col] = voltage.imag
+                    jacobian[row + 1, ii_col] = -voltage.real
                 row += 2
             else:  # FSS
                 # Residual: |I|^2 - I_max^2 = 0
                 # Jacobian: d/dvr = 0, d/dvi = 0, d/dir = 2*I_r, d/dii = 2*I_i
-                eps = 1e-8
                 jacobian[row, vr_col] = 0.0
                 jacobian[row, vi_col] = 0.0
-                jacobian[row, ir_col] = 2.0 * max(abs(current.real), eps)
-                jacobian[row, ii_col] = 2.0 * max(abs(current.imag), eps)
+                jacobian[row, ir_col] = 2.0 * current.real
+                jacobian[row, ii_col] = 2.0 * current.imag
                 # Second equation
-                if converter.control_mode == "PV":
-                    # P = 0: dP/dvr = current.real, dP/dvi = current.imag
+                if converter.control_mode == "GFM":
+                    jacobian[row + 1, vi_col] = 1.0
+                else:
                     jacobian[row + 1, vr_col] = current.real
                     jacobian[row + 1, vi_col] = current.imag
                     jacobian[row + 1, ir_col] = voltage.real
                     jacobian[row + 1, ii_col] = voltage.imag
-                elif converter.control_mode == "GFM":
-                    # Q = 0: dQ/dvr = -current.imag, dQ/dvi = current.real
-                    jacobian[row + 1, vr_col] = -current.imag
-                    jacobian[row + 1, vi_col] = current.real
-                    jacobian[row + 1, ir_col] = -voltage.imag
-                    jacobian[row + 1, ii_col] = voltage.real
-                else:
-                    # Default: Q = 0
-                    jacobian[row + 1, vr_col] = -current.imag
-                    jacobian[row + 1, vi_col] = current.real
-                    jacobian[row + 1, ir_col] = -voltage.imag
-                    jacobian[row + 1, ii_col] = voltage.real
                 row += 2
         return jacobian
 
@@ -728,38 +753,55 @@ class PaperFaithfulShortCircuitSolver:
         voltages: NDArray[np.complex128],
         current_injections: NDArray[np.complex128],
         previous_modes: list[ModeName],
+        inner_converged: bool = True,
     ) -> list[ModeName]:
         classified_modes: list[ModeName] = []
         for index, converter in enumerate(converters):
             current_magnitude = abs(current_injections[index])
             if converter.control_mode == "GFM":
-                classified_modes.append("USS" if current_magnitude <= converter.i_max + self.exit_tolerance else "FSS")
-                continue
-            if current_magnitude <= converter.i_max - self.exit_tolerance:
-                classified_modes.append("USS")
-                continue
-            if previous_modes[index] != "USS" and current_magnitude <= converter.i_max + self.exit_tolerance:
-                classified_modes.append(previous_modes[index])
-                continue
-            # Saturated: current > i_max, need to decide PSS vs FSS
-            # Paper logic: PSS = active-power priority, FSS = reactive/fault-support priority
-            # For PV converter (VSC2): when saturated, it gives up P and enters FSS
-            # For GS converter (VSC3): when saturated, it maintains P with modified Q (PSS)
-            if converter.control_mode == "PV":
-                # PV converter: saturated -> FSS (gives up active power)
-                classified_modes.append("FSS")
-            elif converter.control_mode == "GS":
-                # GS converter: can be PSS or FSS depending on preference
-                classified_modes.append(converter.saturation_preference)
-            else:
-                # PQ converter: use saturation_preference or default to PSS
-                bus_voltage = abs(voltages[converter.bus])
-                safe_voltage = max(bus_voltage, 1e-9)
-                reactive_threshold = abs(converter.q_ref) / safe_voltage
-                if converter.saturation_preference == "FSS" or reactive_threshold >= converter.i_max - self.exit_tolerance:
-                    classified_modes.append("FSS")
+                voltage_magnitude = abs(voltages[converter.bus])
+                if previous_modes[index] == "FSS":
+                    classified_modes.append("USS" if voltage_magnitude > converter.u_ref + self.exit_tolerance else "FSS")
                 else:
-                    classified_modes.append("PSS")
+                    classified_modes.append("FSS" if current_magnitude > converter.i_max + self.exit_tolerance else "USS")
+                continue
+            if converter.control_mode == "PV":
+                voltage = voltages[converter.bus]
+                voltage_magnitude = abs(voltage)
+                current = current_injections[index]
+                active_power = voltage.real * current.real + voltage.imag * current.imag
+                reactive_power = voltage.imag * current.real - voltage.real * current.imag
+                if previous_modes[index] == "USS":
+                    total_power_current = abs(complex(active_power, reactive_power)) / max(converter.i_max, 1e-12)
+                    reactive_current = abs(reactive_power) / max(converter.i_max, 1e-12)
+                    if reactive_current < voltage_magnitude < total_power_current:
+                        classified_modes.append("PSS")
+                    elif converter.i_max < abs(reactive_power) / max(voltage_magnitude, 1e-12):
+                        classified_modes.append("FSS")
+                    else:
+                        classified_modes.append("USS")
+                elif previous_modes[index] == "PSS":
+                    if not inner_converged:
+                        classified_modes.append("FSS")
+                    elif abs(active_power) > abs(converter.p_ref) + self.exit_tolerance:
+                        classified_modes.append("USS")
+                    else:
+                        classified_modes.append("PSS")
+                else:
+                    classified_modes.append("PSS" if voltage_magnitude > converter.u_ref + self.exit_tolerance else "FSS")
+                continue
+
+            voltage = voltages[converter.bus]
+            voltage_magnitude = abs(voltage)
+            q_reference = self._reactive_power_reference(converter, voltage)
+            total_power_threshold = abs(complex(converter.p_ref, q_reference)) / max(converter.i_max, 1e-12)
+            reactive_threshold = abs(q_reference) / max(converter.i_max, 1e-12)
+            if total_power_threshold <= voltage_magnitude + self.exit_tolerance:
+                classified_modes.append("USS")
+            elif reactive_threshold <= voltage_magnitude + self.exit_tolerance:
+                classified_modes.append("PSS")
+            else:
+                classified_modes.append("FSS")
         return classified_modes
 
     def _build_result(

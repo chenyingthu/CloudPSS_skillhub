@@ -95,6 +95,7 @@ class VoltageStabilityAnalysis:
                         "buses": {
                             "type": "array",
                             "items": {"type": "string"},
+                            "default": [],
                         },
                         "collapse_threshold": {
                             "type": "number",

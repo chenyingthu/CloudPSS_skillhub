@@ -77,6 +77,7 @@ class ShortCircuitAnalysis:
                     "properties": {
                         "location": {
                             "type": "string",
+                            "default": "Bus7",
                         },
                         "type": {
                             "enum": [
@@ -106,10 +107,12 @@ class ShortCircuitAnalysis:
                         "current_channels": {
                             "type": "array",
                             "items": {"type": "string"},
+                            "default": [],
                         },
                         "voltage_channels": {
                             "type": "array",
                             "items": {"type": "string"},
+                            "default": [],
                         },
                     },
                 },

@@ -1,5 +1,6 @@
 import json
 import importlib.util
+import sys
 from pathlib import Path
 from typing import Any, Protocol, cast
 
@@ -64,10 +65,19 @@ def _compare_current(target_pu: float, actual_pu: float, label: str, tolerance: 
     return error_pct <= tolerance * 100
 
 
-def run_test_system_1_regression():
-    print("=" * 60)
-    print("Test System 1 Regression Against Paper Tables")
-    print("=" * 60)
+def _parse_fault_impedance(value: str) -> complex:
+    return complex(0, float(value[1:])) if value.startswith("j") else complex(value)
+
+
+def _format_voltage(voltage: complex) -> str:
+    return f"{abs(voltage):.4f}∠{np.angle(voltage, deg=True):.1f}°"
+
+
+def evaluate_test_system_1_regression(verbose: bool = True) -> dict[str, Any]:
+    if verbose:
+        print("=" * 60)
+        print("Test System 1 Strict Regression Against Paper Tables")
+        print("=" * 60)
 
     ybus, slack_bus, bus_index = build_test_system_1_admittance_matrix(islanded=True)
     artifact = load_test_system_1_artifact()
@@ -79,72 +89,30 @@ def run_test_system_1_regression():
         for converter in artifact["test_system_1"]["converters"]
     }
 
-    print(f"\nAdmittance matrix: {ybus.shape}, slack_bus={slack_bus} (bus1, islanded mode)")
-    print(f"Converters: {len(converters)}")
-    for i, c in enumerate(converters):
-        print(f"  VSC{i+1}: bus={c.bus}, p_ref={c.p_ref}, q_ref={c.q_ref}, i_max={c.i_max}")
+    if verbose:
+        print(f"\nAdmittance matrix: {ybus.shape}, slack_bus={slack_bus} (bus1, islanded mode)")
+        print(f"Converters: {len(converters)}")
+        for i, c in enumerate(converters):
+            print(f"  VSC{i+1}: bus={c.bus}, p_ref={c.p_ref}, q_ref={c.q_ref}, i_max={c.i_max}")
 
     targets = PAPER_VALIDATION_TARGETS["test_system_1"]
     solver = PaperFaithfulShortCircuitSolver(tolerance=1e-8, max_iter=100, max_outer_iter=20)
-
+    strict_cases = [
+        ("moderate_fault", "moderate_fault_table"),
+        ("severe_fault", "severe_fault_table"),
+    ]
+    case_results = []
     all_pass = True
 
-    for scenario in targets["moderate_fault_table"]["iterations"]:
-        fault_str = targets["moderate_fault_table"]["fault_impedance_pu"]
-        fault_impedance = complex(0, float(fault_str[1:])) if fault_str.startswith("j") else complex(fault_str)
+    for case_name, table_key in strict_cases:
+        table = targets[table_key]
+        fault_str = table["fault_impedance_pu"]
+        fault_impedance = _parse_fault_impedance(fault_str)
+        feasible_target = next(scenario for scenario in table["iterations"] if scenario["feasible"])
 
-        print(f"\n--- Moderate fault (z_ft={fault_str}) ---")
-        print(f"Paper iteration {scenario['iteration']}: states={scenario['vsc_states']}")
-
-        try:
-            result = solver.solve(
-                admittance_matrix=ybus,
-                slack_bus=slack_bus,
-                fault_bus=fault_bus,
-                fault_impedance=fault_impedance,
-                converters=converters,
-                slack_voltage=1.0 + 0.0j,
-            )
-        except LinAlgError as exc:
-            print(f"  [FAIL] Solver error: {exc}")
-            all_pass = False
-            continue
-
-        print(f"  Converged: {result.converged}, outer={result.outer_iterations}, inner={result.inner_iterations}")
-        print(f"  Mode history: {result.mode_history}")
-
-        if not result.converged:
-            print("  [FAIL] Solver did not converge")
-            all_pass = False
-            continue
-
-        for bus_id, mode in result.converter_states.items():
-            print(f"  Bus {bus_id}: {mode}")
-
-        if scenario["iteration"] == 2 and scenario["feasible"]:
-            i_vsc1 = abs(result.current_injections.get(converter_bus_by_id["VSC1"], 0.0))
-            i_vsc2 = abs(result.current_injections.get(converter_bus_by_id["VSC2"], 0.0))
-            i_vsc3 = abs(result.current_injections.get(converter_bus_by_id["VSC3"], 0.0))
-            u1 = result.voltages[converter_bus_by_id["VSC1"]]
-            u12 = result.voltages[fault_bus]
-
-            print(f"\n  Comparing to paper Table 2 iteration 2 (feasible):")
-            ok = _compare_current(2.204, i_vsc1, "i_vsc1")
-            all_pass = ok and all_pass
-            ok = _compare_current(1.0, i_vsc2, "i_vsc2")
-            all_pass = ok and all_pass
-            ok = _compare_current(1.0, i_vsc3, "i_vsc3")
-            all_pass = ok and all_pass
-
-            print(f"  u1: paper=1∠0°, got={abs(u1):.4f}∠{np.angle(u1, deg=True):.1f}°")
-            print(f"  u12: paper=0.700∠-0.1°, got={abs(u12):.4f}∠{np.angle(u12, deg=True):.1f}°")
-
-    for scenario in targets["severe_fault_table"]["iterations"]:
-        fault_str = targets["severe_fault_table"]["fault_impedance_pu"]
-        fault_impedance = complex(0, float(fault_str[1:])) if fault_str.startswith("j") else complex(fault_str)
-
-        print(f"\n--- Severe fault (z_ft={fault_str}) ---")
-        print(f"Paper iteration {scenario['iteration']}: states={scenario['vsc_states']}")
+        if verbose:
+            print(f"\n--- {case_name} (z_ft={fault_str}) ---")
+            print(f"Paper feasible iteration {feasible_target['iteration']}: states={feasible_target['vsc_states']}")
 
         try:
             result = solver.solve(
@@ -156,45 +124,104 @@ def run_test_system_1_regression():
                 slack_voltage=1.0 + 0.0j,
             )
         except LinAlgError as exc:
-            print(f"  [FAIL] Solver error: {exc}")
+            if verbose:
+                print(f"  [FAIL] Solver error: {exc}")
+            case_results.append({"case": case_name, "passed": False, "error": str(exc)})
             all_pass = False
             continue
 
-        print(f"  Converged: {result.converged}, outer={result.outer_iterations}, inner={result.inner_iterations}")
-        print(f"  Mode history: {result.mode_history}")
+        if verbose:
+            print(f"  Converged: {result.converged}, outer={result.outer_iterations}, inner={result.inner_iterations}")
+            print(f"  Mode history: {result.mode_history}")
 
         if not result.converged:
-            print("  [FAIL] Solver did not converge")
+            if verbose:
+                print("  [FAIL] Solver did not converge")
+            case_results.append(
+                {
+                    "case": case_name,
+                    "passed": False,
+                    "converged": False,
+                    "max_residual": result.max_residual,
+                    "mode_history": result.mode_history,
+                }
+            )
             all_pass = False
             continue
 
-        for bus_id, mode in result.converter_states.items():
-            print(f"  Bus {bus_id}: {mode}")
+        mode_checks = {}
+        mode_pass = True
+        for converter_id, expected_mode in feasible_target["vsc_states"].items():
+            bus_id = converter_bus_by_id[converter_id]
+            actual_mode = result.converter_states.get(bus_id)
+            passed = actual_mode == expected_mode
+            mode_checks[converter_id] = {"expected": expected_mode, "actual": actual_mode, "passed": passed}
+            mode_pass = mode_pass and passed
+            if verbose:
+                status = "PASS" if passed else "FAIL"
+                print(f"  [{status}] {converter_id} mode: expected={expected_mode}, got={actual_mode}")
 
-        if scenario["iteration"] == 2 and scenario["feasible"]:
-            i_vsc1 = abs(result.current_injections.get(converter_bus_by_id["VSC1"], 0.0))
-            u1 = result.voltages[converter_bus_by_id["VSC1"]]
-            i_vsc2 = abs(result.current_injections.get(converter_bus_by_id["VSC2"], 0.0))
-            u6 = result.voltages[converter_bus_by_id["VSC2"]]
-            i_vsc3 = abs(result.current_injections.get(converter_bus_by_id["VSC3"], 0.0))
-            u12 = result.voltages[fault_bus]
+        current_checks = {}
+        current_pass = True
+        for converter_id in ("VSC1", "VSC2", "VSC3"):
+            target_key = f"i_{converter_id.lower()}_pu"
+            target_current = float(feasible_target[target_key])
+            actual_current = abs(result.current_injections.get(converter_bus_by_id[converter_id], 0.0))
+            error_pct = abs(actual_current - target_current) / max(target_current, 1e-9) * 100.0
+            passed = error_pct <= 5.0
+            current_checks[converter_id] = {
+                "expected_pu": target_current,
+                "actual_pu": actual_current,
+                "error_percent": error_pct,
+                "passed": passed,
+            }
+            current_pass = current_pass and passed
+            if verbose:
+                status = "PASS" if passed else "FAIL"
+                print(
+                    f"  [{status}] {converter_id} current: "
+                    f"target={target_current:.4f} pu, got={actual_current:.4f} pu, error={error_pct:.1f}%"
+                )
 
-            print(f"\n  Comparing to paper severe fault Table iteration 2 (feasible):")
-            ok = _compare_current(2.5, i_vsc1, "i_vsc1 (FSS limit)")
-            all_pass = ok and all_pass
-            ok = _compare_current(1.0, i_vsc2, "i_vsc2 (FSS limit)")
-            all_pass = ok and all_pass
-            ok = _compare_current(1.0, i_vsc3, "i_vsc3 (FSS limit)")
-            all_pass = ok and all_pass
+        voltage_summary = {
+            "u1": _format_voltage(result.voltages[converter_bus_by_id["VSC1"]]),
+            "u6": _format_voltage(result.voltages[converter_bus_by_id["VSC2"]]),
+            "u12": _format_voltage(result.voltages[fault_bus]),
+        }
+        if verbose:
+            print(f"  Voltages: {voltage_summary}")
 
-            print(f"  u1: paper=0.556∠0°, got={abs(u1):.4f}∠{np.angle(u1, deg=True):.1f}°")
-            print(f"  u6: paper=0.454∠-2.7°, got={abs(u6):.4f}∠{np.angle(u6, deg=True):.1f}°")
-            print(f"  u12: paper=0.222∠10.4°, got={abs(u12):.4f}∠{np.angle(u12, deg=True):.1f}°")
+        case_pass = result.converged and mode_pass and current_pass
+        all_pass = all_pass and case_pass
+        case_results.append(
+            {
+                "case": case_name,
+                "passed": case_pass,
+                "converged": result.converged,
+                "max_residual": result.max_residual,
+                "mode_checks": mode_checks,
+                "current_checks": current_checks,
+                "voltage_summary": voltage_summary,
+                "mode_history": result.mode_history,
+            }
+        )
 
-    print(f"\n{'=' * 60}")
-    print(f"Overall: {'ALL PASS' if all_pass else 'SOME FAILURES'}")
-    print(f"{'=' * 60}")
-    return all_pass
+    if verbose:
+        print(f"\n{'=' * 60}")
+        print(f"Overall: {'ALL PASS' if all_pass else 'SOME FAILURES'}")
+        print(f"{'=' * 60}")
+
+    return {
+        "passed": all_pass,
+        "cases": case_results,
+        "blocking_reason": None
+        if all_pass
+        else "paper-exact Test System 1 network/base data are not yet reconstructed well enough for numerical reproduction",
+    }
+
+
+def run_test_system_1_regression() -> bool:
+    return bool(evaluate_test_system_1_regression(verbose=True)["passed"])
 
 
 def main() -> None:
@@ -272,7 +299,10 @@ def main() -> None:
     }
     print(json.dumps(report, indent=2, sort_keys=True))
 
-    _ = run_test_system_1_regression()
+    strict_regression = evaluate_test_system_1_regression(verbose=True)
+    if not strict_regression["passed"]:
+        print(json.dumps({"strict_paper_regression": strict_regression}, indent=2, sort_keys=True))
+        sys.exit(1)
 
 
 if __name__ == "__main__":
