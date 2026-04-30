@@ -48,6 +48,9 @@ token
 # Results
 results/
 *.log
+
+# Worktrees
+.worktrees/
 test_results/
 validation_results/
 validation_results.json
