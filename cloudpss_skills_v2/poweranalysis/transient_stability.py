@@ -24,7 +24,7 @@ class TransientStabilityAnalysis:
             "type": "object",
             "required": ["skill", "model"],
             "properties": {
-                "skill": {"type": "string", "const": "transient_stability"},
+                "skill": {"type": "string", "const": "transient_stability", "default": "transient_stability"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
@@ -33,7 +33,7 @@ class TransientStabilityAnalysis:
                 "model": {
                     "type": "object",
                     "required": ["rid"],
-                    "properties": {"rid": {"type": "string"}},
+                    "properties": {"rid": {"type": "string", "default": "model/holdme/IEEE39"}},
                 },
                 "simulation": {
                     "type": "object",

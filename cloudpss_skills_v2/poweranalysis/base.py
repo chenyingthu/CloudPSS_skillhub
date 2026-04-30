@@ -11,7 +11,7 @@ from cloudpss_skills_v2.core.skill_result import (
     SkillResult,
     SkillStatus,
 )
-from cloudpss_skills_v2.base import AnalysisBase as NewAnalysisBase
+from cloudpss_skills_v2.base import AnalysisBase
 from cloudpss_skills_v2.powerskill import Engine, ModelHandle, ComponentType
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,15 @@ def _as_float(value, default=0.0) -> float:
         return default
 
 
-class AnalysisBase(ABC):
+class PowerAnalysisBase(ABC):
+    """Power analysis skill base class using PowerSkill APIs.
+
+    This is the recommended base class for all power analysis skills
+    that use the PowerSkill API layer (Engine, PowerFlow, etc.).
+
+    For backward compatibility, AnalysisBase is aliased to this class.
+    """
+
     name: str = ""
     description: str = ""
 
@@ -119,14 +127,19 @@ class AnalysisBase(ABC):
     @abstractmethod
     def run(self, config: dict[str, Any]) -> SkillResult:
         """执行分析
-        
+
         Args:
             config: 配置字典
-            
+
         Returns:
             SkillResult 结果对象
-            
+
         Raises:
             NotImplementedError: 子类必须实现此方法
         """
         raise NotImplementedError("子类必须实现 run() 方法")
+
+
+# Backward compatibility alias
+# TODO: Deprecated, use PowerAnalysisBase instead
+AnalysisBase = PowerAnalysisBase

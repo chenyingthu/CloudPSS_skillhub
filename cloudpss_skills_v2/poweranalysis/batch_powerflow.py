@@ -34,11 +34,11 @@ class BatchPowerFlowAnalysis:
             "type": "object",
             "required": ["skill", "models"],
             "properties": {
-                "skill": {"type": "string", "const": "batch_powerflow"},
+                "skill": {"type": "string", "const": "batch_powerflow", "default": "batch_powerflow"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
-                    "default": "cloudpss",
+                    "default": "pandapower",
                 },
                 "auth": {
                     "type": "object",
@@ -52,12 +52,13 @@ class BatchPowerFlowAnalysis:
                     "items": {
                         "type": "object",
                         "properties": {
-                            "rid": {"type": "string"},
+                            "rid": {"type": "string", "default": "model/holdme/IEEE39"},
                             "name": {"type": "string", "default": ""},
                             "source": {"enum": ["cloud", "local"], "default": "cloud"},
                         },
                         "required": ["rid"],
                     },
+                    "default": [{"rid": "case14", "name": "IEEE14", "source": "local"}],
                     "description": "List of models to calculate",
                 },
                 "algorithm": {

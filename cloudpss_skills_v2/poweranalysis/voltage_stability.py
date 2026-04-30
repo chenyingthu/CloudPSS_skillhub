@@ -51,7 +51,7 @@ class VoltageStabilityAnalysis:
             "type": "object",
             "required": ["skill", "model"],
             "properties": {
-                "skill": {"type": "string", "const": "voltage_stability"},
+                "skill": {"type": "string", "const": "voltage_stability", "default": "voltage_stability"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
@@ -68,7 +68,7 @@ class VoltageStabilityAnalysis:
                     "type": "object",
                     "required": ["rid"],
                     "properties": {
-                        "rid": {"type": "string"},
+                        "rid": {"type": "string", "default": "model/holdme/IEEE39"},
                         "source": {"enum": ["cloud", "local"], "default": "cloud"},
                     },
                 },

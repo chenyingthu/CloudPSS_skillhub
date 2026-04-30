@@ -56,7 +56,7 @@ class N1SecurityAnalysis:
             "type": "object",
             "required": ["skill", "model"],
             "properties": {
-                "skill": {"type": "string", "const": "n1_security"},
+                "skill": {"type": "string", "const": "n1_security", "default": "n1_security"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
@@ -73,7 +73,7 @@ class N1SecurityAnalysis:
                     "type": "object",
                     "required": ["rid"],
                     "properties": {
-                        "rid": {"type": "string"},
+                        "rid": {"type": "string", "default": "model/holdme/IEEE39"},
                         "source": {"enum": ["cloud", "local"], "default": "cloud"},
                     },
                 },

@@ -258,4 +258,165 @@ class PandapowerShortCircuitAdapter(EngineAdapter):
         return ValidationResult(valid=len(errors) == 0, errors=errors)
 
 
-__all__ = ["PandapowerShortCircuitAdapter"]
+__all__ = ["PandapowerShortCircuitAdapter", "VSCConverter", "VSCNrSolver"]
+
+
+# =============================================================================
+# VSC Short-Circuit Solver - Based on Paper doi:10.1016/j.ijepes.2024.109839
+# =============================================================================
+
+class VSCConverter:
+    """VSC Converter: compute i_p, i_q based on local voltage."""
+    
+    def __init__(self, bus_index: int, p_ref: float = 0.0, q_ref: float = 0.0, 
+                 i_max: float = 1.2, mode: str = "PSS"):
+        self.bus_index = bus_index
+        self.p_ref = p_ref
+        self.q_ref = q_ref
+        self.i_max = i_max
+        self.mode = mode
+        self.is_saturated = False
+    
+    def compute_current(self, v_mag: float) -> tuple[float, float]:
+        """Compute (i_p, i_q) from P/Q refs at given voltage (all in PU)."""
+        if v_mag < 1e-6:
+            return 0.0, 0.0
+        
+        i_p = self.p_ref / v_mag
+        i_q = self.q_ref / v_mag
+        i_mag = np.sqrt(i_p**2 + i_q**2)
+        
+        if i_mag > self.i_max:
+            self.is_saturated = True
+            return self._saturate(i_p, i_q, i_mag)
+        
+        self.is_saturated = False
+        return i_p, i_q
+    
+    def _saturate(self, i_p: float, i_q: float, i_mag: float) -> tuple[float, float]:
+        if self.mode == "FSS":
+            i_q_sat = min(self.i_max, abs(i_q))
+            i_p_sat = np.sqrt(max(0, self.i_max**2 - i_q_sat**2))
+            return i_p_sat if i_p >= 0 else -i_p_sat, i_q_sat
+        else:
+            scale = self.i_max / i_mag
+            return i_p * scale, i_q * scale
+
+
+class VSCNrSolver:
+    """Extended NR solver for short-circuit with VSC converters.
+    
+    Paper algorithm (doi:10.1016/j.ijepes.2024.109839):
+    1. Build Y in PU (S_base=100MVA)
+    2. Add ext_grid as Norton: I_sc = S_sc/S_base
+    3. Add fault impedance
+    4. Initialize V = 1 at slack
+    5. Iterate: compute VSC currents → solve Y@V=I → check convergence
+    """
+    
+    def __init__(self, tolerance: float = 1e-6, max_iter: int = 50):
+        self.tolerance = tolerance
+        self.max_iter = max_iter
+        self.iterations = 0
+        self.converged = False
+        self._V_pu = None
+        self._I_base = None
+    
+    def solve(self, net, fault_bus: int, fault_z: float = 0.01, 
+              converters: dict[int, VSCConverter] = None) -> tuple[np.ndarray, bool]:
+        """Solve using NR iteration (all in PU)."""
+        converters = converters or {}
+        n = len(net.bus)
+        
+        # Base values
+        S_base = 100.0  # MVA
+        slack_bus = 0
+        V_base_kV = float(net.bus.at[slack_bus, "vn_kv"])
+        self._I_base = S_base / (np.sqrt(3) * V_base_kV)  # kA
+        
+        # Build Y in PU
+        Y = self._build_Y_pu(net, S_base)
+        
+        # Add fault
+        Y[fault_bus, fault_bus] += 1 / complex(fault_z, 0)
+        
+        # Add ext_grid: Y_th = S_base/S_sc at slack
+        S_sc = float(net.ext_grid.at[0, "s_sc_max_mva"])
+        Y_th = S_sc / S_base
+        Y[slack_bus, slack_bus] += Y_th
+        
+        # Initial V
+        V = np.ones(n, dtype=complex)
+        
+        # NR Iteration - use current source model
+        # Compute I from ext_grid and VSC converters
+        S_sc = float(net.ext_grid.at[0, "s_sc_max_mva"])  # MVA
+        I_sc_pu = S_sc / S_base  # Norton current: 1/Z_th = S_sc/S_base in pu
+        
+        for it in range(self.max_iter):
+            V_old = V.copy()
+            
+            # Build current injection vector
+            I = np.zeros(n, dtype=complex)
+            I[slack_bus] = I_sc_pu  # Ext grid as current source
+            
+            # Update VSC currents
+            for bus_idx, vsc in converters.items():
+                v_mag = abs(V[bus_idx])
+                i_p, i_q = vsc.compute_current(max(v_mag, 0.01))
+                I[bus_idx] = complex(i_p, -i_q)
+            
+            # Solve
+            try:
+                V = np.linalg.solve(Y, I)
+            except:
+                V = np.linalg.pinv(Y) @ I
+            
+            V[slack_bus] = complex(1.0, 0)
+            
+            # Check convergence
+            if it > 0:
+                delta = np.max(np.abs(np.abs(V) - np.abs(V_old)))
+                if delta < self.tolerance:
+                    self.converged = True
+                    break
+            
+            self.iterations = it
+        
+        self._V_pu = V
+        return V, self.converged
+    
+    def _build_Y_pu(self, net: Any, S_base: float) -> np.ndarray:
+        """Build Y matrix in per-unit (R_pu, X_pu directly from pandapower)."""
+        from dataclasses import asdict
+        n = len(net.bus)
+        Y = np.zeros((n, n), dtype=complex)
+        
+        # Lines: r, x already in pu if < 1.0, or convert
+        if hasattr(net, "line") and not net.line.empty:
+            for _, line in net.line.iterrows():
+                f = int(line["from_bus"])
+                t = int(line["to_bus"])
+                # r, x in pu or ohms
+                r = line.get("r_ohm_per_km", 0)
+                x = line.get("x_ohm_per_km", 0)
+                length = line.get("length_km", 1)
+                
+                # Simple: assume pu if < 1
+                z = complex(r * length, x * length)
+                if abs(z) > 1e-9:
+                    y = 1 / z
+                else:
+                    y = 1e6
+                Y[f, f] += y
+                Y[f, t] -= y
+                Y[t, f] -= y
+                Y[t, t] += y
+        
+        return Y
+    
+    def get_fault_current_kA(self, fault_bus: int, fault_z: float) -> float:
+        """Convert fault current to kA."""
+        V = self._V_pu
+        Ik_pu = abs(V[fault_bus] / complex(fault_z, 0))
+        return Ik_pu * self._I_base

@@ -56,8 +56,13 @@ from cloudpss_skills_v2.poweranalysis.renewable_integration import (
     RenewableIntegrationAnalysis,
 )
 from cloudpss_skills_v2.poweranalysis.vsi_weak_bus import VSIWeakBusAnalysis
+from cloudpss_skills_v2.poweranalysis.base import PowerAnalysisBase, AnalysisBase
 
 __all__ = [
+    # Base classes
+    "PowerAnalysisBase",
+    "AnalysisBase",  # Backward compatibility alias
+    # Analysis skills
     "N1SecurityAnalysis",
     "ContingencyAnalysis",
     "VoltageStabilityAnalysis",

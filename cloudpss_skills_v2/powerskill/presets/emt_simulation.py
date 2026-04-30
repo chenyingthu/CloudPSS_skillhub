@@ -37,7 +37,7 @@ class EMTPreset:
             "type": "object",
             "required": ["skill", "model"],
             "properties": {
-                "skill": {"type": "string", "const": "emt_simulation"},
+                "skill": {"type": "string", "const": "emt_simulation", "default": "emt_simulation"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss"],
@@ -54,7 +54,7 @@ class EMTPreset:
                     "type": "object",
                     "required": ["rid"],
                     "properties": {
-                        "rid": {"type": "string"},
+                        "rid": {"type": "string", "default": "model/holdme/IEEE39"},
                         "source": {"enum": ["cloud", "local"], "default": "cloud"},
                     },
                 },

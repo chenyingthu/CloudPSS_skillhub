@@ -6,169 +6,96 @@ engine: paper2skill-v0.0.1
 license: MIT
 url: "https://doi.org/10.1016/j.ijepes.2024.109839"
 keywords: [Short-Circuit, VSC, Newton-Raphson, Current Saturation, Power Electronics]
-description: "Extended Newton-Raphson solver for steady-state short-circuit calculation in power systems with voltage source converters, considering converter operation limits and current saturation states."
+description: "Standalone paper-oriented short-circuit skill package for VSC-rich systems, now upgraded to an outer saturation-state loop plus inner Newton-Raphson solve, with explicit limits around paper-table reproduction."
 ---
 
-# VSC Short-Circuit Calculation with Extended NR Solver
+# vsc-short-circuit-nr
 
-Modern power systems increasingly use power electronics converters (VSCs) for renewable integration, HVDC, and battery storage. These converters behave differently from synchronous generators during faults—their current can saturate, and their control modes affect the short-circuit current. Traditional short-circuit methods that model converters as simple current sources don't capture this complexity.
+This skill packages a standalone short-circuit workflow for systems with voltage source converters and current saturation. It is derived from the paper’s problem structure and preserves the paper-native validation scenarios that were recoverable in the current environment, while keeping a strict boundary between what the paper proves and what the local implementation currently reproduces.
 
-This skill provides an extended Newton-Raphson (NR) solver that computes steady-state short-circuit equilibrium points considering VSC operation limits and current saturation states. It avoids the need for detailed dynamic simulations while maintaining accuracy.
+The underlying paper solves a piecewise nonlinear short-circuit equilibrium problem with an inner Jacobian-based Newton-Raphson solve and an outer saturation-state update loop. The packaged code now follows that two-level structure in a standalone form, while still avoiding any false claim of full numerical reproduction of the paper’s published tables.
 
 ## Core Concept
 
-The key insight is that VSCs operate in different modes (PSSin which active power control, and FSS where reactive power is prioritized), and their current saturation changes the system behavior during faults. The extended NR solver:
+The paper’s key idea is that short-circuit calculation in VSC-rich systems depends on converter operating state, not just passive network impedance. A faithful formulation must track whether each converter remains unsaturated or switches into a current-limited mode such as PSS or FSS, because that changes the algebraic constraints imposed at the converter bus.
 
-1. **Models VSC steady-state control equations** within the system formulation
-2. **Identifies current saturation states** through an iterative algorithm
-3. **Computes the short-circuit equilibrium point** considering converter limits
+This package therefore combines three deliverables: a local solver implementation, paper-derived regression targets that can be replayed without external tooling, and an executable validation runner that states exactly what is and is not verified.
 
 ## Architecture Overview
 
-- **VSC Steady-State Model**: Models converters with their control modes (P/Q control, voltage control)
-- **Current Saturation Detection**: Iteratively identifies saturated vs. linear operating states
-- **Extended NR Solver**: Solves for equilibrium considering converter limits
-- **Dynamic Validation**: Compares results with EMT simulation for verification
+- **Local solver module**: `scripts/vsc_nr_solver.py` now implements an outer converter-mode update loop wrapped around an inner Newton-Raphson residual and Jacobian solve.
+- **Scenario definitions**: `scripts/scenarios.py` stores the recoverable paper-native validation targets, regression-grade table values, missing-parameter inventory, and the local IEEE 14-bus admittance builder.
+- **Validation runner**: `scripts/run_validation.py` executes baseline and VSC-enabled cases and prints a machine-readable report.
+- **Validation contract**: `scripts/expected_results.md` defines what the runner output should contain and which claims remain intentionally out of scope.
+- **Benchmark reconstruction artifact**: `scripts/test_system_1_network.json` stores the first explicit Test System 1 skeleton, separating benchmark carry-over from paper-exact converter and fault data.
 
-## Implementation Steps
+## Implementation
 
-### Step 1: Define VSC Steady-State Model
-
-```python
-import numpy as np
-
-class VSCOperatingPoint:
-    """Represents VSC operating state during fault"""
-    def __init__(self, v_sc, i_max, p_ref, q_ref, mode='PSS'):
-        self.v_sc = v_sc          # Converter voltage
-        self.i_max = i_max        # Current limit
-        self.p_ref = p_ref        # Active power reference
-        self.q_ref = q_ref        # Reactive power reference
-        self.mode = mode          # 'PSS' or 'FSS'
-
-    def compute_current(self, v_grid):
-        """Compute converter current based on control mode"""
-        i_p = self.p_ref / v_grid if v_grid > 0 else 0
-        i_q = self.q_ref / v_grid if v_grid > 0 else 0
-        i_mag = np.sqrt(i_p**2 + i_q**2)
-
-        if i_mag > self.i_max:
-            return self._saturate(i_p, i_q, i_mag)
-        return i_p, i_q
-
-    def _saturate(self, i_p, i_q, i_mag):
-        """Apply current saturation"""
-        scale = self.i_max / i_mag
-        if self.mode == 'FSS':
-            # Reactive power prioritized
-            i_q_sat = self.i_max
-            i_p_sat = np.sqrt(self.i_max**2 - i_q**2)
-        else:
-            i_p_sat = i_p * scale
-            i_q_sat = i_q * scale
-        return i_p_sat, i_q_sat
+```text
+scripts/
+├── expected_results.md
+├── run_validation.py
+├── scenarios.py
+├── test_system_1_network.json
+├── test_system_1_reconstruction.py
+└── vsc_nr_solver.py
 ```
 
-### Step 2: Extended NR Solver for Short-Circuit
+Run the packaged validation flow with:
 
-```python
-def extended_nr_short_circuit(Y_bus, v_sc, v_g, converters, tolerance=1e-6, max_iter=50):
-    """
-    Extended Newton-Raphson for short-circuit with VSCs
-
-    Args:
-        Y_bus: System admittance matrix
-        v_sc: Fault location bus
-        v_g: Generator voltages (dict of bus: voltage)
-        converters: List of VSC operating points
-        tolerance: Convergence tolerance
-        max_iter: Maximum iterations
-
-    Returns:
-        V: Bus voltages after convergence
-        converged: Boolean indicating convergence
-    """
-    n = len(Y_bus)
-    V = np.ones(n, dtype=complex)  # Initial voltage guess
-
-    for iteration in range(max_iter):
-        # Build Jacobian
-        J = build_jacobian(Y_bus, V, converters)
-
-        # Compute mismatch
-        S_inj = V * np.conj(Y_bus @ V)
-        S_target = {bus: converters[bus].p_ref + 1j*converters[bus].q_ref
-                   for bus in converters}
-        mismatch = compute_mismatch(S_inj, S_target, v_sc)
-
-        # Solve NR update
-        delta_V = np.linalg.solve(J, mismatch)
-        V = V - delta_V
-
-        if np.linalg.norm(delta_V) < tolerance:
-            return V, True
-
-    return V, False
+```bash
+python scripts/run_validation.py
 ```
 
-### Step 3: Current Saturation Identification
+The current package runner verifies that the local solver executes on a standalone IEEE 14-bus admittance model, that converter saturation states are surfaced in the result, and that the paper-derived scenario targets plus missing-parameter inventory remain attached to the skill package.
 
-```python
-def identify_saturation(V, converters, v_grid):
-    """
-    Iteratively identify converter current saturation states
+## Validation
 
-    Returns:
-        saturated: List of buses where converters are saturated
-        linear: List of buses where converters operate linearly
-    """
-    saturated = []
-    linear = []
+The paper-native scenario targets currently preserved in this package are:
 
-    for bus, vsc in converters.items():
-        i_p, i_q = vsc.compute_current(V[bus])
-        i_mag = np.sqrt(i_p**2 + i_q**2)
+- **Test System 1**: CIGRE European MV based system, fault at bus 12, with fault impedances `j0.2 pu` and `j0.05 pu`, a reported valid state resolution of `VSC1 = USS`, `VSC2 = FSS`, `VSC3 = PSS`, and iteration-by-iteration table values for voltages, converter currents, and feasibility.
+- **Test System 2**: IEEE 14-bus based system with 8 VSCs connected through transformers, tested at penetration levels `25%`, `50%`, and `75%`, including explicit short-circuit current comparison tables at each penetration level.
 
-        if i_mag >= vsc.i_max * 0.99:
-            saturated.append(bus)
-        else:
-            linear.append(bus)
+The current environment did yield a substantial set of paper-native tables and appendix values, and those are now embedded in the package. What remains incomplete is the benchmark network definition needed to drive blind end-to-end reproduction from inputs alone, so the validation runner is still an execution and traceability artifact rather than a final regression proof against the paper.
 
-    return saturated, linear
-```
+The package now also includes a first explicit **Test System 1 reconstruction artifact** based on the open CIGRE MV benchmark skeleton, with paper-specific converter/fault targets attached and benchmark carry-over assumptions called out in metadata.
 
 ## Practical Guidance
 
-### When to Use
+### When to use
 
-- Power systems with high VSC penetration (renewable integration, HVDC)
-- Protection setting calculations for modern power systems
-- Short-circuit studies requiring accurate converter contribution
-- Comparing steady-state vs. dynamic simulation results
+- Use this package when you need a standalone short-circuit skill artifact derived from a paper and want the local implementation, scenario targets, and runnable validation flow kept together.
+- Use it when converter saturation mode changes are part of the study and a plain passive-fault model is not enough.
+- Use it as a standalone implementation of the paper’s two-level solver structure when you need explicit mode histories, current-limited branches, and a runnable local validation path.
 
-### When NOT to Use
+### Limitations
 
-- Conventional systems without power electronics
-- When detailed transient response is needed (use EMT)
-- Systems where converter saturation is not a concern
+- The packaged solver now follows the paper’s outer-loop plus inner-NR structure, but some mode-switching details are still derived from recoverable paper structure plus local assumptions rather than a complete machine-readable extraction of every paper equation.
+- Exact network reconstruction data for the paper benchmarks is still incomplete even though many target tables are now embedded.
+- This package should not be described as fully numerically validated against the paper until those embedded targets are paired with a reconstructed benchmark model and checked directly.
+- The new `test_system_1_network.json` artifact is a reconstruction starting point, not yet a paper-certified executable model.
 
-### Hyperparameters
+### Parameters
 
-| Parameter | Description | Typical Range |
-|-----------|-------------|---------------|
-| `i_max` | Converter current limit (pu) | 1.1–1.5 |
-| tolerance | NR convergence tolerance | 1e-6–1e-4 |
-| max_iter | Maximum NR iterations | 20–50 |
+| Parameter | Description | Recommended value |
+|-----------|-------------|-------------------|
+| `fault_impedance` | Per-unit fault impedance used in the local runner | `0.01` for local replay, `j0.2` and `j0.05` as paper targets |
+| `i_max` | Converter current limit in per unit | scenario dependent |
+| `tolerance` | Inner Newton-Raphson convergence threshold | `1e-8` |
+| `max_iter` | Maximum inner Newton-Raphson iterations | `30` |
+| `max_outer_iter` | Maximum saturation-state update iterations | `12` |
+| `saturation_preference` | Preferred limiting branch when saturation is detected | `PSS` or `FSS` |
 
-### Common Pitfalls
+### Output files
 
-1. **Ignoring saturation**: Always run saturation identification after initial solution
-2. **Mode confusion**: PSS (active power) vs FSS (reactive power) modes behave differently
-3. **Initialization**: Start with flat voltage profile (1.0 pu) for better convergence
+- `scripts/run_validation.py` prints the current package validation report.
+- `scripts/expected_results.md` defines the expected report shape and its non-claims.
+- `scripts/scenarios.py` stores the paper-derived scenario targets, extracted regression tables, and the missing-parameter inventory for unresolved benchmark inputs.
+- `scripts/test_system_1_network.json` captures the current Test System 1 reconstruction skeleton and benchmark carry-over notes.
 
 ## Reference
 
 - Paper: *A short-circuit calculation solver for power systems with power electronics converters*
 - DOI: https://doi.org/10.1016/j.ijepes.2024.109839
 - Authors: Jie Song, Josep Fanals-Batllori, Leonardo Marín, et al.
-- Test Cases: IEEE 9-bus, IEEE 39-bus with VSC additions
+- Validation context recovered from the paper: CIGRE European MV based test system and an IEEE 14-bus based system with 8 VSCs

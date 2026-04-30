@@ -51,7 +51,7 @@ class ContingencyAnalysis:
             "type": "object",
             "required": ["skill", "model"],
             "properties": {
-                "skill": {"type": "string", "const": "contingency_analysis"},
+                "skill": {"type": "string", "const": "contingency_analysis", "default": "contingency_analysis"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
@@ -68,7 +68,7 @@ class ContingencyAnalysis:
                     "type": "object",
                     "required": ["rid"],
                     "properties": {
-                        "rid": {"type": "string"},
+                        "rid": {"type": "string", "default": "model/holdme/IEEE39"},
                         "source": {"enum": ["cloud", "local"], "default": "cloud"},
                     },
                 },

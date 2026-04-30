@@ -36,7 +36,7 @@ class PowerFlowPreset:
             "type": "object",
             "required": ["skill", "model"],
             "properties": {
-                "skill": {"type": "string", "const": "power_flow"},
+                "skill": {"type": "string", "const": "power_flow", "default": "power_flow"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
@@ -53,7 +53,7 @@ class PowerFlowPreset:
                     "type": "object",
                     "required": ["rid"],
                     "properties": {
-                        "rid": {"type": "string"},
+                        "rid": {"type": "string", "default": "model/holdme/IEEE39"},
                         "source": {"enum": ["cloud", "local"], "default": "cloud"},
                     },
                 },

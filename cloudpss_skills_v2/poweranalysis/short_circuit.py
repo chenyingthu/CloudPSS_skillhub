@@ -48,7 +48,7 @@ class ShortCircuitAnalysis:
             "type": "object",
             "required": ["skill", "model", "fault"],
             "properties": {
-                "skill": {"type": "string", "const": "short_circuit"},
+                "skill": {"type": "string", "const": "short_circuit", "default": "short_circuit"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
@@ -65,7 +65,7 @@ class ShortCircuitAnalysis:
                     "type": "object",
                     "required": ["rid"],
                     "properties": {
-                        "rid": {"type": "string"},
+                        "rid": {"type": "string", "default": "model/holdme/IEEE39"},
                         "source": {"enum": ["cloud", "local"], "default": "cloud"},
                         "file": {"type": "string"},
                         "path": {"type": "string"},

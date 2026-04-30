@@ -136,6 +136,17 @@ class SimulationResult:
             return (self.completed_at - self.started_at).total_seconds()
         return None
 
+    # Aliases for consistent naming with SkillResult
+    @property
+    def start_time(self) -> Optional[datetime]:
+        """Alias for started_at (consistent with SkillResult)."""
+        return self.started_at
+
+    @property
+    def end_time(self) -> Optional[datetime]:
+        """Alias for completed_at (consistent with SkillResult)."""
+        return self.completed_at
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
@@ -149,6 +160,29 @@ class SimulationResult:
             "completed_at": self.completed_at.isoformat()
             if self.completed_at
             else None,
+            "duration_seconds": self.duration_seconds,
+            # Consistent naming with SkillResult
+            "start_time": self.start_time.isoformat() if self.start_time else None,
+            "end_time": self.end_time.isoformat() if self.end_time else None,
+        }
+
+    def to_skill_result_dict(self) -> dict[str, Any]:
+        """Convert to SkillResult-compatible dictionary format.
+
+        This method provides a dictionary that matches the SkillResult.to_dict()
+        format for interoperability between PowerAPI and PowerSkill layers.
+        """
+        return {
+            "skill_name": self.job_id,
+            "status": self.status.value if self.status else None,
+            "success": self.is_success,
+            "data": self.data,
+            "artifacts": [],  # SimulationResult doesn't have artifacts
+            "logs": [{"level": "error", "message": e} for e in self.errors],
+            "metrics": self.metadata,
+            "error": "; ".join(self.errors) if self.errors else None,
+            "start_time": self.start_time.isoformat() if self.start_time else None,
+            "end_time": self.end_time.isoformat() if self.end_time else None,
             "duration_seconds": self.duration_seconds,
         }
 

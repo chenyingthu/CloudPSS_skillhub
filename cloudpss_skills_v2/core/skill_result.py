@@ -82,6 +82,27 @@ class SkillResult:
     def has_error(self) -> bool:
         return self.error is not None
 
+    # Compatibility properties for SimulationResult naming
+    @property
+    def started_at(self) -> datetime | None:
+        """Alias for start_time (consistent with SimulationResult)."""
+        return self.start_time
+
+    @property
+    def completed_at(self) -> datetime | None:
+        """Alias for end_time (consistent with SimulationResult)."""
+        return self.end_time
+
+    @property
+    def job_id(self) -> str:
+        """Alias for skill_name (consistent with SimulationResult)."""
+        return self.skill_name
+
+    @property
+    def is_completed(self) -> bool:
+        """Check if status is SUCCESS or FAILED (consistent with SimulationResult)."""
+        return self.status in (SkillStatus.SUCCESS, SkillStatus.FAILED)
+
     def add_log(self, level: str, message: str, context: dict[str, Any] | None = None):
         self.logs.append(
             LogEntry(
@@ -191,6 +212,39 @@ class SkillResult:
             data=data or {},
             start_time=datetime.now(),
         )
+
+    def to_simulation_result_dict(self) -> dict[str, Any]:
+        """Convert to SimulationResult-compatible dictionary format.
+
+        This method provides a dictionary that matches the SimulationResult.to_dict()
+        format for interoperability between PowerSkill and PowerAPI layers.
+        """
+        # Map SkillStatus to SimulationStatus string values
+        status_map = {
+            "pending": "pending",
+            "running": "running",
+            "success": "completed",
+            "failed": "failed",
+            "cancelled": "cancelled",
+        }
+        status_value = status_map.get(self.status.value if self.status else "", None)
+
+        return {
+            "job_id": self.skill_name,
+            "status": status_value,
+            "data": self.data,
+            "metadata": self.metrics,
+            "errors": [self.error] if self.error else [],
+            "warnings": [],
+            "started_at": self.start_time.isoformat() if self.start_time else None,
+            "completed_at": self.end_time.isoformat() if self.end_time else None,
+            "duration_seconds": self.duration_seconds,
+            # Consistent naming
+            "start_time": self.start_time.isoformat() if self.start_time else None,
+            "end_time": self.end_time.isoformat() if self.end_time else None,
+            "skill_name": self.skill_name,
+            "success": self.is_success,
+        }
 
 
 FIELD_NAME_MAPPING = {
