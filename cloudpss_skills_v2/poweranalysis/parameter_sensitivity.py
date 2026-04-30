@@ -30,19 +30,33 @@ class ParameterSensitivityAnalysis:
             "type": "object",
             "required": ["skill", "model"],
             "properties": {
-                "skill": {"type": "string", "const": "parameter_sensitivity"},
+                "skill": {"type": "string", "const": "parameter_sensitivity", "default": "parameter_sensitivity"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
                     "default": "pandapower",
                 },
-                "model": {"type": "object", "required": ["rid"]},
+                "auth": {
+                    "type": "object",
+                    "properties": {
+                        "token": {"type": "string", "default": "local-pandapower-token"},
+                    },
+                },
+                "model": {
+                    "type": "object",
+                    "required": ["rid"],
+                    "properties": {
+                        "rid": {"type": "string", "default": "case14"},
+                        "source": {"type": "string", "enum": ["cloud", "local"], "default": "local"},
+                    },
+                },
                 "analysis": {
                     "type": "object",
                     "properties": {
                         "target_parameter": {
                             "type": "string",
                             "description": "e.g., load.p_mw",
+                            "default": "",
                         },
                         "delta": {"type": "number", "default": 0.01},
                     },
@@ -53,6 +67,18 @@ class ParameterSensitivityAnalysis:
     def __init__(self):
         self.logs = []
         self.artifacts = []
+
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "engine": "pandapower",
+            "auth": {"token": "local-pandapower-token"},
+            "model": {"rid": "case14", "source": "local"},
+            "analysis": {
+                "target_parameter": "",
+                "delta": 0.01,
+            },
+        }
 
     def _log(self, level: str, message: str) -> None:
         self.logs.append(

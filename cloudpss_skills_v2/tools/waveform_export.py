@@ -19,6 +19,39 @@ class WaveformExportTool:
         self.logs: list[LogEntry] = []
         self.artifacts: list[Artifact] = []
 
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["skill"],
+            "properties": {
+                "skill": {"type": "string", "const": "waveform_export", "default": "waveform_export"},
+                "source": {"type": "object", "properties": {"job_id": {"type": "string", "default": ""}}},
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "time": {"type": "array", "items": {"type": "number"}, "default": []},
+                        "channels": {"type": "object", "default": {}},
+                    },
+                },
+                "export": {
+                    "type": "object",
+                    "properties": {
+                        "channels": {"type": "array", "items": {"type": "string"}, "default": []},
+                        "time_range": {"type": "object", "default": {}},
+                    },
+                },
+                "output": {
+                    "type": "object",
+                    "properties": {
+                        "format": {"type": "string", "enum": ["csv", "json"], "default": "csv"},
+                        "path": {"type": "string", "default": "./results/"},
+                        "filename": {"type": "string", "default": ""},
+                    },
+                },
+            },
+        }
+
     def get_default_config(self):
         return {
             "skill": self.name,

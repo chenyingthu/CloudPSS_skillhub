@@ -30,13 +30,26 @@ class VSIWeakBusAnalysis:
             "type": "object",
             "required": ["skill", "model"],
             "properties": {
-                "skill": {"type": "string", "const": "vsi_weak_bus"},
+                "skill": {"type": "string", "const": "vsi_weak_bus", "default": "vsi_weak_bus"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
                     "default": "pandapower",
                 },
-                "model": {"type": "object", "required": ["rid"]},
+                "auth": {
+                    "type": "object",
+                    "properties": {
+                        "token": {"type": "string", "default": "local-pandapower-token"},
+                    },
+                },
+                "model": {
+                    "type": "object",
+                    "required": ["rid"],
+                    "properties": {
+                        "rid": {"type": "string", "default": "case14"},
+                        "source": {"type": "string", "enum": ["cloud", "local"], "default": "local"},
+                    },
+                },
                 "analysis": {
                     "type": "object",
                     "properties": {

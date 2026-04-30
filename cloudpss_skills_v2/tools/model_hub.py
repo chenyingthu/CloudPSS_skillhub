@@ -64,6 +64,20 @@ class ModelHubTool:
         self.logs = []
         self.artifacts = []
 
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["skill"],
+            "properties": {
+                "skill": {"type": "string", "const": "model_hub", "default": "model_hub"},
+                "action": {"type": "string", "enum": ["search", "list", "get", "cache_status", "clear_cache"], "default": "search"},
+                "query": {"type": "string", "default": ""},
+                "servers": {"type": "array", "items": {"type": "object"}, "default": []},
+                "cache": {"type": "object", "properties": {"enabled": {"type": "boolean", "default": True}, "clear": {"type": "boolean", "default": False}}},
+            },
+        }
+
     def get_default_config(self) -> dict[str, object]:
         return {
             "skill": self.name,

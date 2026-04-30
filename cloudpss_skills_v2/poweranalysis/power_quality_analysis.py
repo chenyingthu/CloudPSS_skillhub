@@ -30,15 +30,25 @@ class PowerQualityAnalysisAnalysis:
             "type": "object",
             "required": ["skill", "model"],
             "properties": {
-                "skill": {"type": "string", "const": "power_quality_analysis"},
+                "skill": {"type": "string", "const": "power_quality_analysis", "default": "power_quality_analysis"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
                     "default": "cloudpss",
                 },
+                "auth": {
+                    "type": "object",
+                    "properties": {
+                        "token": {"type": "string", "default": "local-pandapower-token"},
+                    },
+                },
                 "model": {
                     "type": "object",
                     "required": ["rid"],
+                    "properties": {
+                        "rid": {"type": "string", "default": "case14"},
+                        "source": {"type": "string", "enum": ["cloud", "local"], "default": "local"},
+                    },
                 },
                 "analysis": {
                     "type": "object",
@@ -56,13 +66,14 @@ class PowerQualityAnalysisAnalysis:
                 "measurements": {
                     "type": "object",
                     "properties": {
-                        "harmonic_voltages": {"type": "object"},
+                        "harmonic_voltages": {"type": "object", "default": {}},
                         "fundamental_voltage": {"type": "number", "default": 1.0},
                         "phase_voltages_pu": {
                             "type": "array",
                             "items": {"type": "number"},
                             "minItems": 3,
                             "maxItems": 3,
+                            "default": [1.0, 1.0, 1.0],
                         },
                     },
                 },

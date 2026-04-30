@@ -20,6 +20,28 @@ class AutoChannelSetupTool:
         self.logs = []
         self.artifacts = []
 
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["skill"],
+            "properties": {
+                "skill": {"type": "string", "const": "auto_channel_setup", "default": "auto_channel_setup"},
+                "model": {"type": "object", "properties": {"rid": {"type": "string", "default": ""}}},
+                "channels": {
+                    "type": "object",
+                    "properties": {
+                        "voltage": {"type": "object", "properties": {"buses": {"type": "array", "items": {"type": "string"}, "default": []}}},
+                        "current": {"type": "object", "properties": {"components": {"type": "array", "items": {"type": "string"}, "default": []}}},
+                        "power": {"type": "object", "properties": {"components": {"type": "array", "items": {"type": "string"}, "default": []}}},
+                        "frequency": {"type": "object", "properties": {"buses": {"type": "array", "items": {"type": "string"}, "default": []}}},
+                    },
+                },
+                "sampling": {"type": "object", "properties": {"frequency": {"type": "number", "default": 50.0}}},
+                "output": {"type": "object", "properties": {"format": {"type": "string", "default": "json"}, "group_by_type": {"type": "boolean", "default": True}}},
+            },
+        }
+
     def get_default_config(self) -> dict[str, Any]:
         return {
             "skill": self.name,

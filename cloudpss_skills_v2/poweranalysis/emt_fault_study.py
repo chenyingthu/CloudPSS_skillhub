@@ -22,15 +22,57 @@ class EmtFaultStudyAnalysis:
     def config_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
-            "required": ["model"],
+            "required": ["skill", "model"],
             "properties": {
-                "model": {"type": "object", "required": ["rid"]},
-                "scenarios": {"type": "object"},
+                "skill": {"type": "string", "const": "emt_fault_study", "default": "emt_fault_study"},
+                "engine": {"type": "string", "enum": ["cloudpss", "pandapower"], "default": "pandapower"},
+                "model": {
+                    "type": "object",
+                    "required": ["rid"],
+                    "properties": {
+                        "rid": {"type": "string", "default": "case14"},
+                        "source": {"type": "string", "enum": ["cloud", "local"], "default": "local"},
+                    },
+                },
+                "scenarios": {
+                    "type": "object",
+                    "properties": {
+                        "baseline": {
+                            "type": "object",
+                            "properties": {
+                                "enabled": {"type": "boolean", "default": True},
+                                "prefault_voltage_pu": {"type": "number", "default": 1.0},
+                                "minimum_voltage_pu": {"type": "number", "default": 0.7},
+                                "clearing_time": {"type": "number", "default": 0.1},
+                            },
+                        },
+                        "delayed_clear": {
+                            "type": "object",
+                            "properties": {
+                                "enabled": {"type": "boolean", "default": True},
+                                "prefault_voltage_pu": {"type": "number", "default": 1.0},
+                                "minimum_voltage_pu": {"type": "number", "default": 0.5},
+                                "clearing_time": {"type": "number", "default": 0.2},
+                            },
+                        },
+                        "mild_fault": {
+                            "type": "object",
+                            "properties": {
+                                "enabled": {"type": "boolean", "default": True},
+                                "prefault_voltage_pu": {"type": "number", "default": 1.0},
+                                "minimum_voltage_pu": {"type": "number", "default": 0.85},
+                                "clearing_time": {"type": "number", "default": 0.08},
+                            },
+                        },
+                    },
+                },
             },
         }
 
     def get_default_config(self) -> dict[str, Any]:
         return {
+            "skill": self.name,
+            "engine": "pandapower",
             "model": {"rid": "case14", "source": "local"},
             "scenarios": {
                 "baseline": {

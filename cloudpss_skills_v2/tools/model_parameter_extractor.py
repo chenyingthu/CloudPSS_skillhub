@@ -62,6 +62,33 @@ class ModelParameterExtractorTool:
 
     name = "model_parameter_extractor"
 
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["skill"],
+            "properties": {
+                "skill": {"type": "string", "const": "model_parameter_extractor", "default": "model_parameter_extractor"},
+                "model": {
+                    "type": "object",
+                    "properties": {
+                        "rid": {"type": "string", "default": ""},
+                        "source": {"type": "string", "default": "inline"},
+                        "components": {"type": "array", "items": {"type": "object"}, "default": []},
+                    },
+                },
+                "component_types": {"type": "array", "items": {"type": "string"}, "default": []},
+                "extraction": {
+                    "type": "object",
+                    "properties": {
+                        "include_args": {"type": "boolean", "default": True},
+                        "include_pins": {"type": "boolean", "default": True},
+                    },
+                },
+                "output": {"type": "object", "properties": {"format": {"type": "string", "default": "json"}}},
+            },
+        }
+
     def get_default_config(self) -> dict[str, Any]:
         return {
             "skill": self.name,

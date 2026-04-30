@@ -32,6 +32,36 @@ class ReactiveCompensationDesignAnalysis:
         self.logs: list[LogEntry] = []
         self.artifacts: list[Artifact] = []
 
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["skill"],
+            "properties": {
+                "skill": {"type": "string", "const": "reactive_compensation_design", "default": "reactive_compensation_design"},
+                "engine": {"type": "string", "enum": ["cloudpss", "pandapower"], "default": "cloudpss"},
+                "auth": {"type": "object", "properties": {"token_file": {"type": "string", "default": ".cloudpss_token"}}},
+                "model": {"type": "object", "properties": {"rid": {"type": "string", "default": ""}, "source": {"type": "string", "enum": ["cloud", "local"], "default": "cloud"}}},
+                "weak_buses": {"type": "array", "items": {"type": "object"}, "default": []},
+                "vsi_result": {"type": "object", "default": {}},
+                "compensation": {
+                    "type": "object",
+                    "properties": {
+                        "device_type": {"type": "string", "default": "sync_compensator"},
+                        "max_capacity_mvar": {"type": "number", "default": 100},
+                    },
+                },
+                "output": {
+                    "type": "object",
+                    "properties": {
+                        "format": {"type": "string", "default": "json"},
+                        "path": {"type": "string", "default": "./results/"},
+                        "prefix": {"type": "string", "default": "reactive_compensation"},
+                    },
+                },
+            },
+        }
+
     def get_default_config(self):
         return {
             "skill": self.name,

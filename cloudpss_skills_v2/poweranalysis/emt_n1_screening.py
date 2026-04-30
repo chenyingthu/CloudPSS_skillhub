@@ -24,16 +24,34 @@ class EmtN1ScreeningAnalysis:
             "type": "object",
             "required": ["skill", "model"],
             "properties": {
-                "skill": {"type": "string", "const": "emt_n1_screening"},
+                "skill": {"type": "string", "const": "emt_n1_screening", "default": "emt_n1_screening"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
                     "default": "cloudpss",
                 },
+                "auth": {
+                    "type": "object",
+                    "properties": {
+                        "token": {"type": "string", "default": "local-pandapower-token"},
+                    },
+                },
                 "model": {
                     "type": "object",
                     "required": ["rid"],
-                    "properties": {"rid": {"type": "string"}},
+                    "properties": {
+                        "rid": {"type": "string", "default": "case14"},
+                        "source": {"type": "string", "enum": ["cloud", "local"], "default": "cloud"},
+                    },
+                },
+                "simulation": {
+                    "type": "object",
+                    "properties": {
+                        "duration": {"type": "number"},
+                        "step_size": {"type": "number"},
+                        "timeout": {"type": "number", "default": 300},
+                        "sampling_freq": {"type": "number", "default": 2000},
+                    },
                 },
                 "contingencies": {
                     "type": "array",
@@ -41,6 +59,7 @@ class EmtN1ScreeningAnalysis:
                         "type": "object",
                         "properties": {"branch": {"type": "string"}},
                     },
+                    "default": [],
                 },
                 "thresholds": {
                     "type": "object",
@@ -55,6 +74,25 @@ class EmtN1ScreeningAnalysis:
     def __init__(self):
         self.logs = []
         self.artifacts = []
+
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "engine": "cloudpss",
+            "auth": {"token": "local-pandapower-token"},
+            "model": {"rid": "case14", "source": "cloud"},
+            "simulation": {
+                "duration": None,
+                "step_size": None,
+                "timeout": 300,
+                "sampling_freq": 2000,
+            },
+            "contingencies": [],
+            "thresholds": {
+                "voltage_deviation": 0.1,
+                "frequency_deviation": 0.5,
+            },
+        }
 
     def _log(self, level: str, message: str) -> None:
         self.logs.append(

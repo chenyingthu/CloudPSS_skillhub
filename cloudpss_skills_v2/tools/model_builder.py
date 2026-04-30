@@ -17,6 +17,18 @@ class ModelBuilderTool:
         self.logs = []
         self.artifacts = []
 
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["skill"],
+            "properties": {
+                "skill": {"type": "string", "const": "model_builder", "default": "model_builder"},
+                "base_model": {"type": "object", "properties": {"components": {"type": "array", "items": {"type": "object"}, "default": []}}},
+                "operations": {"type": "array", "items": {"type": "object"}, "default": []},
+            },
+        }
+
     def get_default_config(self):
         return {"skill": self.name, "base_model": {"components": []}, "operations": []}
 

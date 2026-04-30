@@ -17,6 +17,39 @@ class AutoLoopBreakerTool:
         self.logs: list[LogEntry] = []
         self.artifacts = []
 
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["skill"],
+            "properties": {
+                "skill": {"type": "string", "const": "auto_loop_breaker", "default": "auto_loop_breaker"},
+                "model": {
+                    "type": "object",
+                    "properties": {
+                        "rid": {"type": "string", "default": ""},
+                        "source": {"type": "string", "default": "inline"},
+                        "graph": {"type": "object", "default": {}},
+                    },
+                },
+                "algorithm": {
+                    "type": "object",
+                    "properties": {
+                        "strategy": {"type": "string", "default": "degree"},
+                        "max_iterations": {"type": "integer", "default": 500},
+                    },
+                },
+                "loop_node": {
+                    "type": "object",
+                    "properties": {
+                        "auto_detect": {"type": "boolean", "default": True},
+                        "target_nodes": {"type": "array", "items": {"type": "string"}, "default": []},
+                    },
+                },
+                "output": {"type": "object", "properties": {"format": {"type": "string", "default": "json"}}},
+            },
+        }
+
     def get_default_config(self) -> dict[str, Any]:
         return {
             "skill": self.name,

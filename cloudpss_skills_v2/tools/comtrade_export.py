@@ -40,6 +40,41 @@ class ComtradeExportTool:
         self.logs: list[LogEntry] = []
         self.artifacts: list[Artifact] = []
 
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["skill"],
+            "properties": {
+                "skill": {"type": "string", "const": "comtrade_export", "default": "comtrade_export"},
+                "source": {
+                    "type": "object",
+                    "properties": {
+                        "data": {"type": "object", "default": {}},
+                    },
+                },
+                "comtrade": {
+                    "type": "object",
+                    "properties": {
+                        "station_name": {"type": "string", "default": "CloudPSS"},
+                        "rec_dev_id": {"type": "string", "default": "CloudPSS_EMT"},
+                        "rev_year": {"type": "integer", "default": 1999},
+                        "frequency": {"type": "number", "default": 50.0},
+                        "start_time": {"type": ["string", "null"], "default": None},
+                    },
+                },
+                "output": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "default": "./results/"},
+                        "filename": {"type": "string", "default": "comtrade_export"},
+                        "file_type": {"type": "string", "default": "ASCII"},
+                        "format": {"type": "string", "default": "ASCII"},
+                    },
+                },
+            },
+        }
+
     def get_default_config(self) -> dict[str, object]:
         return {
             "skill": self.name,

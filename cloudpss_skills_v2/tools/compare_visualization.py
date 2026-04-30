@@ -19,12 +19,39 @@ class CompareVisualizationTool:
         self.logs = []
         self.artifacts = []
 
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["skill"],
+            "properties": {
+                "skill": {"type": "string", "const": "compare_visualization", "default": "compare_visualization"},
+                "sources": {"type": "array", "items": {"type": "object"}, "default": []},
+                "compare": {
+                    "type": "object",
+                    "properties": {
+                        "channels": {"type": "array", "items": {"type": "string"}, "default": []},
+                        "metrics": {"type": "array", "items": {"type": "string"}, "default": ["mean", "delta", "ratio"]},
+                        "chart": {"type": "string", "default": "time_series"},
+                    },
+                },
+                "time_range": {
+                    "type": "object",
+                    "properties": {
+                        "start": {"type": ["number", "null"], "default": None},
+                        "end": {"type": ["number", "null"], "default": None},
+                    },
+                    "default": {"start": None, "end": None},
+                },
+            },
+        }
+
     def get_default_config(self):
         return {
             "skill": self.name,
             "sources": [],
             "compare": {"channels": [], "metrics": ["mean", "delta", "ratio"], "chart": "time_series"},
-            "time_range": {},
+            "time_range": {"start": None, "end": None},
         }
 
     def validate(self, config):

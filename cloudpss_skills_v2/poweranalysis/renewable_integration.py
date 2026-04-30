@@ -56,13 +56,26 @@ class RenewableIntegrationAnalysis:
             "type": "object",
             "required": ["skill", "model"],
             "properties": {
-                "skill": {"type": "string", "const": "renewable_integration"},
+                "skill": {"type": "string", "const": "renewable_integration", "default": "renewable_integration"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
                     "default": "pandapower",
                 },
-                "model": {"type": "object", "required": ["rid"]},
+                "auth": {
+                    "type": "object",
+                    "properties": {
+                        "token": {"type": "string", "default": "local-pandapower-token"},
+                    },
+                },
+                "model": {
+                    "type": "object",
+                    "required": ["rid"],
+                    "properties": {
+                        "rid": {"type": "string", "default": "case14"},
+                        "source": {"type": "string", "enum": ["cloud", "local"], "default": "local"},
+                    },
+                },
                 "renewable": {
                     "type": "object",
                     "properties": {
@@ -71,10 +84,10 @@ class RenewableIntegrationAnalysis:
                             "enum": ["pv", "wind", "hybrid"],
                             "default": "pv",
                         },
-                        "capacity_mw": {"type": "number"},
-                        "short_circuit_mva": {"type": "number"},
-                        "point_of_interconnection": {"type": "string"},
-                        "capacity_series_mw": {"type": "array", "items": {"type": "number"}},
+                        "capacity_mw": {"type": "number", "default": 50.0},
+                        "short_circuit_mva": {"type": "number", "default": 1000.0},
+                        "point_of_interconnection": {"type": "string", "default": ""},
+                        "capacity_series_mw": {"type": "array", "items": {"type": "number"}, "default": []},
                     },
                 },
                 "harmonics": {

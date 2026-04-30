@@ -26,6 +26,18 @@ class ModelValidatorTool:
     def __init__(self):
         self.logs: list[LogEntry] = []
 
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["skill"],
+            "properties": {
+                "skill": {"type": "string", "const": "model_validator", "default": "model_validator"},
+                "model": {"type": "object", "properties": {"components": {"type": "array", "items": {"type": "object"}, "default": []}}},
+                "validation": {"type": "object", "properties": {"phases": {"type": "array", "items": {"type": "string"}, "default": ["structure", "topology", "parameters"]}}},
+            },
+        }
+
     def get_default_config(self) -> dict[str, Any]:
         return {
             "skill": self.name,

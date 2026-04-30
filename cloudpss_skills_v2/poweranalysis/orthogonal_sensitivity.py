@@ -110,18 +110,53 @@ class OrthogonalSensitivityAnalysis:
     def config_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
-            "required": ["model", "parameters", "target"],
+            "required": ["skill", "model", "parameters", "target"],
             "properties": {
-                "model": {"type": "object", "required": ["rid"]},
-                "parameters": {"type": "array"},
-                "target": {"type": "object", "required": ["metric"]},
-                "design": {"type": "object"},
+                "skill": {"type": "string", "const": "orthogonal_sensitivity", "default": "orthogonal_sensitivity"},
+                "engine": {"type": "string", "enum": ["cloudpss", "pandapower"], "default": "pandapower"},
+                "model": {
+                    "type": "object",
+                    "required": ["rid"],
+                    "properties": {
+                        "rid": {"type": "string", "default": "case14"},
+                        "source": {"type": "string", "enum": ["cloud", "local"], "default": "local"},
+                    },
+                },
+                "parameters": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "levels": {"type": "array", "items": {"type": "number"}},
+                        },
+                    },
+                    "default": [
+                        {"name": "load_scale", "levels": [0.95, 1.05]},
+                        {"name": "gen_scale", "levels": [0.98, 1.02]},
+                    ],
+                },
+                "target": {
+                    "type": "object",
+                    "required": ["metric"],
+                    "properties": {
+                        "metric": {"type": "string", "default": "voltage"},
+                        "objective": {"type": "string", "enum": ["minimize", "maximize"], "default": "maximize"},
+                    },
+                },
+                "design": {
+                    "type": "object",
+                    "properties": {
+                        "table_type": {"type": "string", "default": "auto"},
+                    },
+                },
             },
         }
 
     def get_default_config(self) -> dict[str, Any]:
         return {
             "skill": self.name,
+            "engine": "pandapower",
             "model": {"rid": "case14", "source": "local"},
             "parameters": [
                 {"name": "load_scale", "levels": [0.95, 1.05]},

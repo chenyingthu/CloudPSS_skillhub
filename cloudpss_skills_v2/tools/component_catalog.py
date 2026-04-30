@@ -25,6 +25,20 @@ class ComponentCatalogTool:
         self.logs = []
         self.artifacts = []
 
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["skill"],
+            "properties": {
+                "skill": {"type": "string", "const": "component_catalog", "default": "component_catalog"},
+                "action": {"type": "string", "enum": ["search", "list", "resolve_rid"], "default": "search"},
+                "query": {"type": "string", "default": ""},
+                "rid": {"type": "string", "default": ""},
+                "servers": {"type": "array", "items": {"type": "object"}, "default": []},
+            },
+        }
+
     def get_default_config(self) -> dict[str, object]:
         return {
             "skill": self.name,
