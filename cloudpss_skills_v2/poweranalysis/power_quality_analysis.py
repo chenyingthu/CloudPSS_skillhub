@@ -84,6 +84,25 @@ class PowerQualityAnalysisAnalysis:
         self.logs = []
         self.artifacts = []
 
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "engine": "cloudpss",
+            "auth": {"token": "local-pandapower-token"},
+            "model": {"rid": "case14", "source": "local"},
+            "analysis": {
+                "harmonic_orders": [2, 3, 5, 7, 11, 13],
+                "thd_threshold": 0.05,
+                "unbalance_threshold": 0.02,
+                "sag_threshold": 0.9,
+            },
+            "measurements": {
+                "harmonic_voltages": {},
+                "fundamental_voltage": 1.0,
+                "phase_voltages_pu": [1.0, 1.0, 1.0],
+            },
+        }
+
     def _log(self, level: str, message: str) -> None:
         self.logs.append(
             {

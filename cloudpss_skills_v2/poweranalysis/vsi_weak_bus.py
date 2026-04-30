@@ -64,6 +64,18 @@ class VSIWeakBusAnalysis:
         self.logs = []
         self.artifacts = []
 
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "engine": "pandapower",
+            "auth": {"token": "local-pandapower-token"},
+            "model": {"rid": "case14", "source": "local"},
+            "analysis": {
+                "threshold": 95.0,
+                "top_n": 10,
+            },
+        }
+
     def _log(self, level: str, message: str) -> None:
         self.logs.append(
             {
