@@ -103,6 +103,8 @@ class PowerQualityAnalysisAnalysis:
             },
         }
 
+    def validate(self, config: dict | None) -> tuple[bool, list[str]]:
+
     def _log(self, level: str, message: str) -> None:
         self.logs.append(
             {
