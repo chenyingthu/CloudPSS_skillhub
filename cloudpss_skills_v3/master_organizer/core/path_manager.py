@@ -49,6 +49,55 @@ class PathManager:
         self._root = self._resolve_root_path(root_path)
         self._ensure_structure()
 
+    def _find_workspace_root(self, start_path: Optional[Path] = None) -> Optional[Path]:
+        """
+        在当前目录或其父目录中查找 CloudPSS 工作区根目录
+        查找策略：
+        1. 查找包含 config/user.yaml 且其中有 workspace.root 配置的目录
+        2. 查找包含 config/ 和 registry/ 目录结构的目录（init --path 创建的工作区）
+        """
+        if start_path is None:
+            start_path = Path.cwd()
+
+        current = start_path.resolve()
+
+        # 向上遍历目录树
+        for path in [current] + list(current.parents):
+            # 检查是否有 config/user.yaml 文件
+            config_file = path / "config" / "user.yaml"
+            if config_file.exists():
+                try:
+                    import yaml
+                    with open(config_file, 'r', encoding='utf-8') as f:
+                        data = yaml.safe_load(f)
+                        if data and "workspace" in data and "root" in data["workspace"]:
+                            configured_root = Path(data["workspace"]["root"]).expanduser().resolve()
+                            # 如果配置指向当前目录，这就是工作区
+                            if configured_root == path.resolve():
+                                return path
+                except Exception:
+                    pass
+
+            # 检查是否有标准的 .cloudpss 子目录结构
+            cloudpss_path = path / self.ROOT_DIR_NAME
+            if cloudpss_path.is_dir():
+                if (cloudpss_path / "config" / "user.yaml").exists():
+                    try:
+                        import yaml
+                        with open(cloudpss_path / "config" / "user.yaml", 'r', encoding='utf-8') as f:
+                            data = yaml.safe_load(f)
+                            if data and "workspace" in data and "root" in data["workspace"]:
+                                configured_root = Path(data["workspace"]["root"]).expanduser().resolve()
+                                if configured_root == cloudpss_path.resolve():
+                                    return cloudpss_path
+                    except Exception:
+                        pass
+                # 有 registry 目录也认为是工作区
+                if (cloudpss_path / "registry").exists():
+                    return cloudpss_path
+
+        return None
+
     def _resolve_root_path(self, root_path: Optional[Path] = None) -> Path:
         """
         解析根目录路径
@@ -56,8 +105,9 @@ class PathManager:
         优先级:
         1. 传入的 root_path 参数
         2. CLOUDPSS_HOME 环境变量
-        3. ~/.cloudpss/config/user.yaml 中的 workspace.root
-        4. 默认值 ~/.cloudpss
+        3. 当前目录或其父目录中的 .cloudpss (类似 git 查找 .git)
+        4. ~/.cloudpss/config/user.yaml 中的 workspace.root
+        5. 默认值 ~/.cloudpss
         """
         # 1. 传入的参数
         if root_path:
@@ -68,7 +118,12 @@ class PathManager:
         if env_path:
             return Path(env_path).expanduser().resolve()
 
-        # 3. 配置文件
+        # 3. 在当前目录或其父目录中查找 .cloudpss 工作区
+        workspace_root = self._find_workspace_root()
+        if workspace_root:
+            return workspace_root
+
+        # 4. 默认位置的配置文件
         default_path = Path.home() / self.ROOT_DIR_NAME
         config_file = default_path / "config" / "user.yaml"
         if config_file.exists():
@@ -83,7 +138,7 @@ class PathManager:
             except Exception:
                 pass
 
-        # 4. 默认值
+        # 5. 默认值
         return default_path
 
     @property

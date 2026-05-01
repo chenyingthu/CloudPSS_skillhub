@@ -103,3 +103,7 @@ class Result:
     size_bytes: int = 0
     files: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    # 导出相关字段
+    export_format: Optional[str] = None
+    export_path: Optional[str] = None
+    exported_at: Optional[str] = None

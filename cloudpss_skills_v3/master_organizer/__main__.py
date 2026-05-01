@@ -22,7 +22,7 @@ def main():
     print("  Phase 1: 核心基础设施 (ID生成器、路径/配置/加密管理)")
     print("  Phase 2: 数据模型 (Server/Case/Task/Result/Variant)")
     print("  Phase 3: 注册表实现 (CRUD、索引、批量操作)")
-    print("  Phase 4: CLI 命令 (server/case/task/result/query)")
+    print("  Phase 4: CLI 命令 (server/case/variant/task/result/query)")
     print("  Phase 5: 测试与优化 (全面测试覆盖)")
     print()
     print("使用示例:")

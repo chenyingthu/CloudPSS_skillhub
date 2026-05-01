@@ -457,6 +457,9 @@ def cmd_result_list(args):
 
 def cmd_result_export(args):
     """导出结果"""
+    import json
+    import csv
+
     registry = ResultRegistry()
     result = registry.get(args.result_id)
 
@@ -464,20 +467,87 @@ def cmd_result_export(args):
         print(f"❌ 结果不存在: {args.result_id}")
         return 1
 
-    # 更新导出格式和路径
+    # 确定导出格式和路径
     export_format = args.format or result.format
     export_path = args.output or f"./{args.result_id}_export.{export_format}"
+    export_path = Path(export_path).expanduser().resolve()
 
-    registry.update(args.result_id, {
-        "export_format": export_format,
-        "export_path": export_path,
-        "exported_at": datetime.now().isoformat()
-    })
+    # 确保父目录存在
+    export_path.parent.mkdir(parents=True, exist_ok=True)
 
-    print(f"✅ 结果导出成功: {args.result_id}")
-    print(f"   格式: {export_format}")
-    print(f"   路径: {export_path}")
-    return 0
+    # 准备导出数据
+    export_data = {
+        "result_id": result.id,
+        "name": result.name,
+        "task_id": result.task_id,
+        "case_id": result.case_id,
+        "format": result.format,
+        "created_at": result.created_at,
+        "size_bytes": result.size_bytes,
+        "files": result.files,
+        "metadata": result.metadata,
+        "exported_at": datetime.now().isoformat(),
+        "export_format": export_format
+    }
+
+    try:
+        # 根据格式导出文件
+        if export_format == "json":
+            with open(export_path, 'w', encoding='utf-8') as f:
+                json.dump(export_data, f, indent=2, ensure_ascii=False)
+
+        elif export_format == "csv":
+            # CSV 导出基本元数据
+            with open(export_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(["Property", "Value"])
+                writer.writerow(["result_id", result.id])
+                writer.writerow(["name", result.name])
+                writer.writerow(["task_id", result.task_id])
+                writer.writerow(["case_id", result.case_id])
+                writer.writerow(["format", result.format])
+                writer.writerow(["created_at", result.created_at])
+                writer.writerow(["size_bytes", result.size_bytes])
+                writer.writerow(["exported_at", export_data["exported_at"]])
+
+        elif export_format == "hdf5":
+            # HDF5 格式需要 h5py，如果不可用则报错
+            try:
+                import h5py
+                with h5py.File(export_path, 'w') as f:
+                    f.attrs['result_id'] = result.id
+                    f.attrs['name'] = result.name
+                    f.attrs['task_id'] = result.task_id
+                    f.attrs['case_id'] = result.case_id
+                    f.attrs['format'] = result.format
+                    f.attrs['created_at'] = result.created_at
+                    f.attrs['exported_at'] = export_data["exported_at"]
+            except ImportError:
+                print(f"❌ 导出失败: HDF5 格式需要 h5py 库")
+                print(f"   请安装: pip install h5py")
+                return 1
+
+        else:
+            print(f"❌ 不支持的导出格式: {export_format}")
+            return 1
+
+        # 更新注册表中的导出信息
+        actual_size = export_path.stat().st_size
+        registry.update(args.result_id, {
+            "export_format": export_format,
+            "export_path": str(export_path),
+            "exported_at": export_data["exported_at"]
+        })
+
+        print(f"✅ 结果导出成功: {args.result_id}")
+        print(f"   格式: {export_format}")
+        print(f"   路径: {export_path}")
+        print(f"   大小: {actual_size} bytes")
+        return 0
+
+    except Exception as e:
+        print(f"❌ 导出失败: {e}")
+        return 1
 
 
 def cmd_result_delete(args):
