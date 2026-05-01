@@ -55,11 +55,6 @@ class StudyPipelineTool:
                     "items": {"type": "object"},
                     "default": [],
                 },
-                "stages": {
-                    "type": "array",
-                    "items": {"type": "object"},
-                    "default": [],
-                },
             },
         }
 
