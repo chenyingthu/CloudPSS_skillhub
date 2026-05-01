@@ -196,6 +196,11 @@ class TestCLI:
                     result = main()
                     assert result == 0
 
+                # 取消任务（只有在 created/submitted/running 状态才能取消）
+                with patch.object(sys, 'argv', ['cloudpss-master', 'task', 'cancel', task_id]):
+                    result = main()
+                    assert result == 0
+
     def test_cli_variant_lifecycle(self):
         """测试 variant create/apply/delete 生命周期命令"""
         with patch.object(sys, 'argv', ['cloudpss-master', 'init', '--path', str(self.temp_dir)]):
@@ -225,6 +230,15 @@ class TestCLI:
                 with patch.object(sys, 'argv', ['cloudpss-master', 'variant', 'list', '--case-id', case_id]):
                     result = main()
                     assert result == 0
+
+                # 获取变体ID并删除
+                from cloudpss_skills_v3.master_organizer.core import VariantRegistry
+                variants = VariantRegistry().list_all()
+                if variants:
+                    variant_id = variants[0][0]
+                    with patch.object(sys, 'argv', ['cloudpss-master', 'variant', 'delete', variant_id]):
+                        result = main()
+                        assert result == 0
 
     def test_cli_result_export_and_analyze(self):
         """测试 result export 和 analyze 命令"""
