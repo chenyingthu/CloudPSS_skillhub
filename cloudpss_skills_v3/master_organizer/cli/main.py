@@ -7,6 +7,7 @@ import argparse
 import sys
 from pathlib import Path
 from datetime import datetime
+from typing import Iterable
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
@@ -53,6 +54,126 @@ def cmd_init(args):
         print(f"   或在其他终端设置环境变量: export CLOUDPSS_HOME={pm.root}")
 
     return 0
+
+
+def _default_config_manager():
+    from cloudpss_skills_v3.master_organizer.core import PathManager
+
+    config_dir = Path.home() / PathManager.ROOT_DIR_NAME / "config"
+    return get_config_manager(config_dir)
+
+
+def _load_default_user_config() -> dict:
+    return _default_config_manager().load("user") or {}
+
+
+def _save_default_user_config(config: dict):
+    _default_config_manager().save("user", config)
+
+
+def _workspace_is_valid(path: Path) -> bool:
+    return (path / "config").is_dir() and (path / "registry").is_dir()
+
+
+def _parse_tags(values: Iterable[str] | None) -> list[str]:
+    tags: list[str] = []
+    for value in values or []:
+        for tag in value.split(","):
+            tag = tag.strip()
+            if tag and tag not in tags:
+                tags.append(tag)
+    return tags
+
+
+def _clean_directory(directory: Path) -> tuple[int, int]:
+    import shutil
+
+    removed = 0
+    freed = 0
+    if not directory.exists():
+        return removed, freed
+
+    for item in list(directory.iterdir()):
+        try:
+            if item.is_dir():
+                size = sum(f.stat().st_size for f in item.rglob("*") if f.is_file())
+                shutil.rmtree(item)
+            else:
+                size = item.stat().st_size
+                item.unlink()
+            removed += 1
+            freed += size
+        except OSError:
+            continue
+    return removed, freed
+
+
+def _update_case_task_summary(case_id: str):
+    cases = CaseRegistry()
+    case = cases.get(case_id)
+    if not case:
+        return
+
+    tasks = TaskRegistry().filter_by(case_id=case_id)
+    last_task_id = None
+    if tasks:
+        last_task_id = sorted(tasks, key=lambda x: x[1].created_at, reverse=True)[0][0]
+
+    cases.update(case_id, {
+        "task_count": len(tasks),
+        "last_task_id": last_task_id,
+    })
+
+
+def cmd_system_clean(args):
+    """清理系统临时文件"""
+    pm = get_path_manager()
+    targets = []
+    if args.cache or args.all:
+        targets.append(("缓存", pm.cache_dir))
+    if args.logs or args.all:
+        targets.append(("日志", pm.logs_dir))
+    if args.trash or args.all:
+        targets.append(("回收站", pm.trash_dir))
+    if not targets:
+        targets = [("缓存", pm.cache_dir)]
+
+    total_removed = 0
+    total_freed = 0
+    for label, path in targets:
+        removed, freed = _clean_directory(path)
+        total_removed += removed
+        total_freed += freed
+        print(f"🧹 已清理{label}: {removed} 个项目")
+
+    print(f"✅ 共清理 {total_removed} 个项目，释放 {total_freed / (1024 * 1024):.2f} MB")
+    return 0
+
+
+def cmd_system_backup(args):
+    """备份工作区数据"""
+    import tarfile
+
+    pm = get_path_manager()
+    if args.output:
+        backup_path = Path(args.output).expanduser().resolve()
+    else:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = Path.cwd() / f"cloudpss_backup_{timestamp}.tar.gz"
+
+    backup_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with tarfile.open(backup_path, "w:gz") as tar:
+            for child in ["config", "registry", "cases", "tasks", "results"]:
+                path = pm.root / child
+                if path.exists():
+                    tar.add(path, arcname=child)
+        print(f"✅ 备份完成: {backup_path}")
+        print(f"   大小: {backup_path.stat().st_size / (1024 * 1024):.2f} MB")
+        return 0
+    except Exception as e:
+        print(f"❌ 备份失败: {e}")
+        return 1
 
 
 def cmd_status(args):
@@ -149,18 +270,48 @@ def cmd_case_list(args):
     registry = CaseRegistry()
     cases = registry.list_all()
 
+    if args.status != "all":
+        cases = [(case_id, case) for case_id, case in cases if case.status == args.status]
+
+    if args.tag:
+        required_tags = set(_parse_tags(args.tag))
+        cases = [
+            (case_id, case)
+            for case_id, case in cases
+            if required_tags.issubset(set(case.tags))
+        ]
+
     print("=" * 60)
-    print("算例列表")
+    print("算例列表" + (" (树形)" if args.tree else ""))
     print("=" * 60)
 
     if not cases:
         print("  (无算例)")
     else:
+        task_registry = TaskRegistry()
+        variant_registry = VariantRegistry()
         for case_id, case in cases:
             status_icon = "🟢" if case.status == "active" else "⚪"
-            print(f"  {status_icon} {case_id}: {case.name} [{case.status}]")
+            if args.tree:
+                print(f"  {status_icon} {case.name} [{case.status}]")
+                print(f"      ID: {case_id}")
+            else:
+                print(f"  {status_icon} {case_id}: {case.name} [{case.status}]")
             if case.description:
                 print(f"      描述: {case.description}")
+            if case.tags:
+                print(f"      标签: {', '.join(case.tags)}")
+            if args.tree:
+                tasks = task_registry.filter_by(case_id=case_id)
+                variants = variant_registry.get_by_case(case_id)
+                if variants:
+                    print("      变体:")
+                    for variant_id, variant in variants:
+                        print(f"        - {variant_id}: {variant.name}")
+                if tasks:
+                    print("      任务:")
+                    for task_id, task in tasks:
+                        print(f"        - {task_id}: {task.name} [{task.status}]")
 
     print("=" * 60)
     return 0
@@ -177,7 +328,8 @@ def cmd_case_create(args):
         description=args.description or "",
         rid=args.rid,
         server_id=args.server_id or "",
-        status="draft"
+        status="draft",
+        tags=_parse_tags(args.tag)
     )
 
     if registry.create(case_id, case):
@@ -199,6 +351,111 @@ def cmd_case_delete(args):
     else:
         print(f"❌ 算例不存在: {args.case_id}")
         return 1
+
+
+def cmd_case_clone(args):
+    """克隆算例"""
+    registry = CaseRegistry()
+    source_case = registry.get(args.case_id)
+
+    if not source_case:
+        print(f"❌ 源算例不存在: {args.case_id}")
+        return 1
+
+    new_case_id = IDGenerator.generate(EntityType.CASE)
+    new_case = Case(
+        id=new_case_id,
+        name=args.name or f"{source_case.name}_副本",
+        description=source_case.description,
+        rid=source_case.rid,
+        server_id=source_case.server_id,
+        status="draft",
+        tags=source_case.tags.copy() if hasattr(source_case, 'tags') else []
+    )
+
+    if registry.create(new_case_id, new_case):
+        print(f"✅ 算例克隆成功")
+        print(f"   原算例: {args.case_id}")
+        print(f"   新算例: {new_case_id}")
+        print(f"   名称: {new_case.name}")
+        return 0
+    else:
+        print(f"❌ 克隆失败")
+        return 1
+
+
+def cmd_case_archive(args):
+    """归档算例"""
+    registry = CaseRegistry()
+    case = registry.get(args.case_id)
+
+    if not case:
+        print(f"❌ 算例不存在: {args.case_id}")
+        return 1
+
+    if case.status == "archived":
+        print(f"⚠️ 算例已是归档状态: {args.case_id}")
+        return 0
+
+    if registry.update(args.case_id, {"status": "archived"}):
+        print(f"✅ 算例已归档: {args.case_id}")
+        print(f"   名称: {case.name}")
+        return 0
+    else:
+        print(f"❌ 归档失败")
+        return 1
+
+
+def cmd_case_restore(args):
+    """恢复归档算例"""
+    registry = CaseRegistry()
+    case = registry.get(args.case_id)
+
+    if not case:
+        print(f"❌ 算例不存在: {args.case_id}")
+        return 1
+
+    if case.status != "archived":
+        print(f"⚠️ 算例不是归档状态: {args.case_id}")
+        return 0
+
+    if registry.update(args.case_id, {"status": "active"}):
+        print(f"✅ 算例已恢复: {args.case_id}")
+        print(f"   名称: {case.name}")
+        return 0
+    else:
+        print(f"❌ 恢复失败")
+        return 1
+
+
+def cmd_case_show(args):
+    """查看算例详情"""
+    registry = CaseRegistry()
+    case = registry.get(args.case_id)
+
+    if not case:
+        print(f"❌ 算例不存在: {args.case_id}")
+        return 1
+
+    print("=" * 60)
+    print(f"算例详情: {args.case_id}")
+    print("=" * 60)
+    print(f"  名称: {case.name}")
+    print(f"  状态: {case.status}")
+    print(f"  RID: {case.rid}")
+    if case.description:
+        print(f"  描述: {case.description}")
+    if case.server_id:
+        print(f"  服务器: {case.server_id}")
+    if case.tags:
+        print(f"  标签: {', '.join(case.tags)}")
+    print(f"  创建时间: {case.created_at}")
+    if hasattr(case, 'updated_at') and case.updated_at:
+        print(f"  更新时间: {case.updated_at}")
+    if hasattr(case, 'task_count') and case.task_count:
+        print(f"  任务数: {case.task_count}")
+    print("=" * 60)
+    return 0
 
 
 # ====== Task 命令 ======
@@ -237,6 +494,11 @@ def cmd_task_list(args):
 def cmd_task_create(args):
     """创建任务"""
     registry = TaskRegistry()
+    case_registry = CaseRegistry()
+
+    if not case_registry.exists(args.case_id):
+        print(f"❌ 算例不存在: {args.case_id}")
+        return 1
 
     task_id = IDGenerator.generate(EntityType.TASK)
     task = Task(
@@ -248,6 +510,7 @@ def cmd_task_create(args):
     )
 
     if registry.create(task_id, task):
+        _update_case_task_summary(args.case_id)
         print(f"✅ 任务创建成功: {task_id}")
         print(f"   名称: {args.name}")
         print(f"   算例: {args.case_id}")
@@ -261,7 +524,10 @@ def cmd_task_create(args):
 def cmd_task_delete(args):
     """删除任务"""
     registry = TaskRegistry()
+    task = registry.get(args.task_id)
     if registry.delete(args.task_id):
+        if task:
+            _update_case_task_summary(task.case_id)
         print(f"✅ 任务已删除: {args.task_id}")
         return 0
     else:
@@ -420,6 +686,7 @@ def cmd_variant_apply(args):
     )
 
     if task_registry.create(task_id, task):
+        _update_case_task_summary(variant.case_id)
         print(f"✅ 变体已应用，任务创建成功: {task_id}")
         print(f"   变体: {args.variant_id}")
         print(f"   算例: {variant.case_id}")
@@ -433,6 +700,10 @@ def cmd_variant_apply(args):
 def cmd_variant_delete(args):
     """删除变体"""
     registry = VariantRegistry()
+    referenced = TaskRegistry().filter_by(variant_id=args.variant_id)
+    if referenced and not args.force:
+        print(f"❌ 变体已被 {len(referenced)} 个任务引用，使用 --force 强制删除")
+        return 1
     if registry.delete(args.variant_id):
         print(f"✅ 变体已删除: {args.variant_id}")
         return 0
@@ -731,6 +1002,162 @@ def cmd_query_dashboard(args):
     return 0
 
 
+def cmd_query_search(args):
+    """搜索功能"""
+    keyword = args.keyword.lower()
+    results = []
+
+    # 搜索算例
+    if args.type in ["all", "case"]:
+        case_registry = CaseRegistry()
+        for case_id, case in case_registry.list_all():
+            if (keyword in case.name.lower() or
+                keyword in case_id.lower() or
+                (case.description and keyword in case.description.lower())):
+                results.append(("case", case_id, case.name))
+
+    # 搜索任务
+    if args.type in ["all", "task"]:
+        task_registry = TaskRegistry()
+        for task_id, task in task_registry.list_all():
+            if keyword in task.name.lower() or keyword in task_id.lower():
+                results.append(("task", task_id, task.name))
+
+    # 搜索服务器
+    if args.type in ["all", "server"]:
+        server_registry = ServerRegistry()
+        for server_id, server in server_registry.list_all():
+            if keyword in server.name.lower() or keyword in server_id.lower():
+                results.append(("server", server_id, server.name))
+
+    print("=" * 60)
+    print(f"搜索结果: '{args.keyword}'")
+    print("=" * 60)
+
+    if not results:
+        print("  (无匹配结果)")
+    else:
+        type_icons = {"case": "📦", "task": "📋", "server": "🖥️"}
+        for entity_type, entity_id, name in results[:args.limit]:
+            icon = type_icons.get(entity_type, "📄")
+            print(f"  {icon} [{entity_type}] {name}")
+            print(f"      ID: {entity_id}")
+
+    print("=" * 60)
+    print(f"共找到 {len(results)} 个结果")
+    return 0
+
+
+def cmd_query_recent(args):
+    """最近活动"""
+    print("=" * 60)
+    print("最近活动")
+    print("=" * 60)
+
+    # 最近算例
+    cases = CaseRegistry()
+    recent_cases = sorted(cases.list_all(), key=lambda x: x[1].created_at, reverse=True)[:args.limit]
+    if recent_cases:
+        print("\n📦 最近算例:")
+        for case_id, case in recent_cases:
+            print(f"  • {case.name} [{case_id}]")
+
+    # 最近任务
+    tasks = TaskRegistry()
+    recent_tasks = sorted(tasks.list_all(), key=lambda x: x[1].created_at, reverse=True)[:args.limit]
+    if recent_tasks:
+        print("\n📋 最近任务:")
+        for task_id, task in recent_tasks:
+            status_icon = {"completed": "✅", "running": "🔄", "failed": "❌"}.get(task.status, "⏳")
+            print(f"  {status_icon} {task.name} [{task.status}]")
+
+    print("\n" + "=" * 60)
+    return 0
+
+
+def cmd_workspace_list(args):
+    """列出保存过的工作区"""
+    config = _load_default_user_config()
+    workspaces = config.get("workspaces", {})
+    current_root = str(get_path_manager().root)
+
+    print("=" * 60)
+    print("已保存工作区")
+    print("=" * 60)
+    if not workspaces:
+        print("  (无已保存工作区)")
+    else:
+        for name, info in sorted(workspaces.items()):
+            root = info.get("root", "")
+            mark = " (当前)" if root == current_root else ""
+            status = "有效" if root and _workspace_is_valid(Path(root)) else "失效"
+            print(f"  {name}: {root}{mark}")
+            print(f"      状态: {status}")
+    print("=" * 60)
+    return 0
+
+
+def cmd_workspace_save(args):
+    """保存当前工作区别名"""
+    pm = get_path_manager()
+    config = _load_default_user_config()
+    workspaces = config.setdefault("workspaces", {})
+    workspaces[args.name] = {
+        "root": str(pm.root),
+        "saved_at": datetime.now().isoformat(),
+    }
+    config["workspace"] = {"root": str(pm.root)}
+    _save_default_user_config(config)
+    print(f"✅ 工作区已保存: {args.name}")
+    print(f"   路径: {pm.root}")
+    return 0
+
+
+def cmd_workspace_load(args):
+    """加载已保存工作区"""
+    config = _load_default_user_config()
+    workspaces = config.get("workspaces", {})
+    workspace = workspaces.get(args.name)
+    if not workspace:
+        print(f"❌ 工作区不存在: {args.name}")
+        return 1
+
+    root = Path(workspace.get("root", "")).expanduser().resolve()
+    if not _workspace_is_valid(root):
+        print(f"❌ 工作区路径无效: {root}")
+        return 1
+
+    config["workspace"] = {"root": str(root)}
+    _save_default_user_config(config)
+
+    # Reset singleton so the current process sees the newly loaded workspace.
+    import cloudpss_skills_v3.master_organizer.core.path_manager as pm_module
+    pm_module._path_manager = None
+
+    print(f"✅ 工作区已加载: {args.name}")
+    print(f"   路径: {root}")
+    return 0
+
+
+def cmd_workspace_clean(args):
+    """清理工作区缓存"""
+    config = _load_default_user_config()
+    root = get_path_manager().root
+    if args.name:
+        workspace = config.get("workspaces", {}).get(args.name)
+        if not workspace:
+            print(f"❌ 工作区不存在: {args.name}")
+            return 1
+        root = Path(workspace.get("root", "")).expanduser().resolve()
+        if not _workspace_is_valid(root):
+            print(f"❌ 工作区路径无效: {root}")
+            return 1
+
+    removed, freed = _clean_directory(root / "cache")
+    print(f"✅ 已清理工作区缓存: {removed} 个项目，释放 {freed / (1024 * 1024):.2f} MB")
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="cloudpss-master",
@@ -746,6 +1173,22 @@ def main():
     # status 命令
     status_parser = subparsers.add_parser("status", help="查看系统状态")
     status_parser.set_defaults(func=cmd_status)
+
+    # system 命令
+    system_parser = subparsers.add_parser("system", help="系统管理")
+    system_subparsers = system_parser.add_subparsers(dest="system_command", required=True, help="子命令")
+
+    system_clean_parser = system_subparsers.add_parser("clean", help="清理临时文件")
+    system_clean_parser.add_argument("--cache", action="store_true", help="清理缓存")
+    system_clean_parser.add_argument("--logs", action="store_true", help="清理日志")
+    system_clean_parser.add_argument("--trash", action="store_true", help="清理回收站")
+    system_clean_parser.add_argument("--all", action="store_true", help="清理所有")
+    system_clean_parser.add_argument("--older-than", type=int, metavar="DAYS", help="清理早于指定天数的文件")
+    system_clean_parser.set_defaults(func=cmd_system_clean)
+
+    system_backup_parser = system_subparsers.add_parser("backup", help="备份工作区")
+    system_backup_parser.add_argument("--output", "-o", help="备份文件路径")
+    system_backup_parser.set_defaults(func=cmd_system_backup)
 
     # server 命令
     server_parser = subparsers.add_parser("server", help="服务器管理")
@@ -769,6 +1212,9 @@ def main():
     case_subparsers = case_parser.add_subparsers(dest="case_command", required=True, help="子命令")
 
     case_list_parser = case_subparsers.add_parser("list", help="列出算例")
+    case_list_parser.add_argument("--tree", action="store_true", help="树形显示算例、变体和任务")
+    case_list_parser.add_argument("--tag", action="append", help="按标签过滤，可重复或逗号分隔")
+    case_list_parser.add_argument("--status", choices=["all", "draft", "active", "archived", "deleted"], default="all", help="按状态过滤")
     case_list_parser.set_defaults(func=cmd_case_list)
 
     case_create_parser = case_subparsers.add_parser("create", help="创建算例")
@@ -776,11 +1222,29 @@ def main():
     case_create_parser.add_argument("--rid", required=True, help="CloudPSS RID")
     case_create_parser.add_argument("--description", help="算例描述")
     case_create_parser.add_argument("--server-id", help="服务器ID")
+    case_create_parser.add_argument("--tag", action="append", help="算例标签，可重复或逗号分隔")
     case_create_parser.set_defaults(func=cmd_case_create)
 
     case_delete_parser = case_subparsers.add_parser("delete", help="删除算例")
     case_delete_parser.add_argument("case_id", help="算例ID")
     case_delete_parser.set_defaults(func=cmd_case_delete)
+
+    case_clone_parser = case_subparsers.add_parser("clone", help="克隆算例")
+    case_clone_parser.add_argument("case_id", help="源算例ID")
+    case_clone_parser.add_argument("--name", help="新算例名称")
+    case_clone_parser.set_defaults(func=cmd_case_clone)
+
+    case_archive_parser = case_subparsers.add_parser("archive", help="归档算例")
+    case_archive_parser.add_argument("case_id", help="算例ID")
+    case_archive_parser.set_defaults(func=cmd_case_archive)
+
+    case_restore_parser = case_subparsers.add_parser("restore", help="恢复归档算例")
+    case_restore_parser.add_argument("case_id", help="算例ID")
+    case_restore_parser.set_defaults(func=cmd_case_restore)
+
+    case_show_parser = case_subparsers.add_parser("show", help="查看算例详情")
+    case_show_parser.add_argument("case_id", help="算例ID")
+    case_show_parser.set_defaults(func=cmd_case_show)
 
     # task 命令
     task_parser = subparsers.add_parser("task", help="任务管理")
@@ -835,6 +1299,7 @@ def main():
 
     variant_delete_parser = variant_subparsers.add_parser("delete", help="删除变体")
     variant_delete_parser.add_argument("variant_id", help="变体ID")
+    variant_delete_parser.add_argument("--force", action="store_true", help="即使已有任务引用也删除")
     variant_delete_parser.set_defaults(func=cmd_variant_delete)
 
     # result 命令
@@ -872,6 +1337,35 @@ def main():
 
     query_dashboard_parser = query_subparsers.add_parser("dashboard", help="仪表板")
     query_dashboard_parser.set_defaults(func=cmd_query_dashboard)
+
+    query_search_parser = query_subparsers.add_parser("search", help="搜索")
+    query_search_parser.add_argument("keyword", help="搜索关键词")
+    query_search_parser.add_argument("--type", choices=["all", "case", "task", "server"], default="all", help="搜索类型")
+    query_search_parser.add_argument("--limit", type=int, default=20, help="结果数量限制")
+    query_search_parser.set_defaults(func=cmd_query_search)
+
+    query_recent_parser = query_subparsers.add_parser("recent", help="最近活动")
+    query_recent_parser.add_argument("--limit", type=int, default=10, help="显示数量")
+    query_recent_parser.set_defaults(func=cmd_query_recent)
+
+    # workspace 命令
+    workspace_parser = subparsers.add_parser("workspace", help="工作区管理")
+    workspace_subparsers = workspace_parser.add_subparsers(dest="workspace_command", required=True, help="子命令")
+
+    workspace_list_parser = workspace_subparsers.add_parser("list", help="列出已保存的工作区")
+    workspace_list_parser.set_defaults(func=cmd_workspace_list)
+
+    workspace_save_parser = workspace_subparsers.add_parser("save", help="保存当前工作区")
+    workspace_save_parser.add_argument("--name", required=True, help="工作区名称")
+    workspace_save_parser.set_defaults(func=cmd_workspace_save)
+
+    workspace_load_parser = workspace_subparsers.add_parser("load", help="加载工作区")
+    workspace_load_parser.add_argument("--name", required=True, help="工作区名称")
+    workspace_load_parser.set_defaults(func=cmd_workspace_load)
+
+    workspace_clean_parser = workspace_subparsers.add_parser("clean", help="清理工作区缓存")
+    workspace_clean_parser.add_argument("--name", help="工作区名称（默认当前）")
+    workspace_clean_parser.set_defaults(func=cmd_workspace_clean)
 
     args = parser.parse_args()
 

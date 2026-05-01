@@ -109,8 +109,15 @@ class TestCLI:
             from cloudpss_skills_v3.master_organizer.core import PathManager
             mock_pm.return_value = PathManager(self.temp_dir)
 
+            with patch.object(sys, 'argv', ['cloudpss-master', 'case', 'create', '--name', 'task-case', '--rid', 'model/test/task']):
+                result = main()
+                assert result == 0
+
+            from cloudpss_skills_v3.master_organizer.core import CaseRegistry
+            case_id = CaseRegistry().list_all()[0][0]
+
             # 创建任务
-            with patch.object(sys, 'argv', ['cloudpss-master', 'task', 'create', '--name', 'test-task', '--case-id', 'case_test', '--type', 'powerflow']):
+            with patch.object(sys, 'argv', ['cloudpss-master', 'task', 'create', '--name', 'test-task', '--case-id', case_id, '--type', 'powerflow']):
                 result = main()
                 assert result == 0
 
@@ -175,8 +182,15 @@ class TestCLI:
             from cloudpss_skills_v3.master_organizer.core import PathManager
             mock_pm.return_value = PathManager(self.temp_dir)
 
+            with patch.object(sys, 'argv', ['cloudpss-master', 'case', 'create', '--name', 'lifecycle-case', '--rid', 'model/test/lifecycle']):
+                result = main()
+                assert result == 0
+
+            from cloudpss_skills_v3.master_organizer.core import CaseRegistry
+            case_id = CaseRegistry().list_all()[0][0]
+
             # 创建任务
-            with patch.object(sys, 'argv', ['cloudpss-master', 'task', 'create', '--name', 'lifecycle-test', '--case-id', 'case_test', '--type', 'powerflow']):
+            with patch.object(sys, 'argv', ['cloudpss-master', 'task', 'create', '--name', 'lifecycle-test', '--case-id', case_id, '--type', 'powerflow']):
                 result = main()
                 assert result == 0
 
@@ -374,6 +388,95 @@ class TestCLI:
 
             # 验证已删除
             assert ResultRegistry().get(result_id) is None
+
+    def test_cli_case_enhanced_commands(self):
+        """测试 case show/clone/archive/restore/list --tree/tag"""
+        with patch.object(sys, 'argv', ['cloudpss-master', 'init', '--path', str(self.temp_dir)]):
+            main()
+
+        with patch('cloudpss_skills_v3.master_organizer.cli.main.get_path_manager') as mock_pm:
+            from cloudpss_skills_v3.master_organizer.core import CaseRegistry, PathManager
+            mock_pm.return_value = PathManager(self.temp_dir)
+
+            with patch.object(sys, 'argv', ['cloudpss-master', 'case', 'create', '--name', 'enhanced-case', '--rid', 'model/test/enhanced', '--tag', 'uat,important']):
+                assert main() == 0
+
+            case_id = CaseRegistry().list_all()[0][0]
+
+            for argv in [
+                ['cloudpss-master', 'case', 'show', case_id],
+                ['cloudpss-master', 'case', 'clone', case_id, '--name', 'enhanced-copy'],
+                ['cloudpss-master', 'case', 'archive', case_id],
+                ['cloudpss-master', 'case', 'restore', case_id],
+                ['cloudpss-master', 'case', 'list', '--tree', '--tag', 'uat'],
+            ]:
+                with patch.object(sys, 'argv', argv):
+                    assert main() == 0
+
+    def test_cli_query_search_recent(self):
+        """测试 query search/recent"""
+        with patch.object(sys, 'argv', ['cloudpss-master', 'init', '--path', str(self.temp_dir)]):
+            main()
+
+        with patch('cloudpss_skills_v3.master_organizer.cli.main.get_path_manager') as mock_pm:
+            from cloudpss_skills_v3.master_organizer.core import PathManager
+            mock_pm.return_value = PathManager(self.temp_dir)
+
+            with patch.object(sys, 'argv', ['cloudpss-master', 'server', 'add', '--name', 'search-server', '--url', 'https://search.test']):
+                assert main() == 0
+            with patch.object(sys, 'argv', ['cloudpss-master', 'case', 'create', '--name', 'search-case', '--rid', 'model/test/search']):
+                assert main() == 0
+            with patch.object(sys, 'argv', ['cloudpss-master', 'query', 'search', 'search', '--type', 'all']):
+                assert main() == 0
+            with patch.object(sys, 'argv', ['cloudpss-master', 'query', 'recent', '--limit', '2']):
+                assert main() == 0
+
+    def test_cli_workspace_commands(self):
+        """测试 workspace save/list/load/clean"""
+        import os
+
+        with patch.object(sys, 'argv', ['cloudpss-master', 'init', '--path', str(self.temp_dir)]):
+            main()
+
+        cache_file = self.temp_dir / "cache" / "tmp.txt"
+        cache_file.write_text("cache")
+
+        with patch('cloudpss_skills_v3.master_organizer.cli.main.get_path_manager') as mock_pm:
+            from cloudpss_skills_v3.master_organizer.core import PathManager
+            mock_pm.return_value = PathManager(self.temp_dir)
+
+            with patch.object(sys, 'argv', ['cloudpss-master', 'workspace', 'save', '--name', 'uat']):
+                assert main() == 0
+            with patch.object(sys, 'argv', ['cloudpss-master', 'workspace', 'list']):
+                assert main() == 0
+            with patch.object(sys, 'argv', ['cloudpss-master', 'workspace', 'load', '--name', 'uat']):
+                assert main() == 0
+            with patch.object(sys, 'argv', ['cloudpss-master', 'workspace', 'clean']):
+                assert main() == 0
+
+        assert not cache_file.exists()
+
+    def test_cli_variant_delete_ref_guard(self):
+        """测试被任务引用的变体默认不能删除"""
+        with patch.object(sys, 'argv', ['cloudpss-master', 'init', '--path', str(self.temp_dir)]):
+            main()
+
+        with patch('cloudpss_skills_v3.master_organizer.cli.main.get_path_manager') as mock_pm:
+            from cloudpss_skills_v3.master_organizer.core import CaseRegistry, VariantRegistry, PathManager
+            mock_pm.return_value = PathManager(self.temp_dir)
+
+            with patch.object(sys, 'argv', ['cloudpss-master', 'case', 'create', '--name', 'variant-case', '--rid', 'model/test/variant']):
+                assert main() == 0
+            case_id = CaseRegistry().list_all()[0][0]
+            with patch.object(sys, 'argv', ['cloudpss-master', 'variant', 'create', '--case-id', case_id, '--name', 'guarded']):
+                assert main() == 0
+            variant_id = VariantRegistry().list_all()[0][0]
+            with patch.object(sys, 'argv', ['cloudpss-master', 'variant', 'apply', variant_id]):
+                assert main() == 0
+            with patch.object(sys, 'argv', ['cloudpss-master', 'variant', 'delete', variant_id]):
+                assert main() == 1
+            with patch.object(sys, 'argv', ['cloudpss-master', 'variant', 'delete', variant_id, '--force']):
+                assert main() == 0
 
 
 if __name__ == "__main__":
