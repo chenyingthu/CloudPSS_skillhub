@@ -26,6 +26,16 @@ from cloudpss_skills_v3.master_organizer.core import (
     Task,
     TaskRegistry,
 )
+from cloudpss_skills_v3.master_organizer.core.server_auth import (
+    DEFAULT_INTERNAL_OWNER,
+    DEFAULT_INTERNAL_URL,
+    TOKEN_SOURCE_INTERNAL,
+    build_auth_metadata,
+    decrypt_server_token,
+    ensure_internal_server,
+    get_default_server,
+    normalize_server_url,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -33,13 +43,20 @@ CLI_MODULE = "cloudpss_skills_v3.master_organizer.cli.main"
 DEFAULT_MODEL_RIDS = ("model/holdme/IEEE39", "model/chenying/IEEE39")
 
 
-def _load_cloudpss_token() -> str:
+def _read_token_file(name: str) -> str:
+    token_path = REPO_ROOT / name
+    if token_path.exists():
+        return token_path.read_text(encoding="utf-8").strip()
+    return ""
+
+
+def _load_cloudpss_token() -> tuple[str, str, str]:
     for token_path in (REPO_ROOT / ".cloudpss_token_internal", REPO_ROOT / ".cloudpss_token"):
         if token_path.exists():
             token = token_path.read_text(encoding="utf-8").strip()
             if token:
-                return token
-    return os.environ.get("CLOUDPSS_TOKEN", "").strip()
+                return token, os.environ.get("CLOUDPSS_API_URL", "https://cloudpss.net/"), ""
+    return os.environ.get("CLOUDPSS_TOKEN", "").strip(), os.environ.get("CLOUDPSS_API_URL", "https://cloudpss.net/"), ""
 
 
 def _table_count(table) -> int:
@@ -75,44 +92,60 @@ def test_live_powerflow_result_can_be_registered_and_exported(tmp_path):
     if os.environ.get("CLOUDPSS_V3_RUN_LIVE") != "1":
         pytest.skip("set CLOUDPSS_V3_RUN_LIVE=1 to run the live CloudPSS smoke test")
 
-    token = _load_cloudpss_token()
+    workspace = tmp_path / "workspace"
+    registry_dir = workspace / "registry"
+    registry_dir.mkdir(parents=True)
+
+    internal_token = _read_token_file(".cloudpss_token_internal")
+    if internal_token:
+        server_id, server = ensure_internal_server(ServerRegistry(registry_dir), repo_root=REPO_ROOT)
+    else:
+        token, url, owner = _load_cloudpss_token()
+        if not token:
+            pytest.skip("missing CloudPSS token")
+        server_id = IDGenerator.generate(EntityType.SERVER)
+        server = Server(
+            id=server_id,
+            name="CloudPSS Live",
+            url=normalize_server_url(url),
+            owner=owner,
+            auth=build_auth_metadata(token, {"token_source": "test"}),
+            default=True,
+        )
+        ServerRegistry(registry_dir).create(server_id, server)
+
+    token = decrypt_server_token(server)
     if not token:
         pytest.skip("missing CloudPSS token")
 
     from cloudpss import Model, setToken
 
+    previous_api_url = os.environ.get("CLOUDPSS_API_URL")
+    os.environ["CLOUDPSS_API_URL"] = server.url
     setToken(token)
-    candidates = [os.environ.get("TEST_MODEL_RID", "").strip(), *DEFAULT_MODEL_RIDS]
-    model_rid, model = _fetch_first_available_model(Model, [rid for rid in candidates if rid])
+    try:
+        candidates = [os.environ.get("TEST_MODEL_RID", "").strip(), *DEFAULT_MODEL_RIDS]
+        model_rid, model = _fetch_first_available_model(Model, [rid for rid in candidates if rid])
 
-    job = model.runPowerFlow()
-    status = _wait_for_job(job)
-    assert status == 1, f"CloudPSS power-flow job failed: {getattr(job, 'id', 'unknown')}"
+        job = model.runPowerFlow()
+        status = _wait_for_job(job)
+        assert status == 1, f"CloudPSS power-flow job failed: {getattr(job, 'id', 'unknown')}"
 
-    result = job.result
-    bus_count = _table_count(result.getBuses())
-    branch_count = _table_count(result.getBranches())
-    assert bus_count > 0
-    assert branch_count > 0
+        result = job.result
+        bus_count = _table_count(result.getBuses())
+        branch_count = _table_count(result.getBranches())
+        assert bus_count > 0
+        assert branch_count > 0
+    finally:
+        if previous_api_url is None:
+            os.environ.pop("CLOUDPSS_API_URL", None)
+        else:
+            os.environ["CLOUDPSS_API_URL"] = previous_api_url
 
-    workspace = tmp_path / "workspace"
-    registry_dir = workspace / "registry"
-    registry_dir.mkdir(parents=True)
-
-    server_id = IDGenerator.generate(EntityType.SERVER)
     case_id = IDGenerator.generate(EntityType.CASE)
     task_id = IDGenerator.generate(EntityType.TASK)
     result_id = IDGenerator.generate(EntityType.RESULT)
 
-    ServerRegistry(registry_dir).create(
-        server_id,
-        Server(
-            id=server_id,
-            name="CloudPSS Live",
-            url=os.environ.get("CLOUDPSS_API_URL", "https://cloudpss.net/"),
-            default=True,
-        ),
-    )
     CaseRegistry(registry_dir).create(
         case_id,
         Case(
@@ -153,6 +186,9 @@ def test_live_powerflow_result_can_be_registered_and_exported(tmp_path):
             files=[],
             metadata={
                 "data_source": "live_cloudpss",
+                "server_id": server_id,
+                "server_url": server.url,
+                "server_owner": server.owner,
                 "model_rid": model_rid,
                 "model_name": getattr(model, "name", ""),
                 "job_id": getattr(job, "id", None),
@@ -174,6 +210,26 @@ def test_live_powerflow_result_can_be_registered_and_exported(tmp_path):
     exported = json.loads(export_path.read_text(encoding="utf-8"))
     assert exported["result_id"] == result_id
     assert exported["metadata"]["data_source"] == "live_cloudpss"
+    assert exported["metadata"]["server_id"] == server_id
+    assert exported["metadata"]["server_url"] == server.url
     assert exported["metadata"]["job_id"] == getattr(job, "id", None)
     assert exported["metadata"]["bus_count"] == bus_count
     assert exported["metadata"]["branch_count"] == branch_count
+
+
+def test_internal_token_is_bound_to_internal_server(tmp_path):
+    token_path = REPO_ROOT / ".cloudpss_token_internal"
+    if not token_path.exists() or not token_path.read_text(encoding="utf-8").strip():
+        pytest.skip("missing .cloudpss_token_internal")
+
+    registry = ServerRegistry(tmp_path / "registry")
+    server_id, server = ensure_internal_server(registry, repo_root=REPO_ROOT)
+
+    assert server.url == DEFAULT_INTERNAL_URL
+    assert server.owner == DEFAULT_INTERNAL_OWNER
+    assert server.default is True
+    assert server.auth["token_source"] == TOKEN_SOURCE_INTERNAL
+    assert "encrypted_token" in server.auth
+    assert token_path.read_text(encoding="utf-8").strip() not in str(server.auth)
+    assert decrypt_server_token(server) == token_path.read_text(encoding="utf-8").strip()
+    assert get_default_server(registry) == (server_id, server)

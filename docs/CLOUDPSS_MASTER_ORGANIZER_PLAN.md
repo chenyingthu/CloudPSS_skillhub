@@ -481,9 +481,12 @@ servers:
   server_a3f7b2d9:
     name: "CloudPSS_生产环境"
     url: "https://www.cloudpss.net/"
+    owner: "cloudpss_user"
     auth:
       # 加密存储的认证信息
-      encrypted_token: "ENC[AES256_GCM:data:...]"
+      encrypted_token: "ENC:..."
+      token_source: "file"
+      token_file: "/home/user/.cloudpss_token"
       key_id: "key_v1"
     status: "active"
     created_at: "2026-04-01T10:00:00+08:00"
@@ -493,6 +496,17 @@ servers:
       - "powerflow"
       - "emt"
       - "stability"
+
+  server_internal:
+    name: "CloudPSS Internal"
+    url: "http://166.111.60.76:50001/"
+    owner: "chenying"
+    auth:
+      encrypted_token: "ENC:..."
+      token_source: "internal"
+      token_file: ".cloudpss_token_internal"
+    status: "active"
+    default: true
 ```
 
 ---
@@ -916,8 +930,12 @@ cloudpss system backup --output backup_$(date +%Y%m%d).tar.gz
 cloudpss server add \
     --name "生产环境" \
     --url "https://www.cloudpss.net/" \
+    --owner "cloudpss_user" \
     --token-file ~/.cloudpss_token \
     --default
+
+# 注册本项目内网服务：.cloudpss_token_internal -> http://166.111.60.76:50001/，owner=chenying
+cloudpss server internal
 
 # 列出服务器
 cloudpss server list

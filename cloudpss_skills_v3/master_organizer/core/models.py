@@ -37,6 +37,7 @@ class Server:
     name: str
     url: str
     auth: Dict[str, str] = field(default_factory=dict)
+    owner: str = ""
     status: str = "active"
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     last_used: Optional[str] = None

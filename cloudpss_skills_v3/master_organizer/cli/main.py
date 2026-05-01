@@ -17,6 +17,16 @@ from cloudpss_skills_v3.master_organizer.core import (
     ServerRegistry, CaseRegistry, TaskRegistry, ResultRegistry, VariantRegistry,
     Server, Case, Task, Result, Variant
 )
+from cloudpss_skills_v3.master_organizer.core.server_auth import (
+    TOKEN_SOURCE_ENV,
+    TOKEN_SOURCE_INLINE,
+    build_auth_metadata,
+    ensure_internal_server,
+    get_default_server,
+    normalize_server_url,
+    read_token_source,
+    set_default_server,
+)
 
 
 def cmd_init(args):
@@ -223,6 +233,11 @@ def cmd_server_list(args):
             default_mark = " (默认)" if getattr(server, 'default', False) else ""
             print(f"  {status_icon} {server_id}: {server.name}{default_mark}")
             print(f"      URL: {server.url}")
+            if server.owner:
+                print(f"      Owner: {server.owner}")
+            token_source = server.auth.get("token_source") if server.auth else None
+            if token_source:
+                print(f"      Token: {token_source} (encrypted)")
 
     print("=" * 60)
     return 0
@@ -232,25 +247,86 @@ def cmd_server_add(args):
     """添加服务器"""
     registry = ServerRegistry()
 
+    try:
+        url = normalize_server_url(args.url)
+    except ValueError as e:
+        print(f"❌ {e}")
+        return 1
+
+    auth = {}
+    if args.token:
+        try:
+            auth = build_auth_metadata(args.token, {"token_source": TOKEN_SOURCE_INLINE})
+        except ValueError as e:
+            print(f"❌ {e}")
+            return 1
+    elif args.token_file:
+        try:
+            token, metadata = read_token_source(args.token_file)
+            auth = build_auth_metadata(token, metadata)
+        except (OSError, ValueError) as e:
+            print(f"❌ 读取 token 失败: {e}")
+            return 1
+    elif args.token_env:
+        try:
+            token, metadata = read_token_source(TOKEN_SOURCE_ENV)
+            auth = build_auth_metadata(token, metadata)
+        except ValueError as e:
+            print(f"❌ 读取 token 失败: {e}")
+            return 1
+
     server_id = IDGenerator.generate(EntityType.SERVER)
     server = Server(
         id=server_id,
         name=args.name,
-        url=args.url,
+        url=url,
+        owner=args.owner or "",
+        auth=auth,
         status="active"
     )
 
     if registry.create(server_id, server):
+        if args.default:
+            set_default_server(server_id, registry)
         print(f"✅ 服务器添加成功: {server_id}")
         print(f"   名称: {args.name}")
-        print(f"   URL: {args.url}")
+        print(f"   URL: {url}")
+        if args.owner:
+            print(f"   Owner: {args.owner}")
+        if auth:
+            print(f"   Token: 已加密保存 ({auth.get('token_source', 'unknown')})")
         if args.default:
-            registry.update(server_id, {"default": True})
             print("   已设为默认服务器")
         return 0
     else:
         print(f"❌ 添加失败")
         return 1
+
+
+def cmd_server_default(args):
+    """设置默认服务器"""
+    if set_default_server(args.server_id):
+        print(f"✅ 默认服务器已设置: {args.server_id}")
+        return 0
+    print(f"❌ 服务器不存在: {args.server_id}")
+    return 1
+
+
+def cmd_server_internal(args):
+    """注册内网服务器"""
+    try:
+        server_id, server = ensure_internal_server()
+    except (OSError, ValueError) as e:
+        print(f"❌ 注册 internal 服务器失败: {e}")
+        return 1
+
+    print(f"✅ internal 服务器已注册: {server_id}")
+    print(f"   名称: {server.name}")
+    print(f"   URL: {server.url}")
+    print(f"   Owner: {server.owner}")
+    print("   Token: .cloudpss_token_internal (encrypted)")
+    print("   已设为默认服务器")
+    return 0
 
 
 def cmd_server_remove(args):
@@ -320,6 +396,11 @@ def cmd_case_list(args):
 def cmd_case_create(args):
     """创建算例"""
     registry = CaseRegistry()
+    server_id = args.server_id or ""
+    if not server_id:
+        default_server = get_default_server()
+        if default_server:
+            server_id = default_server[0]
 
     case_id = IDGenerator.generate(EntityType.CASE)
     case = Case(
@@ -327,7 +408,7 @@ def cmd_case_create(args):
         name=args.name,
         description=args.description or "",
         rid=args.rid,
-        server_id=args.server_id or "",
+        server_id=server_id,
         status="draft",
         tags=_parse_tags(args.tag)
     )
@@ -336,6 +417,8 @@ def cmd_case_create(args):
         print(f"✅ 算例创建成功: {case_id}")
         print(f"   名称: {args.name}")
         print(f"   RID: {args.rid}")
+        if server_id:
+            print(f"   服务器: {server_id}")
         return 0
     else:
         print(f"❌ 创建失败")
@@ -499,6 +582,8 @@ def cmd_task_create(args):
     if not case_registry.exists(args.case_id):
         print(f"❌ 算例不存在: {args.case_id}")
         return 1
+    case = case_registry.get(args.case_id)
+    server_id = case.server_id if case else ""
 
     task_id = IDGenerator.generate(EntityType.TASK)
     task = Task(
@@ -506,6 +591,7 @@ def cmd_task_create(args):
         name=args.name,
         case_id=args.case_id,
         type=args.type,
+        server_id=server_id,
         status="created"
     )
 
@@ -1200,8 +1286,19 @@ def main():
     server_add_parser = server_subparsers.add_parser("add", help="添加服务器")
     server_add_parser.add_argument("--name", required=True, help="服务器名称")
     server_add_parser.add_argument("--url", required=True, help="服务器URL")
+    server_add_parser.add_argument("--owner", help="服务器 token 所属用户")
+    server_add_parser.add_argument("--token-file", help="从文件读取 token 并加密保存")
+    server_add_parser.add_argument("--token-env", action="store_true", help="从 CLOUDPSS_TOKEN 读取 token 并加密保存")
+    server_add_parser.add_argument("--token", help="直接传入 token 并加密保存")
     server_add_parser.add_argument("--default", action="store_true", help="设为默认")
     server_add_parser.set_defaults(func=cmd_server_add)
+
+    server_default_parser = server_subparsers.add_parser("default", help="设置默认服务器")
+    server_default_parser.add_argument("server_id", help="服务器ID")
+    server_default_parser.set_defaults(func=cmd_server_default)
+
+    server_internal_parser = server_subparsers.add_parser("internal", help="注册当前内网 CloudPSS 服务器")
+    server_internal_parser.set_defaults(func=cmd_server_internal)
 
     server_remove_parser = server_subparsers.add_parser("remove", help="删除服务器")
     server_remove_parser.add_argument("server_id", help="服务器ID")

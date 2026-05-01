@@ -5,6 +5,7 @@ CLI 测试
 import pytest
 import tempfile
 import shutil
+import yaml
 from pathlib import Path
 from unittest.mock import patch
 import sys
@@ -77,6 +78,43 @@ class TestCLI:
             with patch.object(sys, 'argv', ['cloudpss-master', 'server', 'list']):
                 result = main()
                 assert result == 0
+
+    def test_cli_server_add_encrypts_owner_token_and_sets_default(self):
+        """测试 server add 记录 owner、加密 token 并设置默认服务器"""
+        token_file = self.temp_dir / "token.txt"
+        token_file.write_text("secret-token", encoding="utf-8")
+
+        with patch.object(sys, 'argv', ['cloudpss-master', 'init', '--path', str(self.temp_dir)]):
+            main()
+
+        with patch('cloudpss_skills_v3.master_organizer.cli.main.get_path_manager') as mock_pm:
+            from cloudpss_skills_v3.master_organizer.core import PathManager
+            mock_pm.return_value = PathManager(self.temp_dir)
+
+            with patch.object(sys, 'argv', [
+                'cloudpss-master',
+                'server',
+                'add',
+                '--name',
+                'internal',
+                '--url',
+                '166.111.60.76:50001',
+                '--owner',
+                'chenying',
+                '--token-file',
+                str(token_file),
+                '--default',
+            ]):
+                assert main() == 0
+
+        data = yaml.safe_load((self.temp_dir / "registry" / "servers.yaml").read_text(encoding="utf-8"))
+        server = next(iter(data["servers"].values()))
+        assert server["url"] == "http://166.111.60.76:50001/"
+        assert server["owner"] == "chenying"
+        assert server["default"] is True
+        assert server["auth"]["token_source"] == "file"
+        assert server["auth"]["encrypted_token"].startswith("ENC:")
+        assert "secret-token" not in str(server["auth"])
 
     def test_cli_case_create_delete(self):
         """测试 case create/delete 命令"""
