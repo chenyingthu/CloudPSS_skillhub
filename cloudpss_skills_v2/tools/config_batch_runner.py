@@ -32,6 +32,33 @@ class ConfigBatchRunnerTool:
         self.logs = []
         self.artifacts = []
 
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["skill"],
+            "properties": {
+                "skill": {"type": "string", "const": "config_batch_runner", "default": "config_batch_runner"},
+                "configs": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "config": {"type": "object"},
+                        },
+                    },
+                    "default": [],
+                },
+            },
+        }
+
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "configs": [],
+        }
+
     def validate(self, config: dict[str, Any] | None = None) -> tuple[bool, list[str]]:
         errors = []
         if not isinstance(config, dict):

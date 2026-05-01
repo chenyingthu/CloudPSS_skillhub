@@ -35,7 +35,7 @@ from .config_manager import ConfigManager, get_config_manager, UserConfig, UserP
 from .crypto import CryptoManager, MockCryptoManager, get_crypto_manager
 from .registry_base import RegistryBase, RegistryEntry
 from .models import Server, Case, Task, Result, Variant, EntityStatus, TaskStatus
-from .registries import ServerRegistry, CaseRegistry, TaskRegistry, ResultRegistry
+from .registries import ServerRegistry, CaseRegistry, TaskRegistry, ResultRegistry, VariantRegistry
 
 __all__ = [
     # ID 生成器
@@ -79,6 +79,7 @@ __all__ = [
     'CaseRegistry',
     'TaskRegistry',
     'ResultRegistry',
+    'VariantRegistry',
 ]
 
 __version__ = '1.0.0'

@@ -57,6 +57,9 @@ def get_config_defaults(config: dict, path: str = "") -> Dict[str, Any]:
         new_path = f"{path}.{key}" if path else key
 
         if isinstance(value, dict):
+            # 如果字典为空，记录路径；否则递归处理子键
+            if not value:
+                defaults[new_path] = value
             defaults.update(get_config_defaults(value, new_path))
         else:
             defaults[new_path] = value

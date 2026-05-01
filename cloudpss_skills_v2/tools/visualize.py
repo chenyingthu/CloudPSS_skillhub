@@ -96,13 +96,20 @@ class VisualizeTool:
             "type": "object",
             "required": ["skill"],
             "properties": {
-                "skill": {"type": "string", "const": "visualize"},
+                "skill": {"type": "string", "const": "visualize", "default": "visualize"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
                     "default": "pandapower",
                 },
-                "model": {"type": "object", "required": ["rid"]},
+                "model": {
+                    "type": "object",
+                    "required": ["rid"],
+                    "properties": {
+                        "rid": {"type": "string", "default": "case14"},
+                        "source": {"type": "string", "enum": ["cloud", "local"], "default": "local"},
+                    },
+                },
                 "result": {"type": "object"},
                 "plot": {
                     "type": "object",
@@ -112,7 +119,7 @@ class VisualizeTool:
                             "items": {"type": "string"},
                             "default": ["time_series", "bus_voltages"],
                         },
-                        "channels": {"type": "array", "items": {"type": "string"}},
+                        "channels": {"type": "array", "items": {"type": "string"}, "default": []},
                     },
                 },
             },

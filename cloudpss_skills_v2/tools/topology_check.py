@@ -30,13 +30,20 @@ class TopologyCheckTool:
             "type": "object",
             "required": ["skill", "model"],
             "properties": {
-                "skill": {"type": "string", "const": "topology_check"},
+                "skill": {"type": "string", "const": "topology_check", "default": "topology_check"},
                 "engine": {
                     "type": "string",
                     "enum": ["cloudpss", "pandapower"],
                     "default": "pandapower",
                 },
-                "model": {"type": "object", "required": ["rid"]},
+                "model": {
+                    "type": "object",
+                    "required": ["rid"],
+                    "properties": {
+                        "rid": {"type": "string", "default": "case14"},
+                        "source": {"type": "string", "enum": ["cloud", "local"], "default": "local"},
+                    },
+                },
                 "checks": {
                     "type": "object",
                     "properties": {

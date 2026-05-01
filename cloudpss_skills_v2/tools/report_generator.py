@@ -29,7 +29,7 @@ class ReportGeneratorTool:
             "type": "object",
             "required": ["skill"],
             "properties": {
-                "skill": {"type": "string", "const": "report_generator"},
+                "skill": {"type": "string", "const": "report_generator", "default": "report_generator"},
                 "report": {
                     "type": "object",
                     "properties": {
@@ -38,8 +38,8 @@ class ReportGeneratorTool:
                             "default": "CloudPSS Analysis Report",
                         },
                         "author": {"type": "string", "default": "CloudPSS Toolkit"},
-                        "skills": {"type": "array", "items": {"type": "string"}},
-                        "skill_results": {"type": "array"},
+                        "skills": {"type": "array", "items": {"type": "string"}, "default": []},
+                        "skill_results": {"type": "array", "default": []},
                     },
                 },
                 "output": {

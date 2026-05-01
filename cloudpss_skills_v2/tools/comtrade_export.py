@@ -78,7 +78,7 @@ class ComtradeExportTool:
     def get_default_config(self) -> dict[str, object]:
         return {
             "skill": self.name,
-            "source": {"data": {"time": [], "channels": []}},
+            "source": {"data": {}},
             "comtrade": {
                 "station_name": "CloudPSS",
                 "rec_dev_id": "CloudPSS_EMT",

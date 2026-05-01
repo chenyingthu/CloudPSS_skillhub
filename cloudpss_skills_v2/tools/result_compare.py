@@ -28,7 +28,7 @@ class ResultCompareTool:
             "type": "object",
             "required": ["skill"],
             "properties": {
-                "skill": {"type": "string", "const": "result_compare"},
+                "skill": {"type": "string", "const": "result_compare", "default": "result_compare"},
                 "sources": {
                     "type": "array",
                     "items": {
@@ -39,6 +39,7 @@ class ResultCompareTool:
                         },
                     },
                     "minItems": 2,
+                    "default": [],
                 },
                 "compare": {
                     "type": "object",

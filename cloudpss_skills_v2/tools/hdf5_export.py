@@ -37,6 +37,36 @@ class HDF5ExportTool:
         self.logs: list[LogEntry] = []
         self.artifacts: list[Artifact] = []
 
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["skill"],
+            "properties": {
+                "skill": {"type": "string", "const": "hdf5_export", "default": "hdf5_export"},
+                "source": {
+                    "type": "object",
+                    "properties": {
+                        "data": {"type": "object", "default": {}},
+                    },
+                },
+                "output": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "default": "./results/export.h5"},
+                        "version": {"type": "string", "default": "2.0"},
+                    },
+                },
+            },
+        }
+
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "source": {"data": {}},
+            "output": {"path": "./results/export.h5", "version": "2.0"},
+        }
+
     def validate(self, config: object) -> tuple[bool, list[str]]:
         errors: list[str] = []
         if not isinstance(config, dict):

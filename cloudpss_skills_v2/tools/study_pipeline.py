@@ -43,6 +43,32 @@ class StudyPipelineTool:
         self.logs = []
         self.artifacts = []
 
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["skill"],
+            "properties": {
+                "skill": {"type": "string", "const": "study_pipeline", "default": "study_pipeline"},
+                "pipeline": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "default": [],
+                },
+                "stages": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "default": [],
+                },
+            },
+        }
+
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "pipeline": [],
+        }
+
     def _log(self, level: str, message: str, context: dict[str, Any] | None = None) -> None:
         self.logs.append(
             LogEntry(

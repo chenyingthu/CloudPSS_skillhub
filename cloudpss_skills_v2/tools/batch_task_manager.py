@@ -63,6 +63,31 @@ class BatchTaskManagerTool:
         self.logs: list[LogEntry] = []
         self.artifacts: list[Artifact] = []
 
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["skill"],
+            "properties": {
+                "skill": {"type": "string", "const": "batch_task_manager", "default": "batch_task_manager"},
+                "tasks": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "default": [],
+                },
+                "max_workers": {"type": "integer", "default": 4},
+                "max_retries": {"type": "integer", "default": 0},
+            },
+        }
+
+    def get_default_config(self) -> dict[str, Any]:
+        return {
+            "skill": self.name,
+            "tasks": [],
+            "max_workers": 4,
+            "max_retries": 0,
+        }
+
     def _log(
         self,
         level: str,

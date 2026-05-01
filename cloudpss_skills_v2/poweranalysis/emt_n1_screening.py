@@ -47,8 +47,8 @@ class EmtN1ScreeningAnalysis:
                 "simulation": {
                     "type": "object",
                     "properties": {
-                        "duration": {"type": "number"},
-                        "step_size": {"type": "number"},
+                        "duration": {"type": ["number", "null"], "default": None},
+                        "step_size": {"type": ["number", "null"], "default": None},
                         "timeout": {"type": "number", "default": 300},
                         "sampling_freq": {"type": "number", "default": 2000},
                     },

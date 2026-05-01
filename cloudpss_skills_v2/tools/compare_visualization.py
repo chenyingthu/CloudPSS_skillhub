@@ -41,7 +41,6 @@ class CompareVisualizationTool:
                         "start": {"type": ["number", "null"], "default": None},
                         "end": {"type": ["number", "null"], "default": None},
                     },
-                    "default": {"start": None, "end": None},
                 },
             },
         }

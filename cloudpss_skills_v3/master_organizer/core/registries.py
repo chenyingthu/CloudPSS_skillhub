@@ -7,7 +7,7 @@
 from dataclasses import asdict
 from typing import Optional
 from .registry_base import RegistryBase
-from .models import Server, Case, Task, Result
+from .models import Server, Case, Task, Result, Variant
 
 
 class ServerRegistry(RegistryBase[Server]):
@@ -74,4 +74,26 @@ class ResultRegistry(RegistryBase[Result]):
         return {k: Result(**v) for k, v in data.get(self.registry_name, {}).items()}
 
 
-__all__ = ["ServerRegistry", "CaseRegistry", "TaskRegistry", "ResultRegistry"]
+class VariantRegistry(RegistryBase[Variant]):
+    """变体注册表"""
+
+    @property
+    def registry_name(self) -> str:
+        return "variants"
+
+    @property
+    def entity_type(self) -> str:
+        return "variant"
+
+    def _serialize_data(self) -> dict:
+        return {k: asdict(v) for k, v in self._data.items()}
+
+    def _deserialize_data(self, data: dict) -> dict:
+        return {k: Variant(**v) for k, v in data.get(self.registry_name, {}).items()}
+
+    def get_by_case(self, case_id: str) -> list[tuple[str, Variant]]:
+        """获取指定算例的所有变体"""
+        return [(k, v) for k, v in self._data.items() if v.case_id == case_id]
+
+
+__all__ = ["ServerRegistry", "CaseRegistry", "TaskRegistry", "ResultRegistry", "VariantRegistry"]

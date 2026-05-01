@@ -94,14 +94,14 @@ class RenewableIntegrationAnalysis:
                     "type": "object",
                     "properties": {
                         "fundamental_voltage": {"type": "number", "default": 1.0},
-                        "orders": {"type": "object"},
+                        "orders": {"type": "object", "default": {}},
                         "limit_thd": {"type": "number", "default": 0.05},
                     },
                 },
                 "lvrt": {
                     "type": "object",
                     "properties": {
-                        "profile": {"type": "array", "items": {"type": "object"}},
+                        "profile": {"type": "array", "items": {"type": "object"}, "default": []},
                         "min_voltage_pu": {"type": "number", "default": 0.15},
                         "max_recovery_time_s": {"type": "number", "default": 1.5},
                     },
@@ -127,25 +127,22 @@ class RenewableIntegrationAnalysis:
         return {
             "skill": self.name,
             "engine": "pandapower",
-            "model": {"rid": "case14"},
+            "auth": {"token": "local-pandapower-token"},
+            "model": {"rid": "case14", "source": "local"},
             "renewable": {
                 "type": "pv",
-                "capacity_mw": 100.0,
-                "short_circuit_mva": 350.0,
-                "point_of_interconnection": "bus_1",
-                "capacity_series_mw": [40.0, 55.0, 20.0, 75.0],
+                "capacity_mw": 50.0,
+                "short_circuit_mva": 1000.0,
+                "point_of_interconnection": "",
+                "capacity_series_mw": [],
             },
             "harmonics": {
                 "fundamental_voltage": 1.0,
-                "orders": {"5": 0.03, "7": 0.02, "11": 0.01},
+                "orders": {},
                 "limit_thd": 0.05,
             },
             "lvrt": {
-                "profile": [
-                    {"time_s": 0.0, "voltage_pu": 1.0},
-                    {"time_s": 0.15, "voltage_pu": 0.2},
-                    {"time_s": 0.8, "voltage_pu": 0.92},
-                ],
+                "profile": [],
                 "min_voltage_pu": 0.15,
                 "max_recovery_time_s": 1.5,
             },
