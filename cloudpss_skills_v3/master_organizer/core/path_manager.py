@@ -16,6 +16,12 @@ class PathManager:
 
     负责管理 ~/.cloudpss/ 目录结构的所有路径。
     确保路径一致性、安全性和可预测性。
+
+    支持从以下位置读取自定义路径（优先级从高到低）：
+    1. 传入的 root_path 参数
+    2. CLOUDPSS_HOME 环境变量
+    3. ~/.cloudpss/config/user.yaml 中的 workspace.root
+    4. 默认值 ~/.cloudpss
     """
 
     # 根目录名称
@@ -40,12 +46,45 @@ class PathManager:
         Args:
             root_path: 自定义根目录路径，默认为 ~/.cloudpss
         """
-        if root_path:
-            self._root = Path(root_path).expanduser().resolve()
-        else:
-            self._root = Path.home() / self.ROOT_DIR_NAME
-
+        self._root = self._resolve_root_path(root_path)
         self._ensure_structure()
+
+    def _resolve_root_path(self, root_path: Optional[Path] = None) -> Path:
+        """
+        解析根目录路径
+
+        优先级:
+        1. 传入的 root_path 参数
+        2. CLOUDPSS_HOME 环境变量
+        3. ~/.cloudpss/config/user.yaml 中的 workspace.root
+        4. 默认值 ~/.cloudpss
+        """
+        # 1. 传入的参数
+        if root_path:
+            return Path(root_path).expanduser().resolve()
+
+        # 2. 环境变量
+        env_path = os.environ.get("CLOUDPSS_HOME")
+        if env_path:
+            return Path(env_path).expanduser().resolve()
+
+        # 3. 配置文件
+        default_path = Path.home() / self.ROOT_DIR_NAME
+        config_file = default_path / "config" / "user.yaml"
+        if config_file.exists():
+            try:
+                import yaml
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    data = yaml.safe_load(f)
+                    if data and "workspace" in data:
+                        workspace_root = data["workspace"].get("root")
+                        if workspace_root:
+                            return Path(workspace_root).expanduser().resolve()
+            except Exception:
+                pass
+
+        # 4. 默认值
+        return default_path
 
     @property
     def root(self) -> Path:

@@ -23,7 +23,7 @@ def main():
     print("  Phase 2: 数据模型 (Server/Case/Task/Result/Variant)")
     print("  Phase 3: 注册表实现 (CRUD、索引、批量操作)")
     print("  Phase 4: CLI 命令 (server/case/task/result/query)")
-    print("  Phase 5: 测试与优化 (68个测试, 84%覆盖率)")
+    print("  Phase 5: 测试与优化 (全面测试覆盖)")
     print()
     print("使用示例:")
     print("  python -m cloudpss_skills_v3.master_organizer init")

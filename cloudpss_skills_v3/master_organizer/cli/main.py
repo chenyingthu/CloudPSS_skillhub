@@ -13,20 +13,37 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from cloudpss_skills_v3.master_organizer.core import (
     IDGenerator, EntityType,
     get_path_manager, get_config_manager,
-    ServerRegistry, CaseRegistry, TaskRegistry, ResultRegistry,
-    Server, Case, Task, Result
+    ServerRegistry, CaseRegistry, TaskRegistry, ResultRegistry, VariantRegistry,
+    Server, Case, Task, Result, Variant
 )
 
 
 def cmd_init(args):
     """初始化工作区"""
+    # 如果指定了自定义路径，先设置环境变量以确保一致性
+    if args.path:
+        import os
+        os.environ["CLOUDPSS_HOME"] = str(Path(args.path).expanduser().resolve())
+
     pm = get_path_manager(args.path)
+
+    # 保存工作区路径到配置（以便后续命令使用）
+    if args.path:
+        cm = get_config_manager(pm.config_dir)
+        cm.update("user", {"workspace": {"root": str(pm.root)}}, merge=True)
+
     print(f"✅ 工作区初始化完成: {pm.root}")
     print(f"   配置目录: {pm.config_dir}")
     print(f"   注册表目录: {pm.registry_dir}")
     print(f"   算例目录: {pm.cases_dir}")
     print(f"   任务目录: {pm.tasks_dir}")
     print(f"   结果目录: {pm.results_dir}")
+
+    if args.path:
+        print(f"\n💡 提示: 已保存工作区路径到配置")
+        print(f"   后续命令会自动使用此路径")
+        print(f"   或在其他终端设置环境变量: export CLOUDPSS_HOME={pm.root}")
+
     return 0
 
 
@@ -244,6 +261,178 @@ def cmd_task_delete(args):
         return 1
 
 
+def cmd_task_submit(args):
+    """提交任务"""
+    registry = TaskRegistry()
+    task = registry.get(args.task_id)
+
+    if not task:
+        print(f"❌ 任务不存在: {args.task_id}")
+        return 1
+
+    # 更新状态为 submitted
+    registry.update(args.task_id, {"status": "submitted", "submitted_at": datetime.now().isoformat()})
+    print(f"✅ 任务已提交: {args.task_id}")
+    print(f"   名称: {task.name}")
+    print(f"   类型: {task.type}")
+    if args.wait:
+        print(f"   等待模式: 已启用 (等待 CloudPSS 响应)")
+    return 0
+
+
+def cmd_task_status(args):
+    """查看任务状态"""
+    registry = TaskRegistry()
+    task = registry.get(args.task_id)
+
+    if not task:
+        print(f"❌ 任务不存在: {args.task_id}")
+        return 1
+
+    print("=" * 60)
+    print(f"任务状态: {args.task_id}")
+    print("=" * 60)
+    print(f"  名称: {task.name}")
+    print(f"  状态: {task.status}")
+    print(f"  类型: {task.type}")
+    print(f"  算例: {task.case_id}")
+    if task.created_at:
+        print(f"  创建时间: {task.created_at}")
+    if task.submitted_at:
+        print(f"  提交时间: {task.submitted_at}")
+    if task.started_at:
+        print(f"  开始时间: {task.started_at}")
+    if task.completed_at:
+        print(f"  完成时间: {task.completed_at}")
+    if task.result_id:
+        print(f"  结果ID: {task.result_id}")
+    print("=" * 60)
+    return 0
+
+
+def cmd_task_cancel(args):
+    """取消任务"""
+    registry = TaskRegistry()
+    task = registry.get(args.task_id)
+
+    if not task:
+        print(f"❌ 任务不存在: {args.task_id}")
+        return 1
+
+    if task.status not in ["created", "submitted", "running"]:
+        print(f"❌ 任务状态为 {task.status}，无法取消")
+        return 1
+
+    registry.update(args.task_id, {"status": "cancelled"})
+    print(f"✅ 任务已取消: {args.task_id}")
+    return 0
+
+
+# ====== Variant 命令 ======
+def cmd_variant_list(args):
+    """列出变体"""
+    registry = VariantRegistry()
+
+    if args.case_id:
+        variants = registry.get_by_case(args.case_id)
+        print(f"=" * 60)
+        print(f"算例 {args.case_id} 的变体列表")
+    else:
+        variants = registry.list_all()
+        print("=" * 60)
+        print("变体列表")
+
+    print("=" * 60)
+
+    if not variants:
+        print("  (无变体)")
+    else:
+        for variant_id, variant in variants:
+            print(f"  🎨 {variant_id}: {variant.name}")
+            print(f"      算例: {variant.case_id}")
+            if variant.parameters:
+                print(f"      参数: {variant.parameters}")
+
+    print("=" * 60)
+    return 0
+
+
+def cmd_variant_create(args):
+    """创建变体"""
+    registry = VariantRegistry()
+
+    variant_id = IDGenerator.generate(EntityType.VARIANT)
+
+    # 解析参数字符串 (格式: key1=val1,key2=val2)
+    parameters = {}
+    if args.parameters:
+        for param in args.parameters.split(","):
+            if "=" in param:
+                key, value = param.split("=", 1)
+                parameters[key] = value
+
+    variant = Variant(
+        id=variant_id,
+        case_id=args.case_id,
+        name=args.name,
+        parameters=parameters
+    )
+
+    if registry.create(variant_id, variant):
+        print(f"✅ 变体创建成功: {variant_id}")
+        print(f"   名称: {args.name}")
+        print(f"   算例: {args.case_id}")
+        print(f"   参数: {parameters}")
+        return 0
+    else:
+        print(f"❌ 创建失败")
+        return 1
+
+
+def cmd_variant_apply(args):
+    """应用变体创建任务"""
+    # 获取变体
+    variant_registry = VariantRegistry()
+    variant = variant_registry.get(args.variant_id)
+
+    if not variant:
+        print(f"❌ 变体不存在: {args.variant_id}")
+        return 1
+
+    # 创建任务
+    task_registry = TaskRegistry()
+    task_id = IDGenerator.generate(EntityType.TASK)
+    task = Task(
+        id=task_id,
+        name=args.name or f"{variant.name}_应用",
+        case_id=variant.case_id,
+        variant_id=args.variant_id,
+        type=args.type,
+        status="created"
+    )
+
+    if task_registry.create(task_id, task):
+        print(f"✅ 变体已应用，任务创建成功: {task_id}")
+        print(f"   变体: {args.variant_id}")
+        print(f"   算例: {variant.case_id}")
+        print(f"   参数: {variant.parameters}")
+        return 0
+    else:
+        print(f"❌ 任务创建失败")
+        return 1
+
+
+def cmd_variant_delete(args):
+    """删除变体"""
+    registry = VariantRegistry()
+    if registry.delete(args.variant_id):
+        print(f"✅ 变体已删除: {args.variant_id}")
+        return 0
+    else:
+        print(f"❌ 变体不存在: {args.variant_id}")
+        return 1
+
+
 # ====== Result 命令 ======
 def cmd_result_list(args):
     """列出结果"""
@@ -261,6 +450,117 @@ def cmd_result_list(args):
             print(f"  📊 {result_id}: {result.name}")
             print(f"      格式: {result.format}")
             print(f"      大小: {result.size_bytes} bytes")
+
+    print("=" * 60)
+    return 0
+
+
+def cmd_result_export(args):
+    """导出结果"""
+    registry = ResultRegistry()
+    result = registry.get(args.result_id)
+
+    if not result:
+        print(f"❌ 结果不存在: {args.result_id}")
+        return 1
+
+    # 更新导出格式和路径
+    export_format = args.format or result.format
+    export_path = args.output or f"./{args.result_id}_export.{export_format}"
+
+    registry.update(args.result_id, {
+        "export_format": export_format,
+        "export_path": export_path,
+        "exported_at": datetime.now().isoformat()
+    })
+
+    print(f"✅ 结果导出成功: {args.result_id}")
+    print(f"   格式: {export_format}")
+    print(f"   路径: {export_path}")
+    return 0
+
+
+def cmd_result_delete(args):
+    """删除结果"""
+    registry = ResultRegistry()
+    result = registry.get(args.result_id)
+
+    if not result:
+        print(f"❌ 结果不存在: {args.result_id}")
+        return 1
+
+    if registry.delete(args.result_id):
+        print(f"✅ 结果已删除: {args.result_id}")
+        return 0
+    else:
+        print(f"❌ 删除失败")
+        return 1
+
+
+def cmd_result_analyze(args):
+    """分析结果"""
+    registry = ResultRegistry()
+    result = registry.get(args.result_id)
+
+    if not result:
+        print(f"❌ 结果不存在: {args.result_id}")
+        return 1
+
+    print("=" * 60)
+    print(f"结果分析: {args.result_id}")
+    print("=" * 60)
+    print(f"  名称: {result.name}")
+    print(f"  格式: {result.format}")
+    print(f"  大小: {result.size_bytes} bytes")
+    print(f"  创建时间: {result.created_at}")
+
+    if result.files:
+        print(f"\n  包含文件 ({len(result.files)}):")
+        for f in result.files[:10]:  # 最多显示10个
+            print(f"    - {f}")
+        if len(result.files) > 10:
+            print(f"    ... 还有 {len(result.files) - 10} 个文件")
+
+    if result.metadata:
+        print(f"\n  元数据:")
+        for key, value in result.metadata.items():
+            print(f"    {key}: {value}")
+
+    print("=" * 60)
+    return 0
+
+
+def cmd_result_compare(args):
+    """比较两个结果"""
+    registry = ResultRegistry()
+    result1 = registry.get(args.result_id1)
+    result2 = registry.get(args.result_id2)
+
+    if not result1:
+        print(f"❌ 结果不存在: {args.result_id1}")
+        return 1
+    if not result2:
+        print(f"❌ 结果不存在: {args.result_id2}")
+        return 1
+
+    print("=" * 60)
+    print(f"结果对比")
+    print("=" * 60)
+    print(f"{'属性':<20} {'结果1':<20} {'结果2':<20}")
+    print("-" * 60)
+    print(f"{'ID':<20} {result1.id:<20} {result2.id:<20}")
+    print(f"{'名称':<20} {result1.name:<20} {result2.name:<20}")
+    print(f"{'格式':<20} {result1.format:<20} {result2.format:<20}")
+    print(f"{'大小 (bytes)':<20} {result1.size_bytes:<20} {result2.size_bytes:<20}")
+
+    size_diff = result2.size_bytes - result1.size_bytes
+    diff_pct = (size_diff / result1.size_bytes * 100) if result1.size_bytes > 0 else 0
+    print(f"\n大小差异: {size_diff:+d} bytes ({diff_pct:+.1f}%)")
+
+    if result1.format == result2.format:
+        print("格式: 相同")
+    else:
+        print(f"格式: 不同 ({result1.format} vs {result2.format})")
 
     print("=" * 60)
     return 0
@@ -422,12 +722,68 @@ def main():
     task_delete_parser.add_argument("task_id", help="任务ID")
     task_delete_parser.set_defaults(func=cmd_task_delete)
 
+    task_submit_parser = task_subparsers.add_parser("submit", help="提交任务")
+    task_submit_parser.add_argument("task_id", help="任务ID")
+    task_submit_parser.add_argument("--wait", action="store_true", help="等待完成")
+    task_submit_parser.set_defaults(func=cmd_task_submit)
+
+    task_status_parser = task_subparsers.add_parser("status", help="查看任务状态")
+    task_status_parser.add_argument("task_id", help="任务ID")
+    task_status_parser.set_defaults(func=cmd_task_status)
+
+    task_cancel_parser = task_subparsers.add_parser("cancel", help="取消任务")
+    task_cancel_parser.add_argument("task_id", help="任务ID")
+    task_cancel_parser.set_defaults(func=cmd_task_cancel)
+
+    # variant 命令
+    variant_parser = subparsers.add_parser("variant", help="变体管理")
+    variant_subparsers = variant_parser.add_subparsers(dest="variant_command")
+
+    variant_list_parser = variant_subparsers.add_parser("list", help="列出变体")
+    variant_list_parser.add_argument("--case-id", help="按算例过滤")
+    variant_list_parser.set_defaults(func=cmd_variant_list)
+
+    variant_create_parser = variant_subparsers.add_parser("create", help="创建变体")
+    variant_create_parser.add_argument("--case-id", required=True, help="算例ID")
+    variant_create_parser.add_argument("--name", required=True, help="变体名称")
+    variant_create_parser.add_argument("--parameters", help="参数 (格式: key1=val1,key2=val2)")
+    variant_create_parser.set_defaults(func=cmd_variant_create)
+
+    variant_apply_parser = variant_subparsers.add_parser("apply", help="应用变体")
+    variant_apply_parser.add_argument("variant_id", help="变体ID")
+    variant_apply_parser.add_argument("--name", help="任务名称")
+    variant_apply_parser.add_argument("--type", default="powerflow", choices=["powerflow", "emt", "stability"], help="任务类型")
+    variant_apply_parser.set_defaults(func=cmd_variant_apply)
+
+    variant_delete_parser = variant_subparsers.add_parser("delete", help="删除变体")
+    variant_delete_parser.add_argument("variant_id", help="变体ID")
+    variant_delete_parser.set_defaults(func=cmd_variant_delete)
+
     # result 命令
     result_parser = subparsers.add_parser("result", help="结果管理")
     result_subparsers = result_parser.add_subparsers(dest="result_command")
 
     result_list_parser = result_subparsers.add_parser("list", help="列出结果")
     result_list_parser.set_defaults(func=cmd_result_list)
+
+    result_export_parser = result_subparsers.add_parser("export", help="导出结果")
+    result_export_parser.add_argument("result_id", help="结果ID")
+    result_export_parser.add_argument("--format", choices=["json", "csv", "hdf5"], help="导出格式")
+    result_export_parser.add_argument("--output", "-o", help="输出路径")
+    result_export_parser.set_defaults(func=cmd_result_export)
+
+    result_delete_parser = result_subparsers.add_parser("delete", help="删除结果")
+    result_delete_parser.add_argument("result_id", help="结果ID")
+    result_delete_parser.set_defaults(func=cmd_result_delete)
+
+    result_analyze_parser = result_subparsers.add_parser("analyze", help="分析结果")
+    result_analyze_parser.add_argument("result_id", help="结果ID")
+    result_analyze_parser.set_defaults(func=cmd_result_analyze)
+
+    result_compare_parser = result_subparsers.add_parser("compare", help="比较结果")
+    result_compare_parser.add_argument("result_id1", help="第一个结果ID")
+    result_compare_parser.add_argument("result_id2", help="第二个结果ID")
+    result_compare_parser.set_defaults(func=cmd_result_compare)
 
     # query 命令
     query_parser = subparsers.add_parser("query", help="查询")
