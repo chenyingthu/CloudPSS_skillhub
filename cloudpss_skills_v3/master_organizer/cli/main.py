@@ -29,8 +29,16 @@ def cmd_init(args):
 
     # 保存工作区路径到配置（以便后续命令使用）
     if args.path:
+        # 保存到自定义工作区的配置
         cm = get_config_manager(pm.config_dir)
         cm.update("user", {"workspace": {"root": str(pm.root)}}, merge=True)
+
+        # 同时保存到默认位置的配置，以便从任意目录都能识别
+        from cloudpss_skills_v3.master_organizer.core import PathManager
+        default_config_dir = Path.home() / PathManager.ROOT_DIR_NAME / "config"
+        default_config_dir.mkdir(parents=True, exist_ok=True)
+        default_cm = get_config_manager(default_config_dir)
+        default_cm.update("user", {"workspace": {"root": str(pm.root)}}, merge=True)
 
     print(f"✅ 工作区初始化完成: {pm.root}")
     print(f"   配置目录: {pm.config_dir}")
@@ -741,7 +749,7 @@ def main():
 
     # server 命令
     server_parser = subparsers.add_parser("server", help="服务器管理")
-    server_subparsers = server_parser.add_subparsers(dest="server_command")
+    server_subparsers = server_parser.add_subparsers(dest="server_command", required=True, help="子命令")
 
     server_list_parser = server_subparsers.add_parser("list", help="列出服务器")
     server_list_parser.set_defaults(func=cmd_server_list)
@@ -758,7 +766,7 @@ def main():
 
     # case 命令
     case_parser = subparsers.add_parser("case", help="算例管理")
-    case_subparsers = case_parser.add_subparsers(dest="case_command")
+    case_subparsers = case_parser.add_subparsers(dest="case_command", required=True, help="子命令")
 
     case_list_parser = case_subparsers.add_parser("list", help="列出算例")
     case_list_parser.set_defaults(func=cmd_case_list)
@@ -776,7 +784,7 @@ def main():
 
     # task 命令
     task_parser = subparsers.add_parser("task", help="任务管理")
-    task_subparsers = task_parser.add_subparsers(dest="task_command")
+    task_subparsers = task_parser.add_subparsers(dest="task_command", required=True, help="子命令")
 
     task_list_parser = task_subparsers.add_parser("list", help="列出任务")
     task_list_parser.add_argument("--case-id", help="按算例过滤")
@@ -807,7 +815,7 @@ def main():
 
     # variant 命令
     variant_parser = subparsers.add_parser("variant", help="变体管理")
-    variant_subparsers = variant_parser.add_subparsers(dest="variant_command")
+    variant_subparsers = variant_parser.add_subparsers(dest="variant_command", required=True, help="子命令")
 
     variant_list_parser = variant_subparsers.add_parser("list", help="列出变体")
     variant_list_parser.add_argument("--case-id", help="按算例过滤")
@@ -831,7 +839,7 @@ def main():
 
     # result 命令
     result_parser = subparsers.add_parser("result", help="结果管理")
-    result_subparsers = result_parser.add_subparsers(dest="result_command")
+    result_subparsers = result_parser.add_subparsers(dest="result_command", required=True, help="子命令")
 
     result_list_parser = result_subparsers.add_parser("list", help="列出结果")
     result_list_parser.set_defaults(func=cmd_result_list)
@@ -857,7 +865,7 @@ def main():
 
     # query 命令
     query_parser = subparsers.add_parser("query", help="查询")
-    query_subparsers = query_parser.add_subparsers(dest="query_command")
+    query_subparsers = query_parser.add_subparsers(dest="query_command", required=True, help="子命令")
 
     query_tree_parser = query_subparsers.add_parser("tree", help="树形视图")
     query_tree_parser.set_defaults(func=cmd_query_tree)

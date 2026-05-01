@@ -123,7 +123,7 @@ class PathManager:
         if workspace_root:
             return workspace_root
 
-        # 4. 默认位置的配置文件
+        # 4. 默认位置的配置文件中查找自定义工作区
         default_path = Path.home() / self.ROOT_DIR_NAME
         config_file = default_path / "config" / "user.yaml"
         if config_file.exists():
@@ -134,7 +134,10 @@ class PathManager:
                     if data and "workspace" in data:
                         workspace_root = data["workspace"].get("root")
                         if workspace_root:
-                            return Path(workspace_root).expanduser().resolve()
+                            custom_path = Path(workspace_root).expanduser().resolve()
+                            # 验证该路径是有效的工作区（有 config/user.yaml 确认）
+                            if (custom_path / "config" / "user.yaml").exists():
+                                return custom_path
             except Exception:
                 pass
 
