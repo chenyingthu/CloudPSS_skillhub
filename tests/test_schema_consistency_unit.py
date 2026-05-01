@@ -10,6 +10,10 @@ import pytest
 from typing import Any
 
 from cloudpss_skills_v2.registry import list_skills, get_skill
+from cloudpss_skills_v2.core.schema_validation import (
+    get_schema_defaults,
+    get_config_defaults,
+)
 
 
 class TestSchemaConsistency:
@@ -60,44 +64,6 @@ class TestSchemaConsistency:
     def test_schema_default_matches_config(self, all_skills):
         """验证 schema 中的 default 值与 get_default_config 返回的值一致。"""
         errors = []
-
-        def get_schema_defaults(schema: dict, path: str = "") -> dict:
-            """从 JSON Schema 中提取所有 default 值。"""
-            defaults = {}
-            if not isinstance(schema, dict):
-                return defaults
-
-            if "default" in schema:
-                defaults[path] = schema["default"]
-
-            if "properties" in schema and isinstance(schema["properties"], dict):
-                for key, value in schema["properties"].items():
-                    new_path = f"{path}.{key}" if path else key
-                    defaults.update(get_schema_defaults(value, new_path))
-
-            if "items" in schema and isinstance(schema["items"], dict):
-                if "default" in schema["items"]:
-                    defaults[f"{path}[]"] = schema["items"]["default"]
-                defaults.update(get_schema_defaults(schema["items"], f"{path}[]"))
-
-            return defaults
-
-        def get_config_defaults(config: dict, path: str = "") -> dict:
-            """从配置字典中提取所有值。"""
-            defaults = {}
-            if not isinstance(config, dict):
-                return defaults
-
-            for key, value in config.items():
-                new_path = f"{path}.{key}" if path else key
-                if isinstance(value, dict):
-                    if not value:
-                        defaults[new_path] = value
-                    defaults.update(get_config_defaults(value, new_path))
-                else:
-                    defaults[new_path] = value
-
-            return defaults
 
         for name in all_skills:
             try:
