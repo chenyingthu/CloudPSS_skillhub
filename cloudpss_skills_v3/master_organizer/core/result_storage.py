@@ -42,6 +42,23 @@ def write_rows_csv(path: Path, rows: list[dict[str, Any]]) -> int:
     return path.stat().st_size
 
 
+def trace_to_rows(trace: dict[str, Any]) -> list[dict[str, Any]]:
+    """Convert an EMT trace with x/y vectors into CSV-friendly rows."""
+    xs = trace.get("x", [])
+    ys = trace.get("y", [])
+    return [
+        {"time": x, "value": ys[index] if index < len(ys) else None}
+        for index, x in enumerate(xs)
+    ]
+
+
+def safe_artifact_name(value: str) -> str:
+    safe = []
+    for char in value:
+        safe.append(char if char.isalnum() or char in ("-", "_") else "_")
+    return "".join(safe).strip("_") or "channel"
+
+
 def store_powerflow_result(
     result_id: str,
     *,
@@ -84,6 +101,74 @@ def store_powerflow_result(
     manifest = {
         "result_id": result_id,
         "format": "powerflow",
+        "metadata": artifact_metadata,
+        "files": files,
+    }
+    total_size += write_json(result_dir / "manifest.json", manifest)
+    files.append("manifest.json")
+    return files, total_size, artifact_metadata
+
+
+def store_emt_result(
+    result_id: str,
+    *,
+    plots: list[dict[str, Any]],
+    traces: dict[str, dict[str, Any]],
+    metadata: dict[str, Any],
+    root_dir: Path | None = None,
+) -> tuple[list[str], int, dict[str, Any]]:
+    """Persist CloudPSS EMT plot/channel traces under results/<result_id>."""
+    result_dir = root_dir or get_path_manager().get_result_path(result_id)
+    channels_dir = result_dir / "channels"
+    csv_dir = result_dir / "csv"
+
+    channel_index = []
+    total_points = 0
+    files: list[str] = []
+    total_size = 0
+
+    for trace_key, trace in traces.items():
+        rows = trace_to_rows(trace)
+        total_points += len(rows)
+        channel_file = f"{safe_artifact_name(trace_key)}.json"
+        csv_file = f"{safe_artifact_name(trace_key)}.csv"
+        total_size += write_json(channels_dir / channel_file, trace)
+        files.append(f"channels/{channel_file}")
+        total_size += write_rows_csv(csv_dir / csv_file, rows)
+        files.append(f"csv/{csv_file}")
+        channel_index.append(
+            {
+                "trace_key": trace_key,
+                "channel_file": f"channels/{channel_file}",
+                "csv_file": f"csv/{csv_file}",
+                "point_count": len(rows),
+            }
+        )
+
+    compact_plots = [
+        {
+            "index": index,
+            "key": plot.get("key"),
+            "name": plot.get("name"),
+            "channels": [trace.get("name") for trace in plot.get("data", {}).get("traces", [])],
+        }
+        for index, plot in enumerate(plots)
+    ]
+    total_size += write_json(result_dir / "plots.json", compact_plots)
+    files.append("plots.json")
+    total_size += write_json(result_dir / "channels.json", channel_index)
+    files.append("channels.json")
+
+    artifact_metadata = {
+        **metadata,
+        "artifact_type": "emt",
+        "plot_count": len(plots),
+        "channel_count": len(channel_index),
+        "sample_points": total_points,
+    }
+    manifest = {
+        "result_id": result_id,
+        "format": "emt",
         "metadata": artifact_metadata,
         "files": files,
     }

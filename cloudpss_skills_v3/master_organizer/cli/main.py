@@ -834,7 +834,7 @@ def cmd_result_export(args):
         return 1
 
     # 确定导出格式和路径
-    export_format = args.format or ("json" if result.format == "powerflow" else result.format)
+    export_format = args.format or ("json" if result.format in {"powerflow", "emt"} else result.format)
     export_path = args.output or f"./{args.result_id}_export.{export_format}"
     export_path = Path(export_path).expanduser().resolve()
 
@@ -875,8 +875,11 @@ def cmd_result_export(args):
                 json.dump(export_data, f, indent=2, ensure_ascii=False)
 
         elif export_format == "csv":
-            table_name = args.table or "buses"
-            artifact_path = result_dir / "tables" / f"{table_name}.csv"
+            if args.artifact:
+                artifact_path = result_dir / args.artifact
+            else:
+                table_name = args.table or "buses"
+                artifact_path = result_dir / "tables" / f"{table_name}.csv"
             if artifact_path.exists():
                 shutil.copyfile(artifact_path, export_path)
             else:
@@ -1441,6 +1444,7 @@ def main():
     result_export_parser.add_argument("--format", choices=["json", "csv", "hdf5"], help="导出格式")
     result_export_parser.add_argument("--output", "-o", help="输出路径")
     result_export_parser.add_argument("--table", choices=["buses", "branches"], help="CSV 导出的结果表")
+    result_export_parser.add_argument("--artifact", help="导出指定结果文件，如 csv/plot_2_vac_0.csv")
     result_export_parser.set_defaults(func=cmd_result_export)
 
     result_delete_parser = result_subparsers.add_parser("delete", help="删除结果")

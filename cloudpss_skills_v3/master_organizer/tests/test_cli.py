@@ -397,6 +397,60 @@ class TestCLI:
                 result = main()
                 assert result == 0
 
+    def test_cli_emt_result_exports_saved_trace_artifacts(self):
+        """测试已保存的 EMT 波形可被 analyze/export 管理"""
+        import json
+
+        with patch.object(sys, 'argv', ['cloudpss-master', 'init', '--path', str(self.temp_dir)]):
+            main()
+
+        with patch('cloudpss_skills_v3.master_organizer.cli.main.get_path_manager') as mock_pm:
+            from cloudpss_skills_v3.master_organizer.core import PathManager
+            mock_pm.return_value = PathManager(self.temp_dir)
+
+            from cloudpss_skills_v3.master_organizer.core import ResultRegistry, Result, IDGenerator, EntityType
+            from cloudpss_skills_v3.master_organizer.core.result_storage import safe_artifact_name, store_emt_result
+
+            result_id = IDGenerator.generate(EntityType.RESULT)
+            trace_key = "plot-2/vac:0"
+            trace = {"name": "vac:0", "x": [0.0, 0.1], "y": [1.0, 0.9]}
+            files, size_bytes, metadata = store_emt_result(
+                result_id,
+                plots=[{"key": "plot-2", "data": {"traces": [trace]}}],
+                traces={trace_key: trace},
+                metadata={"data_source": "unit"},
+                root_dir=self.temp_dir / "results" / result_id,
+            )
+            ResultRegistry().create(
+                result_id,
+                Result(
+                    id=result_id,
+                    name="emt-result",
+                    task_id="task_test",
+                    case_id="case_test",
+                    format="emt",
+                    size_bytes=size_bytes,
+                    files=files,
+                    metadata=metadata,
+                ),
+            )
+
+            export_path = self.temp_dir / "emt_export.json"
+            trace_csv = self.temp_dir / "vac.csv"
+            artifact_path = f"csv/{safe_artifact_name(trace_key)}.csv"
+
+            with patch.object(sys, 'argv', ['cloudpss-master', 'result', 'analyze', result_id]):
+                assert main() == 0
+            with patch.object(sys, 'argv', ['cloudpss-master', 'result', 'export', result_id, '--output', str(export_path)]):
+                assert main() == 0
+            with patch.object(sys, 'argv', ['cloudpss-master', 'result', 'export', result_id, '--format', 'csv', '--artifact', artifact_path, '--output', str(trace_csv)]):
+                assert main() == 0
+
+            exported = json.loads(export_path.read_text(encoding="utf-8"))
+            assert exported["metadata"]["artifact_type"] == "emt"
+            assert "channels.json" in exported["artifacts"]
+            assert "0.1" in trace_csv.read_text(encoding="utf-8")
+
     def test_cli_path_isolation_with_cwd(self):
         """测试路径隔离：在自定义工作区目录下执行命令能正确找到工作区"""
         import os
