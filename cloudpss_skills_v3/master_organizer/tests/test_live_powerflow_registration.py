@@ -60,10 +60,8 @@ def _load_cloudpss_token() -> tuple[str, str, str]:
 
 
 def _table_count(table) -> int:
-    try:
-        return len(table)
-    except TypeError:
-        return len(list(table))
+    columns = table["data"]["columns"]
+    return len(columns[0].get("data", [])) if columns else 0
 
 
 def _fetch_first_available_model(model_cls, candidates: list[str]):
@@ -85,6 +83,13 @@ def _wait_for_job(job, timeout_seconds: int = 240) -> int:
         time.sleep(2)
         status = job.status()
     return status
+
+
+def _run_cli(env: dict[str, str], *args: str, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
+    command = [sys.executable, "-m", CLI_MODULE, *args]
+    completed = subprocess.run(command, cwd=cwd, env=env, text=True, capture_output=True, check=False)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    return completed
 
 
 @pytest.mark.integration
@@ -132,8 +137,8 @@ def test_live_powerflow_result_can_be_registered_and_exported(tmp_path):
         assert status == 1, f"CloudPSS power-flow job failed: {getattr(job, 'id', 'unknown')}"
 
         result = job.result
-        bus_count = _table_count(result.getBuses())
-        branch_count = _table_count(result.getBranches())
+        bus_count = _table_count(result.getBuses()[0])
+        branch_count = _table_count(result.getBranches()[0])
         assert bus_count > 0
         assert branch_count > 0
     finally:
@@ -203,9 +208,28 @@ def test_live_powerflow_result_can_be_registered_and_exported(tmp_path):
     home.mkdir()
     env = {**os.environ, "HOME": str(home), "PYTHONPATH": str(REPO_ROOT), "CLOUDPSS_HOME": str(workspace)}
     export_path = tmp_path / "live-powerflow-result.json"
-    command = [sys.executable, "-m", CLI_MODULE, "result", "export", result_id, "--output", str(export_path)]
-    completed = subprocess.run(command, env=env, text=True, capture_output=True, check=False)
-    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+    server_list = _run_cli(env, "server", "list")
+    assert server_id in server_list.stdout
+    assert server.url in server_list.stdout
+    assert server.owner in server_list.stdout
+    assert "encrypted" in server_list.stdout
+
+    task_status = _run_cli(env, "task", "status", task_id)
+    assert "状态: completed" in task_status.stdout
+    assert f"结果ID: {result_id}" in task_status.stdout
+
+    case_tree = _run_cli(env, "case", "list", "--tree", "--tag", "live")
+    assert case_id in case_tree.stdout
+    assert task_id in case_tree.stdout
+    assert "live powerflow smoke [completed]" in case_tree.stdout
+
+    result_analysis = _run_cli(env, "result", "analyze", result_id)
+    assert "data_source: live_cloudpss" in result_analysis.stdout
+    assert f"server_url: {server.url}" in result_analysis.stdout
+    assert f"job_id: {getattr(job, 'id', None)}" in result_analysis.stdout
+
+    _run_cli(env, "result", "export", result_id, "--output", str(export_path))
 
     exported = json.loads(export_path.read_text(encoding="utf-8"))
     assert exported["result_id"] == result_id

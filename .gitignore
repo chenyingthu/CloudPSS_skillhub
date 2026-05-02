@@ -45,6 +45,9 @@ token
 .cloudpss_token_internal
 *.token
 
+# OMX runtime state
+.omx/
+
 # Results
 results/
 *.log
