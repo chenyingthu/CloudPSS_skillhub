@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from .crypto import get_crypto_manager
+from .path_manager import get_path_manager
 from .models import Server
 from .registries import ServerRegistry
 
@@ -50,22 +51,38 @@ def read_token_source(source: str, *, repo_root: Optional[Path] = None) -> tuple
     return token, {"token_source": TOKEN_SOURCE_FILE, "token_file": str(token_path)}
 
 
-def build_auth_metadata(token: str, metadata: Optional[dict[str, str]] = None) -> dict[str, str]:
+def _workspace_key_path() -> Path:
+    return get_path_manager().config_dir / ".cloudpss_key"
+
+
+def _registry_key_path(registry: ServerRegistry) -> Path:
+    registry_dir = Path(registry._registry_dir)
+    if registry_dir.name == "registry":
+        return registry_dir.parent / "config" / ".cloudpss_key"
+    return _workspace_key_path()
+
+
+def build_auth_metadata(
+    token: str,
+    metadata: Optional[dict[str, str]] = None,
+    *,
+    key_path: Optional[Path] = None,
+) -> dict[str, str]:
     """Encrypt token and attach non-secret metadata for server ownership tracking."""
     if not token:
         raise ValueError("token cannot be empty")
     auth = dict(metadata or {})
-    auth["encrypted_token"] = f"ENC:{get_crypto_manager().encrypt(token)}"
+    auth["encrypted_token"] = f"ENC:{get_crypto_manager(key_path or _workspace_key_path()).encrypt(token)}"
     return auth
 
 
-def decrypt_server_token(server: Server) -> str:
+def decrypt_server_token(server: Server, *, key_path: Optional[Path] = None) -> str:
     encrypted = server.auth.get("encrypted_token", "")
     if not encrypted:
         raise ValueError(f"server {server.id} does not have an encrypted token")
     if not encrypted.startswith("ENC:"):
         raise ValueError(f"server {server.id} token is not encrypted")
-    return get_crypto_manager().decrypt(encrypted[4:])
+    return get_crypto_manager(key_path or _workspace_key_path()).decrypt(encrypted[4:])
 
 
 def get_default_server(registry: Optional[ServerRegistry] = None) -> tuple[str, Server] | None:
@@ -90,7 +107,7 @@ def ensure_internal_server(registry: Optional[ServerRegistry] = None, *, repo_ro
     """Create or refresh the canonical internal server entry for the local token."""
     registry = registry or ServerRegistry()
     token, auth_meta = read_token_source(TOKEN_SOURCE_INTERNAL, repo_root=repo_root)
-    auth = build_auth_metadata(token, auth_meta)
+    auth = build_auth_metadata(token, auth_meta, key_path=_registry_key_path(registry))
 
     for server_id, server in registry.list_all():
         if server.url == DEFAULT_INTERNAL_URL and server.owner == DEFAULT_INTERNAL_OWNER:

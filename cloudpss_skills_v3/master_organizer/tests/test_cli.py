@@ -6,6 +6,8 @@ import pytest
 import tempfile
 import shutil
 import yaml
+import json
+import types
 from pathlib import Path
 from unittest.mock import patch
 import sys
@@ -159,6 +161,46 @@ class TestCLI:
                 result = main()
                 assert result == 0
 
+    def test_cli_task_create_stores_config_and_channels(self):
+        """测试 task create 保存配置文件和 EMT 通道参数"""
+        config_file = self.temp_dir / "task_config.yaml"
+        config_file.write_text("duration: 10\nstep: 0.0001\n", encoding="utf-8")
+
+        with patch.object(sys, 'argv', ['cloudpss-master', 'init', '--path', str(self.temp_dir)]):
+            main()
+
+        with patch('cloudpss_skills_v3.master_organizer.cli.main.get_path_manager') as mock_pm:
+            from cloudpss_skills_v3.master_organizer.core import CaseRegistry, PathManager, TaskRegistry
+
+            mock_pm.return_value = PathManager(self.temp_dir)
+            with patch.object(sys, 'argv', ['cloudpss-master', 'case', 'create', '--name', 'emt-case', '--rid', 'model/test/emt']):
+                assert main() == 0
+
+            case_id = CaseRegistry().list_all()[0][0]
+            with patch.object(sys, 'argv', [
+                'cloudpss-master',
+                'task',
+                'create',
+                '--name',
+                'emt-task',
+                '--case-id',
+                case_id,
+                '--type',
+                'emt',
+                '--config',
+                str(config_file),
+                '--channel',
+                'plot-2/vac:0',
+                '--channel',
+                'plot-0/#wr1:0',
+            ]):
+                assert main() == 0
+
+            task = TaskRegistry().list_all()[0][1]
+            assert task.config["duration"] == 10
+            assert task.config["step"] == 0.0001
+            assert task.config["channels"] == ["plot-2/vac:0", "plot-0/#wr1:0"]
+
     def test_cli_query_tree(self):
         """测试 query tree 命令"""
         with patch.object(sys, 'argv', ['cloudpss-master', 'init', '--path', str(self.temp_dir)]):
@@ -252,6 +294,236 @@ class TestCLI:
                 with patch.object(sys, 'argv', ['cloudpss-master', 'task', 'cancel', task_id]):
                     result = main()
                     assert result == 0
+
+    def test_cli_task_submit_wait_runs_powerflow_and_persists_result(self, monkeypatch):
+        """测试 task submit --wait 执行 CloudPSS 潮流并保存结果工件"""
+        from cloudpss_skills_v3.master_organizer.core import (
+            Case,
+            CaseRegistry,
+            EntityType,
+            IDGenerator,
+            PathManager,
+            Server,
+            ServerRegistry,
+            Task,
+            TaskRegistry,
+        )
+        from cloudpss_skills_v3.master_organizer.core.server_auth import build_auth_metadata
+
+        class FakeResult:
+            def getBuses(self):
+                return [{
+                    "data": {
+                        "columns": [
+                            {"name": "bus", "data": ["1", "2"]},
+                            {"name": "voltage", "data": [1.0, 0.99]},
+                        ]
+                    }
+                }]
+
+            def getBranches(self):
+                return [{
+                    "data": {
+                        "columns": [
+                            {"name": "branch", "data": ["1-2"]},
+                            {"name": "p", "data": [12.3]},
+                        ]
+                    }
+                }]
+
+        class FakeJob:
+            id = "fake-job-1"
+            result = FakeResult()
+
+            def status(self):
+                return 1
+
+        class FakeModel:
+            name = "Fake IEEE"
+
+            @classmethod
+            def fetch(cls, rid):
+                assert rid == "model/test/powerflow"
+                return cls()
+
+            @classmethod
+            def load(cls, path):
+                raise AssertionError(f"unexpected Model.load call: {path}")
+
+            def runPowerFlow(self):
+                return FakeJob()
+
+        fake_cloudpss = types.SimpleNamespace(Model=FakeModel, setToken=lambda token: None)
+        monkeypatch.setitem(sys.modules, "cloudpss", fake_cloudpss)
+
+        with patch.object(sys, 'argv', ['cloudpss-master', 'init', '--path', str(self.temp_dir)]):
+            assert main() == 0
+
+        with patch('cloudpss_skills_v3.master_organizer.cli.main.get_path_manager') as mock_pm:
+            mock_pm.return_value = PathManager(self.temp_dir)
+            server_id = IDGenerator.generate(EntityType.SERVER)
+            ServerRegistry().create(
+                server_id,
+                Server(
+                    id=server_id,
+                    name="fake-server",
+                    url="http://fake-cloudpss/",
+                    owner="tester",
+                    auth=build_auth_metadata("fake-token", {"token_source": "test"}),
+                    default=True,
+                ),
+            )
+            case_id = IDGenerator.generate(EntityType.CASE)
+            CaseRegistry().create(
+                case_id,
+                Case(
+                    id=case_id,
+                    name="fake-case",
+                    rid="model/test/powerflow",
+                    server_id=server_id,
+                    status="active",
+                ),
+            )
+            task_id = IDGenerator.generate(EntityType.TASK)
+            TaskRegistry().create(
+                task_id,
+                Task(
+                    id=task_id,
+                    name="fake-powerflow",
+                    case_id=case_id,
+                    type="powerflow",
+                    server_id=server_id,
+                ),
+            )
+
+            with patch.object(sys, 'argv', ['cloudpss-master', 'task', 'submit', task_id, '--wait', '--poll-interval', '0']):
+                assert main() == 0
+
+            task = TaskRegistry().get(task_id)
+            assert task.status == "completed"
+            assert task.result_id
+
+            result_dir = self.temp_dir / "results" / task.result_id
+            assert (result_dir / "manifest.json").exists()
+            assert (result_dir / "tables" / "buses.json").exists()
+            assert (result_dir / "tables" / "branches.csv").exists()
+
+            manifest = json.loads((result_dir / "manifest.json").read_text(encoding="utf-8"))
+            assert manifest["metadata"]["data_source"] == "live_cloudpss"
+            assert manifest["metadata"]["server_url"] == "http://fake-cloudpss/"
+            assert manifest["metadata"]["job_id"] == "fake-job-1"
+
+    def test_cli_task_submit_wait_runs_emt_from_model_source(self, monkeypatch):
+        """测试 task submit --wait 可用本地模型源执行 EMT 并保存波形"""
+        from cloudpss_skills_v3.master_organizer.core import (
+            Case,
+            CaseRegistry,
+            EntityType,
+            IDGenerator,
+            PathManager,
+            Server,
+            ServerRegistry,
+            Task,
+            TaskRegistry,
+        )
+        from cloudpss_skills_v3.master_organizer.core.server_auth import build_auth_metadata
+
+        model_source = self.temp_dir / "emt.yaml"
+        model_source.write_text("model: fake\n", encoding="utf-8")
+
+        class FakeEMTResult:
+            def getPlots(self):
+                return [
+                    {"key": "plot-0", "name": "plot 0", "data": {"traces": [{"name": "vac:0"}]}},
+                ]
+
+            def getPlotChannelData(self, plot_index, channel):
+                assert plot_index == 0
+                assert channel == "vac:0"
+                return {"x": [0, 1, 2], "y": [0.0, 0.5, 0.1], "name": channel}
+
+        class FakeJob:
+            id = "fake-emt-job"
+            result = FakeEMTResult()
+
+            def status(self):
+                return 1
+
+        class FakeModel:
+            name = "Fake EMT"
+            rid = "model/local/fake-emt"
+
+            @classmethod
+            def fetch(cls, rid):
+                raise AssertionError(f"unexpected Model.fetch call: {rid}")
+
+            @classmethod
+            def load(cls, path):
+                assert path == str(model_source.resolve())
+                return cls()
+
+            def runEMT(self):
+                return FakeJob()
+
+        fake_cloudpss = types.SimpleNamespace(Model=FakeModel, setToken=lambda token: None)
+        monkeypatch.setitem(sys.modules, "cloudpss", fake_cloudpss)
+
+        with patch.object(sys, 'argv', ['cloudpss-master', 'init', '--path', str(self.temp_dir)]):
+            assert main() == 0
+
+        with patch('cloudpss_skills_v3.master_organizer.cli.main.get_path_manager') as mock_pm:
+            mock_pm.return_value = PathManager(self.temp_dir)
+            server_id = IDGenerator.generate(EntityType.SERVER)
+            ServerRegistry().create(
+                server_id,
+                Server(
+                    id=server_id,
+                    name="fake-server",
+                    url="http://fake-cloudpss/",
+                    owner="tester",
+                    auth=build_auth_metadata("fake-token", {"token_source": "test"}),
+                    default=True,
+                ),
+            )
+            case_id = IDGenerator.generate(EntityType.CASE)
+            CaseRegistry().create(
+                case_id,
+                Case(
+                    id=case_id,
+                    name="fake-emt-case",
+                    rid="model/test/emt",
+                    server_id=server_id,
+                    status="active",
+                ),
+            )
+            task_id = IDGenerator.generate(EntityType.TASK)
+            TaskRegistry().create(
+                task_id,
+                Task(
+                    id=task_id,
+                    name="fake-emt",
+                    case_id=case_id,
+                    type="emt",
+                    server_id=server_id,
+                    config={"model_source": str(model_source), "channels": ["plot-0/vac:0"]},
+                ),
+            )
+
+            with patch.object(sys, 'argv', ['cloudpss-master', 'task', 'submit', task_id, '--wait', '--poll-interval', '0']):
+                assert main() == 0
+
+            task = TaskRegistry().get(task_id)
+            assert task.status == "completed"
+            assert task.result_id
+
+            result_dir = self.temp_dir / "results" / task.result_id
+            assert (result_dir / "manifest.json").exists()
+            assert (result_dir / "channels.json").exists()
+            assert (result_dir / "csv" / "plot-0_vac_0.csv").exists()
+
+            manifest = json.loads((result_dir / "manifest.json").read_text(encoding="utf-8"))
+            assert manifest["metadata"]["artifact_type"] == "emt"
+            assert manifest["metadata"]["channel_count"] == 1
 
     def test_cli_variant_lifecycle(self):
         """测试 variant create/apply/delete 生命周期命令"""
@@ -387,10 +659,21 @@ class TestCLI:
                 assert main() == 0
             with patch.object(sys, 'argv', ['cloudpss-master', 'result', 'export', result_id, '--format', 'csv', '--table', 'buses', '--output', str(buses_csv)]):
                 assert main() == 0
+            report_path = self.temp_dir / "powerflow_report.md"
+            archive_path = self.temp_dir / "powerflow_archive.tar.gz"
+            with patch.object(sys, 'argv', ['cloudpss-master', 'result', 'report', result_id, '--output', str(report_path)]):
+                assert main() == 0
+            with patch.object(sys, 'argv', ['cloudpss-master', 'result', 'archive', result_id, '--output', str(archive_path)]):
+                assert main() == 0
 
             exported = json.loads(export_path.read_text(encoding="utf-8"))
             assert len(exported["artifacts"]["tables/buses.json"]) == 2
             assert "bus1" in buses_csv.read_text(encoding="utf-8")
+            assert "CloudPSS Result Report" in report_path.read_text(encoding="utf-8")
+            assert archive_path.exists()
+            assert (self.temp_dir / "registry" / "index.yaml").exists()
+            assert (self.temp_dir / "results" / result_id / "result.yaml").exists()
+            assert (self.temp_dir / "logs" / "audit.log").exists()
 
             # 分析结果
             with patch.object(sys, 'argv', ['cloudpss-master', 'result', 'analyze', result_id]):
@@ -538,6 +821,28 @@ class TestCLI:
 
             # 验证已删除
             assert ResultRegistry().get(result_id) is None
+
+    def test_release_lifecycle_rejects_invalid_case_transition(self):
+        """测试发布级状态机拒绝非法状态转换"""
+        with patch.object(sys, 'argv', ['cloudpss-master', 'init', '--path', str(self.temp_dir)]):
+            main()
+
+        with patch('cloudpss_skills_v3.master_organizer.cli.main.get_path_manager') as mock_pm:
+            from cloudpss_skills_v3.master_organizer.core import CaseRegistry, EntityType, IDGenerator, PathManager
+            from cloudpss_skills_v3.master_organizer.core.models import Case
+            from cloudpss_skills_v3.master_organizer.core.release_ops import LifecycleError, transition_case
+
+            mock_pm.return_value = PathManager(self.temp_dir)
+            case_id = IDGenerator.generate(EntityType.CASE)
+            CaseRegistry().create(
+                case_id,
+                Case(id=case_id, name="draft-case", rid="model/test/draft", status="draft"),
+            )
+
+            with pytest.raises(LifecycleError):
+                transition_case(case_id, "archived")
+
+            assert CaseRegistry().get(case_id).status == "draft"
 
     def test_cli_case_enhanced_commands(self):
         """测试 case show/clone/archive/restore/list --tree/tag"""

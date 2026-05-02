@@ -36,6 +36,18 @@ from .crypto import CryptoManager, MockCryptoManager, get_crypto_manager
 from .registry_base import RegistryBase, RegistryEntry
 from .models import Server, Case, Task, Result, Variant, EntityStatus, TaskStatus
 from .registries import ServerRegistry, CaseRegistry, TaskRegistry, ResultRegistry, VariantRegistry
+from .release_ops import (
+    LifecycleError,
+    QuotaError,
+    archive_result,
+    check_workspace_quotas,
+    generate_result_report,
+    materialize_entity,
+    refresh_index,
+    transition_case,
+    transition_task,
+    write_audit,
+)
 
 __all__ = [
     # ID 生成器
@@ -80,6 +92,18 @@ __all__ = [
     'TaskRegistry',
     'ResultRegistry',
     'VariantRegistry',
+
+    # 发布级工作区操作
+    'LifecycleError',
+    'QuotaError',
+    'archive_result',
+    'check_workspace_quotas',
+    'generate_result_report',
+    'materialize_entity',
+    'refresh_index',
+    'transition_case',
+    'transition_task',
+    'write_audit',
 ]
 
 __version__ = '1.0.0'

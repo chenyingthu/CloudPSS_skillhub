@@ -27,6 +27,21 @@ from cloudpss_skills_v3.master_organizer.core.server_auth import (
     read_token_source,
     set_default_server,
 )
+from cloudpss_skills_v3.master_organizer.core.task_runner import TaskExecutionError, execute_task
+from cloudpss_skills_v3.master_organizer.core.release_ops import (
+    LifecycleError,
+    QuotaError,
+    archive_result,
+    check_workspace_quotas,
+    generate_result_report,
+    materialize_entity,
+    materialize_workspace_entities,
+    move_to_trash,
+    refresh_index,
+    transition_case,
+    transition_task,
+    write_audit,
+)
 
 
 def cmd_init(args):
@@ -57,6 +72,8 @@ def cmd_init(args):
     print(f"   算例目录: {pm.cases_dir}")
     print(f"   任务目录: {pm.tasks_dir}")
     print(f"   结果目录: {pm.results_dir}")
+    refresh_index()
+    write_audit("system.init", str(pm.root), {"path": str(pm.root)})
 
     if args.path:
         print(f"\n💡 提示: 已保存工作区路径到配置")
@@ -93,6 +110,25 @@ def _parse_tags(values: Iterable[str] | None) -> list[str]:
             if tag and tag not in tags:
                 tags.append(tag)
     return tags
+
+
+def _load_task_config(config_path: str | None) -> dict:
+    if not config_path:
+        return {}
+    import json
+    import yaml
+
+    path = Path(config_path).expanduser().resolve()
+    data = path.read_text(encoding="utf-8")
+    if path.suffix.lower() == ".json":
+        loaded = json.loads(data)
+    else:
+        loaded = yaml.safe_load(data)
+    if loaded is None:
+        return {}
+    if not isinstance(loaded, dict):
+        raise ValueError("任务配置文件必须是对象/dict")
+    return loaded
 
 
 def _clean_directory(directory: Path) -> tuple[int, int]:
@@ -210,6 +246,11 @@ def cmd_status(args):
     usage = pm.get_storage_usage()
     total_mb = usage.get('total', 0) / (1024 * 1024)
     print(f"\n💾 存储使用: {total_mb:.2f} MB")
+    try:
+        check_workspace_quotas()
+        print("   配额状态: 正常")
+    except QuotaError as e:
+        print(f"   配额状态: 超限 - {e}")
 
     print("\n" + "=" * 60)
     return 0
@@ -288,6 +329,8 @@ def cmd_server_add(args):
     if registry.create(server_id, server):
         if args.default:
             set_default_server(server_id, registry)
+        write_audit("server.create", server_id, {"name": args.name, "url": url, "owner": args.owner or ""})
+        refresh_index()
         print(f"✅ 服务器添加成功: {server_id}")
         print(f"   名称: {args.name}")
         print(f"   URL: {url}")
@@ -306,6 +349,7 @@ def cmd_server_add(args):
 def cmd_server_default(args):
     """设置默认服务器"""
     if set_default_server(args.server_id):
+        write_audit("server.default", args.server_id)
         print(f"✅ 默认服务器已设置: {args.server_id}")
         return 0
     print(f"❌ 服务器不存在: {args.server_id}")
@@ -320,6 +364,8 @@ def cmd_server_internal(args):
         print(f"❌ 注册 internal 服务器失败: {e}")
         return 1
 
+    write_audit("server.internal", server_id, {"url": server.url, "owner": server.owner})
+    refresh_index()
     print(f"✅ internal 服务器已注册: {server_id}")
     print(f"   名称: {server.name}")
     print(f"   URL: {server.url}")
@@ -333,6 +379,8 @@ def cmd_server_remove(args):
     """删除服务器"""
     registry = ServerRegistry()
     if registry.delete(args.server_id):
+        write_audit("server.delete", args.server_id)
+        refresh_index()
         print(f"✅ 服务器已删除: {args.server_id}")
         return 0
     else:
@@ -409,11 +457,14 @@ def cmd_case_create(args):
         description=args.description or "",
         rid=args.rid,
         server_id=server_id,
-        status="draft",
+        status="active",
         tags=_parse_tags(args.tag)
     )
 
     if registry.create(case_id, case):
+        materialize_entity("case", case_id, case)
+        write_audit("case.create", case_id, {"name": args.name, "rid": args.rid, "server_id": server_id})
+        refresh_index()
         print(f"✅ 算例创建成功: {case_id}")
         print(f"   名称: {args.name}")
         print(f"   RID: {args.rid}")
@@ -428,12 +479,23 @@ def cmd_case_create(args):
 def cmd_case_delete(args):
     """删除算例"""
     registry = CaseRegistry()
-    if registry.delete(args.case_id):
-        print(f"✅ 算例已删除: {args.case_id}")
-        return 0
-    else:
+    case = registry.get(args.case_id)
+    if not case:
         print(f"❌ 算例不存在: {args.case_id}")
         return 1
+    try:
+        transition_case(args.case_id, "deleted", registry)
+    except LifecycleError as e:
+        print(f"❌ 删除失败: {e}")
+        return 1
+    if registry.delete(args.case_id):
+        move_to_trash(args.case_id, get_path_manager().get_case_path(args.case_id))
+        write_audit("case.delete", args.case_id, {"name": case.name})
+        refresh_index()
+        print(f"✅ 算例已删除: {args.case_id}")
+        return 0
+    print(f"❌ 删除失败")
+    return 1
 
 
 def cmd_case_clone(args):
@@ -457,6 +519,9 @@ def cmd_case_clone(args):
     )
 
     if registry.create(new_case_id, new_case):
+        materialize_entity("case", new_case_id, new_case)
+        write_audit("case.clone", new_case_id, {"source_case_id": args.case_id})
+        refresh_index()
         print(f"✅ 算例克隆成功")
         print(f"   原算例: {args.case_id}")
         print(f"   新算例: {new_case_id}")
@@ -480,7 +545,12 @@ def cmd_case_archive(args):
         print(f"⚠️ 算例已是归档状态: {args.case_id}")
         return 0
 
-    if registry.update(args.case_id, {"status": "archived"}):
+    try:
+        transition_case(args.case_id, "archived", registry)
+    except LifecycleError as e:
+        print(f"❌ 归档失败: {e}")
+        return 1
+    if True:
         print(f"✅ 算例已归档: {args.case_id}")
         print(f"   名称: {case.name}")
         return 0
@@ -502,7 +572,12 @@ def cmd_case_restore(args):
         print(f"⚠️ 算例不是归档状态: {args.case_id}")
         return 0
 
-    if registry.update(args.case_id, {"status": "active"}):
+    try:
+        transition_case(args.case_id, "active", registry)
+    except LifecycleError as e:
+        print(f"❌ 恢复失败: {e}")
+        return 1
+    if True:
         print(f"✅ 算例已恢复: {args.case_id}")
         print(f"   名称: {case.name}")
         return 0
@@ -583,7 +658,19 @@ def cmd_task_create(args):
         print(f"❌ 算例不存在: {args.case_id}")
         return 1
     case = case_registry.get(args.case_id)
+    if case and case.status == "archived":
+        print(f"❌ 算例已归档，只读不可创建任务: {args.case_id}")
+        return 1
     server_id = case.server_id if case else ""
+    try:
+        config = _load_task_config(args.config)
+    except Exception as e:
+        print(f"❌ 读取任务配置失败: {e}")
+        return 1
+    if args.model_source:
+        config["model_source"] = str(Path(args.model_source).expanduser().resolve())
+    if args.channel:
+        config["channels"] = args.channel
 
     task_id = IDGenerator.generate(EntityType.TASK)
     task = Task(
@@ -592,11 +679,15 @@ def cmd_task_create(args):
         case_id=args.case_id,
         type=args.type,
         server_id=server_id,
-        status="created"
+        status="created",
+        config=config,
     )
 
     if registry.create(task_id, task):
         _update_case_task_summary(args.case_id)
+        materialize_entity("task", task_id, task)
+        write_audit("task.create", task_id, {"case_id": args.case_id, "type": args.type})
+        refresh_index()
         print(f"✅ 任务创建成功: {task_id}")
         print(f"   名称: {args.name}")
         print(f"   算例: {args.case_id}")
@@ -614,6 +705,9 @@ def cmd_task_delete(args):
     if registry.delete(args.task_id):
         if task:
             _update_case_task_summary(task.case_id)
+        move_to_trash(args.task_id, get_path_manager().get_task_path(args.task_id))
+        write_audit("task.delete", args.task_id)
+        refresh_index()
         print(f"✅ 任务已删除: {args.task_id}")
         return 0
     else:
@@ -630,13 +724,33 @@ def cmd_task_submit(args):
         print(f"❌ 任务不存在: {args.task_id}")
         return 1
 
-    # 更新状态为 submitted
-    registry.update(args.task_id, {"status": "submitted", "submitted_at": datetime.now().isoformat()})
-    print(f"✅ 任务已提交: {args.task_id}")
+    if args.wait:
+        try:
+            execution = execute_task(
+                args.task_id,
+                timeout_seconds=args.timeout,
+                poll_interval=args.poll_interval,
+            )
+        except (TaskExecutionError, TimeoutError) as e:
+            print(f"❌ 任务执行失败: {e}")
+            return 1
+        print(f"✅ 任务执行完成: {args.task_id}")
+        print(f"   名称: {task.name}")
+        print(f"   类型: {task.type}")
+        print(f"   Job ID: {execution.job_id}")
+        print(f"   结果ID: {execution.result_id}")
+        print(f"   结果文件: {len(execution.files)} 个")
+        return 0
+
+    try:
+        transition_task(args.task_id, "submitted", {"submitted_at": datetime.now().isoformat()}, registry)
+    except LifecycleError as e:
+        print(f"❌ 提交失败: {e}")
+        return 1
+    print(f"✅ 任务已登记为 submitted: {args.task_id}")
     print(f"   名称: {task.name}")
     print(f"   类型: {task.type}")
-    if args.wait:
-        print(f"   等待模式: 已启用 (等待 CloudPSS 响应)")
+    print(f"   提示: 使用 --wait 执行 CloudPSS 作业并保存结果")
     return 0
 
 
@@ -683,7 +797,11 @@ def cmd_task_cancel(args):
         print(f"❌ 任务状态为 {task.status}，无法取消")
         return 1
 
-    registry.update(args.task_id, {"status": "cancelled"})
+    try:
+        transition_task(args.task_id, "cancelled", registry=registry)
+    except LifecycleError as e:
+        print(f"❌ 取消失败: {e}")
+        return 1
     print(f"✅ 任务已取消: {args.task_id}")
     return 0
 
@@ -720,6 +838,13 @@ def cmd_variant_list(args):
 def cmd_variant_create(args):
     """创建变体"""
     registry = VariantRegistry()
+    case = CaseRegistry().get(args.case_id)
+    if not case:
+        print(f"❌ 算例不存在: {args.case_id}")
+        return 1
+    if case.status == "archived":
+        print(f"❌ 算例已归档，只读不可创建变体: {args.case_id}")
+        return 1
 
     variant_id = IDGenerator.generate(EntityType.VARIANT)
 
@@ -739,6 +864,9 @@ def cmd_variant_create(args):
     )
 
     if registry.create(variant_id, variant):
+        materialize_entity("variant", variant_id, variant)
+        write_audit("variant.create", variant_id, {"case_id": args.case_id})
+        refresh_index()
         print(f"✅ 变体创建成功: {variant_id}")
         print(f"   名称: {args.name}")
         print(f"   算例: {args.case_id}")
@@ -773,6 +901,9 @@ def cmd_variant_apply(args):
 
     if task_registry.create(task_id, task):
         _update_case_task_summary(variant.case_id)
+        materialize_entity("task", task_id, task)
+        write_audit("variant.apply", args.variant_id, {"task_id": task_id})
+        refresh_index()
         print(f"✅ 变体已应用，任务创建成功: {task_id}")
         print(f"   变体: {args.variant_id}")
         print(f"   算例: {variant.case_id}")
@@ -791,6 +922,8 @@ def cmd_variant_delete(args):
         print(f"❌ 变体已被 {len(referenced)} 个任务引用，使用 --force 强制删除")
         return 1
     if registry.delete(args.variant_id):
+        write_audit("variant.delete", args.variant_id, {"force": args.force})
+        refresh_index()
         print(f"✅ 变体已删除: {args.variant_id}")
         return 0
     else:
@@ -924,6 +1057,17 @@ def cmd_result_export(args):
             "export_path": str(export_path),
             "exported_at": export_data["exported_at"]
         })
+        updated = registry.get(args.result_id)
+        if updated:
+            materialize_entity("result", args.result_id, updated)
+        task = TaskRegistry().get(result.task_id)
+        if task and task.status == "completed":
+            try:
+                transition_task(result.task_id, "exported", registry=TaskRegistry())
+            except LifecycleError:
+                pass
+        write_audit("result.export", args.result_id, {"format": export_format, "path": str(export_path)})
+        refresh_index()
 
         print(f"✅ 结果导出成功: {args.result_id}")
         print(f"   格式: {export_format}")
@@ -938,8 +1082,6 @@ def cmd_result_export(args):
 
 def cmd_result_delete(args):
     """删除结果"""
-    import shutil
-
     registry = ResultRegistry()
     result = registry.get(args.result_id)
 
@@ -949,8 +1091,9 @@ def cmd_result_delete(args):
 
     if registry.delete(args.result_id):
         result_dir = get_path_manager().get_result_path(args.result_id)
-        if result_dir.exists():
-            shutil.rmtree(result_dir)
+        move_to_trash(args.result_id, result_dir)
+        write_audit("result.delete", args.result_id)
+        refresh_index()
         print(f"✅ 结果已删除: {args.result_id}")
         return 0
     else:
@@ -1031,6 +1174,32 @@ def cmd_result_compare(args):
         print(f"格式: 不同 ({result1.format} vs {result2.format})")
 
     print("=" * 60)
+    return 0
+
+
+def cmd_result_archive(args):
+    """归档结果目录为 tar.gz"""
+    try:
+        output = Path(args.output).expanduser().resolve() if args.output else None
+        archive_path = archive_result(args.result_id, output)
+    except Exception as e:
+        print(f"❌ 结果归档失败: {e}")
+        return 1
+    print(f"✅ 结果归档完成: {args.result_id}")
+    print(f"   路径: {archive_path}")
+    return 0
+
+
+def cmd_result_report(args):
+    """生成结果 Markdown 报告"""
+    try:
+        output = Path(args.output).expanduser().resolve() if args.output else None
+        report_path = generate_result_report(args.result_id, output)
+    except Exception as e:
+        print(f"❌ 报告生成失败: {e}")
+        return 1
+    print(f"✅ 结果报告已生成: {args.result_id}")
+    print(f"   路径: {report_path}")
     return 0
 
 
@@ -1388,6 +1557,9 @@ def main():
     task_create_parser.add_argument("--name", required=True, help="任务名称")
     task_create_parser.add_argument("--case-id", required=True, help="算例ID")
     task_create_parser.add_argument("--type", required=True, choices=["powerflow", "emt", "stability"], help="任务类型")
+    task_create_parser.add_argument("--config", help="任务配置文件（YAML/JSON）")
+    task_create_parser.add_argument("--model-source", help="本地模型源文件路径（供 EMT 等任务记录使用）")
+    task_create_parser.add_argument("--channel", action="append", help="EMT 导出通道，如 plot-2/vac:0，可重复")
     task_create_parser.set_defaults(func=cmd_task_create)
 
     task_delete_parser = task_subparsers.add_parser("delete", help="删除任务")
@@ -1396,7 +1568,9 @@ def main():
 
     task_submit_parser = task_subparsers.add_parser("submit", help="提交任务")
     task_submit_parser.add_argument("task_id", help="任务ID")
-    task_submit_parser.add_argument("--wait", action="store_true", help="等待完成")
+    task_submit_parser.add_argument("--wait", action="store_true", help="执行 CloudPSS 作业并等待完成")
+    task_submit_parser.add_argument("--timeout", type=int, default=300, help="等待超时时间（秒）")
+    task_submit_parser.add_argument("--poll-interval", type=float, default=2.0, help="轮询间隔（秒）")
     task_submit_parser.set_defaults(func=cmd_task_submit)
 
     task_status_parser = task_subparsers.add_parser("status", help="查看任务状态")
@@ -1459,6 +1633,16 @@ def main():
     result_compare_parser.add_argument("result_id1", help="第一个结果ID")
     result_compare_parser.add_argument("result_id2", help="第二个结果ID")
     result_compare_parser.set_defaults(func=cmd_result_compare)
+
+    result_archive_parser = result_subparsers.add_parser("archive", help="归档结果目录")
+    result_archive_parser.add_argument("result_id", help="结果ID")
+    result_archive_parser.add_argument("--output", "-o", help="归档输出路径")
+    result_archive_parser.set_defaults(func=cmd_result_archive)
+
+    result_report_parser = result_subparsers.add_parser("report", help="生成结果报告")
+    result_report_parser.add_argument("result_id", help="结果ID")
+    result_report_parser.add_argument("--output", "-o", help="报告输出路径")
+    result_report_parser.set_defaults(func=cmd_result_report)
 
     # query 命令
     query_parser = subparsers.add_parser("query", help="查询")

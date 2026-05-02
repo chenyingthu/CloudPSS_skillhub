@@ -49,6 +49,10 @@ DEFAULT_MODEL_RIDS = ("model/holdme/IEEE39", "model/chenying/IEEE39")
 DEFAULT_EMT_MODEL_SOURCE = "examples/basic/ieee3-emt-prepared.yaml"
 
 
+def _workspace_key_path(registry_dir: Path) -> Path:
+    return registry_dir.parent / "config" / ".cloudpss_key"
+
+
 def _read_token_file(name: str) -> str:
     token_path = REPO_ROOT / name
     if token_path.exists():
@@ -129,7 +133,7 @@ def test_live_powerflow_result_can_be_registered_and_exported(tmp_path):
     registry_dir.mkdir(parents=True)
     server_id, server = _prepare_live_server(registry_dir)
 
-    token = decrypt_server_token(server)
+    token = decrypt_server_token(server, key_path=_workspace_key_path(registry_dir))
     if not token:
         pytest.skip("missing CloudPSS token")
 
@@ -276,6 +280,84 @@ def test_live_powerflow_result_can_be_registered_and_exported(tmp_path):
 
 
 @pytest.mark.integration
+def test_live_cli_submit_wait_runs_powerflow_and_persists_result(tmp_path):
+    if os.environ.get("CLOUDPSS_V3_RUN_LIVE") != "1":
+        pytest.skip("set CLOUDPSS_V3_RUN_LIVE=1 to run the live CloudPSS smoke test")
+
+    workspace = tmp_path / "workspace"
+    registry_dir = workspace / "registry"
+    registry_dir.mkdir(parents=True)
+    server_id, server = _prepare_live_server(registry_dir)
+
+    token = decrypt_server_token(server, key_path=_workspace_key_path(registry_dir))
+    if not token:
+        pytest.skip("missing CloudPSS token")
+
+    from cloudpss import Model, setToken
+
+    previous_api_url = os.environ.get("CLOUDPSS_API_URL")
+    os.environ["CLOUDPSS_API_URL"] = server.url
+    setToken(token)
+    try:
+        candidates = [os.environ.get("TEST_MODEL_RID", "").strip(), *DEFAULT_MODEL_RIDS]
+        model_rid, _model = _fetch_first_available_model(Model, [rid for rid in candidates if rid])
+    finally:
+        if previous_api_url is None:
+            os.environ.pop("CLOUDPSS_API_URL", None)
+        else:
+            os.environ["CLOUDPSS_API_URL"] = previous_api_url
+
+    case_id = IDGenerator.generate(EntityType.CASE)
+    task_id = IDGenerator.generate(EntityType.TASK)
+    CaseRegistry(registry_dir).create(
+        case_id,
+        Case(
+            id=case_id,
+            name="CLI submit live powerflow",
+            rid=model_rid,
+            server_id=server_id,
+            status="active",
+            tags=["live", "cli-submit", "powerflow"],
+        ),
+    )
+    TaskRegistry(registry_dir).create(
+        task_id,
+        Task(
+            id=task_id,
+            name="CLI submit live powerflow",
+            case_id=case_id,
+            type="powerflow",
+            server_id=server_id,
+        ),
+    )
+
+    home = tmp_path / "home"
+    home.mkdir()
+    env = {**os.environ, "HOME": str(home), "PYTHONPATH": str(REPO_ROOT), "CLOUDPSS_HOME": str(workspace)}
+    _run_cli(env, "task", "submit", task_id, "--wait", "--timeout", "240")
+
+    task = TaskRegistry(registry_dir).get(task_id)
+    assert task is not None
+    assert task.status == "completed"
+    assert task.result_id
+    assert task.job_id
+
+    result = ResultRegistry(registry_dir).get(task.result_id)
+    assert result is not None
+    assert result.format == "powerflow"
+    assert result.metadata["data_source"] == "live_cloudpss"
+    assert result.metadata["server_id"] == server_id
+    assert result.metadata["server_url"] == server.url
+    assert result.metadata["bus_rows"] > 0
+    assert result.metadata["branch_rows"] > 0
+
+    result_dir = workspace / "results" / task.result_id
+    assert (result_dir / "manifest.json").exists()
+    assert (result_dir / "tables" / "buses.json").exists()
+    assert (result_dir / "tables" / "branches.csv").exists()
+
+
+@pytest.mark.integration
 def test_live_emt_result_can_be_registered_and_exported(tmp_path):
     if os.environ.get("CLOUDPSS_V3_RUN_LIVE") != "1":
         pytest.skip("set CLOUDPSS_V3_RUN_LIVE=1 to run the live CloudPSS smoke test")
@@ -284,7 +366,7 @@ def test_live_emt_result_can_be_registered_and_exported(tmp_path):
     registry_dir = workspace / "registry"
     registry_dir.mkdir(parents=True)
     server_id, server = _prepare_live_server(registry_dir)
-    token = decrypt_server_token(server)
+    token = decrypt_server_token(server, key_path=_workspace_key_path(registry_dir))
 
     from cloudpss import Model, setToken
 
@@ -419,5 +501,5 @@ def test_internal_token_is_bound_to_internal_server(tmp_path):
     assert server.auth["token_source"] == TOKEN_SOURCE_INTERNAL
     assert "encrypted_token" in server.auth
     assert token_path.read_text(encoding="utf-8").strip() not in str(server.auth)
-    assert decrypt_server_token(server) == token_path.read_text(encoding="utf-8").strip()
+    assert decrypt_server_token(server, key_path=_workspace_key_path(tmp_path / "registry")) == token_path.read_text(encoding="utf-8").strip()
     assert get_default_server(registry) == (server_id, server)
