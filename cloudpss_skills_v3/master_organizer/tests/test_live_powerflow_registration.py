@@ -36,6 +36,7 @@ from cloudpss_skills_v3.master_organizer.core.server_auth import (
     get_default_server,
     normalize_server_url,
 )
+from cloudpss_skills_v3.master_organizer.core.result_storage import store_powerflow_result
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -137,8 +138,10 @@ def test_live_powerflow_result_can_be_registered_and_exported(tmp_path):
         assert status == 1, f"CloudPSS power-flow job failed: {getattr(job, 'id', 'unknown')}"
 
         result = job.result
-        bus_count = _table_count(result.getBuses()[0])
-        branch_count = _table_count(result.getBranches()[0])
+        buses_table = result.getBuses()[0]
+        branches_table = result.getBranches()[0]
+        bus_count = _table_count(buses_table)
+        branch_count = _table_count(branches_table)
         assert bus_count > 0
         assert branch_count > 0
     finally:
@@ -150,6 +153,23 @@ def test_live_powerflow_result_can_be_registered_and_exported(tmp_path):
     case_id = IDGenerator.generate(EntityType.CASE)
     task_id = IDGenerator.generate(EntityType.TASK)
     result_id = IDGenerator.generate(EntityType.RESULT)
+    artifact_metadata = {
+        "data_source": "live_cloudpss",
+        "server_id": server_id,
+        "server_url": server.url,
+        "server_owner": server.owner,
+        "model_rid": model_rid,
+        "model_name": getattr(model, "name", ""),
+        "job_id": getattr(job, "id", None),
+        "job_status": status,
+    }
+    artifact_files, artifact_size, artifact_metadata = store_powerflow_result(
+        result_id,
+        buses_table=buses_table,
+        branches_table=branches_table,
+        metadata=artifact_metadata,
+        root_dir=workspace / "results" / result_id,
+    )
 
     CaseRegistry(registry_dir).create(
         case_id,
@@ -186,21 +206,10 @@ def test_live_powerflow_result_can_be_registered_and_exported(tmp_path):
             name="live powerflow result",
             task_id=task_id,
             case_id=case_id,
-            format="json",
-            size_bytes=bus_count + branch_count,
-            files=[],
-            metadata={
-                "data_source": "live_cloudpss",
-                "server_id": server_id,
-                "server_url": server.url,
-                "server_owner": server.owner,
-                "model_rid": model_rid,
-                "model_name": getattr(model, "name", ""),
-                "job_id": getattr(job, "id", None),
-                "job_status": status,
-                "bus_count": bus_count,
-                "branch_count": branch_count,
-            },
+            format="powerflow",
+            size_bytes=artifact_size,
+            files=artifact_files,
+            metadata=artifact_metadata,
         ),
     )
 
@@ -228,17 +237,33 @@ def test_live_powerflow_result_can_be_registered_and_exported(tmp_path):
     assert "data_source: live_cloudpss" in result_analysis.stdout
     assert f"server_url: {server.url}" in result_analysis.stdout
     assert f"job_id: {getattr(job, 'id', None)}" in result_analysis.stdout
+    assert "tables/buses.json" in result_analysis.stdout
+    assert "tables/branches.csv" in result_analysis.stdout
 
     _run_cli(env, "result", "export", result_id, "--output", str(export_path))
+    bus_csv_path = tmp_path / "buses.csv"
+    branch_csv_path = tmp_path / "branches.csv"
+    _run_cli(env, "result", "export", result_id, "--format", "csv", "--table", "buses", "--output", str(bus_csv_path))
+    _run_cli(env, "result", "export", result_id, "--format", "csv", "--table", "branches", "--output", str(branch_csv_path))
 
+    result_dir = workspace / "results" / result_id
+    assert (result_dir / "manifest.json").exists()
+    assert (result_dir / "tables" / "buses.json").exists()
+    assert (result_dir / "tables" / "branches.json").exists()
+    assert (result_dir / "tables" / "buses.csv").exists()
+    assert (result_dir / "tables" / "branches.csv").exists()
     exported = json.loads(export_path.read_text(encoding="utf-8"))
     assert exported["result_id"] == result_id
     assert exported["metadata"]["data_source"] == "live_cloudpss"
     assert exported["metadata"]["server_id"] == server_id
     assert exported["metadata"]["server_url"] == server.url
     assert exported["metadata"]["job_id"] == getattr(job, "id", None)
-    assert exported["metadata"]["bus_count"] == bus_count
-    assert exported["metadata"]["branch_count"] == branch_count
+    assert exported["metadata"]["bus_rows"] == bus_count
+    assert exported["metadata"]["branch_rows"] == branch_count
+    assert len(exported["artifacts"]["tables/buses.json"]) == bus_count
+    assert len(exported["artifacts"]["tables/branches.json"]) == branch_count
+    assert len(bus_csv_path.read_text(encoding="utf-8").splitlines()) == bus_count + 1
+    assert len(branch_csv_path.read_text(encoding="utf-8").splitlines()) == branch_count + 1
 
 
 def test_internal_token_is_bound_to_internal_server(tmp_path):

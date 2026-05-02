@@ -334,6 +334,64 @@ class TestCLI:
                 assert exported_data['result_id'] == result_id
                 assert exported_data['name'] == 'test-result'
 
+    def test_cli_powerflow_result_exports_saved_artifacts(self):
+        """测试已保存的潮流结果表可被 analyze/export 管理"""
+        import json
+
+        with patch.object(sys, 'argv', ['cloudpss-master', 'init', '--path', str(self.temp_dir)]):
+            main()
+
+        with patch('cloudpss_skills_v3.master_organizer.cli.main.get_path_manager') as mock_pm:
+            from cloudpss_skills_v3.master_organizer.core import PathManager
+            mock_pm.return_value = PathManager(self.temp_dir)
+
+            from cloudpss_skills_v3.master_organizer.core import ResultRegistry, Result, IDGenerator, EntityType
+            from cloudpss_skills_v3.master_organizer.core.result_storage import store_powerflow_result
+
+            result_id = IDGenerator.generate(EntityType.RESULT)
+            table = {
+                "data": {
+                    "columns": [
+                        {"name": "id", "data": ["bus1", "bus2"]},
+                        {"name": "voltage", "data": [1.0, 0.98]},
+                    ]
+                }
+            }
+            files, size_bytes, metadata = store_powerflow_result(
+                result_id,
+                buses_table=table,
+                branches_table=table,
+                metadata={"data_source": "unit"},
+                root_dir=self.temp_dir / "results" / result_id,
+            )
+            ResultRegistry().create(
+                result_id,
+                Result(
+                    id=result_id,
+                    name="powerflow-result",
+                    task_id="task_test",
+                    case_id="case_test",
+                    format="powerflow",
+                    size_bytes=size_bytes,
+                    files=files,
+                    metadata=metadata,
+                ),
+            )
+
+            export_path = self.temp_dir / "powerflow_export.json"
+            buses_csv = self.temp_dir / "buses.csv"
+
+            with patch.object(sys, 'argv', ['cloudpss-master', 'result', 'analyze', result_id]):
+                assert main() == 0
+            with patch.object(sys, 'argv', ['cloudpss-master', 'result', 'export', result_id, '--output', str(export_path)]):
+                assert main() == 0
+            with patch.object(sys, 'argv', ['cloudpss-master', 'result', 'export', result_id, '--format', 'csv', '--table', 'buses', '--output', str(buses_csv)]):
+                assert main() == 0
+
+            exported = json.loads(export_path.read_text(encoding="utf-8"))
+            assert len(exported["artifacts"]["tables/buses.json"]) == 2
+            assert "bus1" in buses_csv.read_text(encoding="utf-8")
+
             # 分析结果
             with patch.object(sys, 'argv', ['cloudpss-master', 'result', 'analyze', result_id]):
                 result = main()

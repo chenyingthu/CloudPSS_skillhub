@@ -824,6 +824,7 @@ def cmd_result_export(args):
     """导出结果"""
     import json
     import csv
+    import shutil
 
     registry = ResultRegistry()
     result = registry.get(args.result_id)
@@ -833,7 +834,7 @@ def cmd_result_export(args):
         return 1
 
     # 确定导出格式和路径
-    export_format = args.format or result.format
+    export_format = args.format or ("json" if result.format == "powerflow" else result.format)
     export_path = args.output or f"./{args.result_id}_export.{export_format}"
     export_path = Path(export_path).expanduser().resolve()
 
@@ -854,26 +855,43 @@ def cmd_result_export(args):
         "exported_at": datetime.now().isoformat(),
         "export_format": export_format
     }
+    pm = get_path_manager()
+    result_dir = pm.get_result_path(args.result_id)
+    manifest_path = result_dir / "manifest.json"
+    if manifest_path.exists():
+        export_data["manifest"] = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     try:
         # 根据格式导出文件
         if export_format == "json":
+            artifacts = {}
+            for relative_path in result.files:
+                artifact_path = result_dir / relative_path
+                if artifact_path.is_file() and artifact_path.suffix == ".json":
+                    artifacts[relative_path] = json.loads(artifact_path.read_text(encoding="utf-8"))
+            if artifacts:
+                export_data["artifacts"] = artifacts
             with open(export_path, 'w', encoding='utf-8') as f:
                 json.dump(export_data, f, indent=2, ensure_ascii=False)
 
         elif export_format == "csv":
-            # CSV 导出基本元数据
-            with open(export_path, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                writer.writerow(["Property", "Value"])
-                writer.writerow(["result_id", result.id])
-                writer.writerow(["name", result.name])
-                writer.writerow(["task_id", result.task_id])
-                writer.writerow(["case_id", result.case_id])
-                writer.writerow(["format", result.format])
-                writer.writerow(["created_at", result.created_at])
-                writer.writerow(["size_bytes", result.size_bytes])
-                writer.writerow(["exported_at", export_data["exported_at"]])
+            table_name = args.table or "buses"
+            artifact_path = result_dir / "tables" / f"{table_name}.csv"
+            if artifact_path.exists():
+                shutil.copyfile(artifact_path, export_path)
+            else:
+                # CSV 导出基本元数据
+                with open(export_path, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(["Property", "Value"])
+                    writer.writerow(["result_id", result.id])
+                    writer.writerow(["name", result.name])
+                    writer.writerow(["task_id", result.task_id])
+                    writer.writerow(["case_id", result.case_id])
+                    writer.writerow(["format", result.format])
+                    writer.writerow(["created_at", result.created_at])
+                    writer.writerow(["size_bytes", result.size_bytes])
+                    writer.writerow(["exported_at", export_data["exported_at"]])
 
         elif export_format == "hdf5":
             # HDF5 格式需要 h5py，如果不可用则报错
@@ -917,6 +935,8 @@ def cmd_result_export(args):
 
 def cmd_result_delete(args):
     """删除结果"""
+    import shutil
+
     registry = ResultRegistry()
     result = registry.get(args.result_id)
 
@@ -925,6 +945,9 @@ def cmd_result_delete(args):
         return 1
 
     if registry.delete(args.result_id):
+        result_dir = get_path_manager().get_result_path(args.result_id)
+        if result_dir.exists():
+            shutil.rmtree(result_dir)
         print(f"✅ 结果已删除: {args.result_id}")
         return 0
     else:
@@ -955,6 +978,13 @@ def cmd_result_analyze(args):
             print(f"    - {f}")
         if len(result.files) > 10:
             print(f"    ... 还有 {len(result.files) - 10} 个文件")
+
+    result_dir = get_path_manager().get_result_path(args.result_id)
+    if result_dir.exists():
+        print(f"\n  存储目录: {result_dir}")
+        manifest_path = result_dir / "manifest.json"
+        if manifest_path.exists():
+            print(f"  Manifest: {manifest_path}")
 
     if result.metadata:
         print(f"\n  元数据:")
@@ -1410,6 +1440,7 @@ def main():
     result_export_parser.add_argument("result_id", help="结果ID")
     result_export_parser.add_argument("--format", choices=["json", "csv", "hdf5"], help="导出格式")
     result_export_parser.add_argument("--output", "-o", help="输出路径")
+    result_export_parser.add_argument("--table", choices=["buses", "branches"], help="CSV 导出的结果表")
     result_export_parser.set_defaults(func=cmd_result_export)
 
     result_delete_parser = result_subparsers.add_parser("delete", help="删除结果")
