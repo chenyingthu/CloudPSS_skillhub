@@ -21,6 +21,8 @@ from cloudpss_skills_v2.core.skill_result import (
     SkillResult,
     SkillStatus,
 )
+from cloudpss_skills_v2.core.system_model import PowerSystemModel
+from cloudpss_skills_v2.poweranalysis.base import PowerAnalysis
 from cloudpss_skills_v2.powerapi import EngineConfig
 from cloudpss_skills_v2.powerskill import Engine, ShortCircuit
 
@@ -36,8 +38,11 @@ def _as_float(value, default=0.0) -> float:
         return default
 
 
-class ShortCircuitAnalysis:
-    """短路电流计算技能 - v2 engine-agnostic implementation."""
+class ShortCircuitAnalysis(PowerAnalysis):
+    """短路电流计算技能 - v2 engine-agnostic implementation.
+
+    Inherits from PowerAnalysis to work with unified PowerSystemModel.
+    """
 
     name = "short_circuit"
     description = "短路电流计算 - 基于EMT仿真计算短路电流和短路容量"
@@ -180,6 +185,187 @@ class ShortCircuitAnalysis:
         self.logs: list[LogEntry] = []
         self.artifacts: list[Artifact] = []
 
+    def run(self, model: PowerSystemModel | None = None, config: dict | None = None) -> dict | SkillResult:
+        """Run short circuit analysis on unified PowerSystemModel.
+
+        This method supports two calling conventions:
+        1. Unified model interface (new): run(model, config)
+        2. Legacy config-only interface (backward compat): run(config)
+
+        Args:
+            model: Unified PowerSystemModel containing buses, branches, generators, etc.
+                   If None and first arg is dict, treats first arg as legacy config.
+            config: Analysis configuration dictionary with keys:
+                - fault_location: str - Bus name where fault occurs
+                - fault_type: str - "three_phase", "line_to_ground", or "line_to_line"
+                - fault_resistance: float - Fault resistance in ohms (default: 0.0)
+
+        Returns:
+            For unified model interface: Dictionary with analysis results
+            For legacy interface: SkillResult object
+        """
+        # Handle backward compatibility: if model is actually a dict, treat as legacy config
+        if model is not None and isinstance(model, dict) and config is None:
+            # Legacy API: run(config_dict)
+            return self.run_with_config(model)
+
+        # Unified model interface
+        if model is None or config is None:
+            raise TypeError("run() requires both 'model' and 'config' arguments")
+        self.logs = []
+        self.artifacts = []
+
+        # Validate model
+        errors = self.validate_model(model)
+        if errors:
+            return {
+                "status": "error",
+                "errors": errors,
+            }
+
+        # Get fault configuration
+        fault_location = config.get("fault_location", "")
+        fault_type = config.get("fault_type", "three_phase")
+        fault_resistance = config.get("fault_resistance", 0.0)
+
+        # Validate fault location
+        target_bus = model.get_bus_by_name(fault_location)
+        if target_bus is None:
+            # Try to find by ID if name fails
+            try:
+                bus_id = int(fault_location.replace("Bus", ""))
+                target_bus = model.get_bus_by_id(bus_id)
+            except (ValueError, AttributeError):
+                pass
+
+        if target_bus is None:
+            return {
+                "status": "error",
+                "errors": [f"Fault location '{fault_location}' not found in model"],
+            }
+
+        self._log("INFO", f"Running short circuit analysis at {fault_location}")
+        self._log("INFO", f"Fault type: {fault_type}")
+        self._log("INFO", f"Fault resistance: {fault_resistance} Ω")
+
+        # Calculate short circuit currents using the unified model
+        result = self._calculate_short_circuit(model, target_bus, fault_type, fault_resistance)
+
+        return result
+
+    def _calculate_short_circuit(
+        self,
+        model: PowerSystemModel,
+        fault_bus: Any,
+        fault_type: str,
+        fault_resistance: float,
+    ) -> dict:
+        """Calculate short circuit currents using the unified model.
+
+        This is a simplified calculation based on the unified model.
+        For more accurate results, the full PowerSkill API with EMT simulation
+        should be used.
+        """
+        from cloudpss_skills_v2.core.system_model import Bus
+
+        fault_currents = {}
+        short_circuit_mva = {}
+
+        # Get system base values
+        base_mva = model.base_mva
+        base_voltage = fault_bus.base_kv
+
+        # Calculate equivalent impedance at fault location
+        # This is a simplified calculation
+        branches_at_fault = model.get_branches_connected_to(fault_bus.bus_id)
+
+        if not branches_at_fault:
+            return {
+                "status": "error",
+                "errors": [f"No branches connected to fault bus {fault_bus.name}"],
+            }
+
+        # Calculate parallel impedance of all branches connected to fault bus
+        # Z_eq = 1 / sum(1/Z_i) for all branches
+        y_total = complex(0, 0)
+        for branch in branches_at_fault:
+            if branch.in_service and branch.x_pu > 0:
+                z_branch = complex(branch.r_pu, branch.x_pu)
+                y_branch = 1 / z_branch if z_branch != 0 else complex(0, 0)
+                y_total += y_branch
+
+        if y_total == 0:
+            return {
+                "status": "error",
+                "errors": ["Cannot calculate short circuit: no valid branch impedances"],
+            }
+
+        z_eq = 1 / y_total
+
+        # Add fault resistance
+        z_fault = complex(fault_resistance / (base_voltage ** 2 / base_mva), 0)
+        z_total = z_eq + z_fault
+
+        # Calculate fault current in per unit
+        v_prefault = 1.0  # Assume 1.0 pu pre-fault voltage
+        i_fault_pu = v_prefault / abs(z_total) if abs(z_total) > 0 else 0
+
+        # Convert to kA
+        i_base = base_mva / (math.sqrt(3) * base_voltage)
+        i_fault_ka = i_fault_pu * i_base
+
+        # Calculate short circuit capacity
+        scc_mva = math.sqrt(3) * base_voltage * i_fault_ka
+
+        # Store results for fault bus
+        fault_currents[fault_bus.name] = {
+            "peak_current": i_fault_ka * math.sqrt(2),  # Peak = RMS * sqrt(2)
+            "steady_current": i_fault_ka,
+            "dc_component": i_fault_ka * 0.5,  # Simplified assumption
+            "time_constant": 0.05,  # Simplified assumption (50 ms)
+            "impedance_pu": abs(z_total),
+        }
+
+        short_circuit_mva[fault_bus.name] = {
+            "steady_current_ka": i_fault_ka,
+            "short_circuit_mva": round(scc_mva, 2),
+        }
+
+        # Calculate voltages at other buses during fault
+        for bus in model.buses:
+            if bus.bus_id != fault_bus.bus_id:
+                # Simplified voltage calculation during fault
+                # V = 1 - I_fault * Z_transfer
+                # For simplicity, assume voltage drops proportionally to distance
+                branches_to_fault = model.get_branches_connected_to(bus.bus_id)
+                if branches_to_fault:
+                    min_z = min(
+                        (b.x_pu for b in branches_to_fault if b.in_service and b.x_pu > 0),
+                        default=0.1
+                    )
+                    voltage_drop = i_fault_pu * min_z
+                    v_during_fault = max(0, 1.0 - voltage_drop)
+                else:
+                    v_during_fault = 1.0
+
+                fault_currents[bus.name] = {
+                    "voltage_during_fault": round(v_during_fault, 4),
+                }
+
+        self._log("INFO", f"Calculated fault current: {i_fault_ka:.4f} kA")
+        self._log("INFO", f"Short circuit capacity: {scc_mva:.2f} MVA")
+
+        return {
+            "status": "success",
+            "fault_location": fault_bus.name,
+            "fault_type": fault_type,
+            "fault_resistance": fault_resistance,
+            "fault_current": fault_currents,
+            "short_circuit_mva": short_circuit_mva,
+            "base_mva": base_mva,
+            "base_voltage_kv": base_voltage,
+        }
+
     def _log(self, level: str, message: str) -> None:
         self.logs.append(LogEntry(timestamp=datetime.now(), level=level, message=message))
         getattr(logger, level.lower(), logger.info)(message)
@@ -207,7 +393,7 @@ class ShortCircuitAnalysis:
             errors.append("必须提供 auth.token 或 auth.token_file")
         return len(errors) == 0, errors
 
-    def run(self, config: dict[str, Any]) -> SkillResult:
+    def run_with_config(self, config: dict[str, Any]) -> SkillResult:
         start_time = datetime.now()
         self.logs = []
         self.artifacts = []
@@ -271,6 +457,14 @@ class ShortCircuitAnalysis:
                     sim_result.errors[0] if sim_result.errors else "短路计算EMT仿真失败"
                 )
 
+            # Get unified PowerSystemModel (new architecture)
+            system_model = None
+            if hasattr(api, 'get_system_model'):
+                system_model = api.get_system_model(sim_result.job_id)
+
+            if system_model is not None:
+                self._log("INFO", f"统一模型: {len(system_model.buses)} 母线, {len(system_model.branches)} 支路")
+
             result_data = sim_result.data
 
             if current_channels or voltage_channels:
@@ -299,6 +493,11 @@ class ShortCircuitAnalysis:
                 "analysis": analysis,
                 "short_circuit_mva": short_circuit_mva,
                 "timestamp": datetime.now().isoformat(),
+                "unified_model": {
+                    "has_model": system_model is not None,
+                    "bus_count": len(system_model.buses) if system_model else 0,
+                    "branch_count": len(system_model.branches) if system_model else 0,
+                } if system_model else None,
             }
 
             self._save_output(result_data, output_config)
