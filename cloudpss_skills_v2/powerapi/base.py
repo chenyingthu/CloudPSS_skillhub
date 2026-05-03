@@ -23,12 +23,16 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Optional
 from datetime import datetime
+from enum import Enum
+from typing import TYPE_CHECKING, Any, Optional
+
 import logging
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from cloudpss_skills_v2.core.system_model import PowerSystemModel
 
 
 class SimulationStatus(Enum):
@@ -113,6 +117,7 @@ class SimulationResult:
         warnings: List of warning messages
         started_at: When the simulation started
         completed_at: When the simulation completed
+        system_model: Unified PowerSystemModel (new architecture, optional)
     """
 
     job_id: str = ""
@@ -123,6 +128,15 @@ class SimulationResult:
     warnings: list[str] = field(default_factory=list)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    system_model: PowerSystemModel | None = None  # Unified model for cross-engine analysis
+
+    def get_unified_model(self) -> PowerSystemModel | None:
+        """Get unified PowerSystemModel if available.
+
+        Returns:
+            PowerSystemModel if set, None otherwise.
+        """
+        return self.system_model
 
     @property
     def is_success(self) -> bool:
