@@ -143,3 +143,63 @@ class PowerAnalysisBase(ABC):
 # Backward compatibility alias
 # TODO: Deprecated, use PowerAnalysisBase instead
 AnalysisBase = PowerAnalysisBase
+
+
+# =============================================================================
+# Unified Model Power Analysis Base Class
+# =============================================================================
+
+from cloudpss_skills_v2.core.system_model import PowerSystemModel
+
+
+class PowerAnalysis(ABC):
+    """Base class for power system analyses using unified PowerSystemModel.
+
+    This class provides a simplified interface for analyses that work directly
+    with the unified PowerSystemModel data structure, rather than going through
+    the PowerSkill API layer.
+
+    Example:
+        class MyAnalysis(PowerAnalysis):
+            def run(self, model: PowerSystemModel, config: dict) -> dict:
+                return {"bus_count": len(model.buses)}
+    """
+
+    @abstractmethod
+    def run(self, model: PowerSystemModel, config: dict) -> dict:
+        """Run analysis on unified model.
+
+        Args:
+            model: Unified PowerSystemModel containing buses, branches, generators, etc.
+            config: Analysis configuration dictionary
+
+        Returns:
+            Analysis results as a dictionary
+
+        Raises:
+            NotImplementedError: Subclasses must implement this method
+        """
+        raise NotImplementedError("子类必须实现 run() 方法")
+
+    def validate_model(self, model: PowerSystemModel) -> list[str]:
+        """Validate model before analysis.
+
+        Performs basic validation checks:
+        - Model has at least one bus
+        - Model has a slack bus for reference
+
+        Args:
+            model: PowerSystemModel to validate
+
+        Returns:
+            List of validation error messages (empty if valid)
+        """
+        errors = []
+
+        if not model.buses:
+            errors.append("No buses in model")
+
+        if model.get_slack_bus() is None:
+            errors.append("No slack bus found")
+
+        return errors
