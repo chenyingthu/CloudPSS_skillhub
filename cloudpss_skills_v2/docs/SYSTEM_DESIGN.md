@@ -85,6 +85,26 @@ User Input → Skill → PowerFlow.run({model_id})
 | `PandapowerPowerFlowAdapter` | Power Flow | 🔶 Requires testing |
 | `PandapowerShortCircuitAdapter` | Short Circuit | 🔶 Requires testing |
 
+### Shared ModelHandle Conversion
+
+Config-based poweranalysis skills that need a fallback model conversion use
+`powerapi.adapters.convert_handle_to_power_system_model()` instead of keeping
+local `_convert_handle_to_model` implementations. The converter currently maps:
+
+| Source component | Unified representation | Notes |
+|------------------|------------------------|-------|
+| `bus` | `Bus` | Supports `bus:0`, `"0"`, and integer IDs |
+| `source` | Slack bus marker | Uses explicit `bus` reference only |
+| `branch` | `Branch(branch_type="LINE")` | Uses `args` first, then `properties` |
+| `transformer` | `Branch(branch_type="TRANSFORMER")` | Preserves `sn_mva`, tap ratio, and phase shift when provided |
+| `load` | `Load` | Requires an explicit resolvable `bus` |
+| `generator` | `Generator` | Requires an explicit resolvable `bus` |
+
+The converter is conservative by design: branches and transformers with missing,
+unknown, or self-loop endpoints are skipped rather than connected to fabricated
+buses. Analysis modules may keep `_convert_handle_to_model` as a compatibility
+wrapper, but new conversion behavior should be added in the shared adapter.
+
 ## 3. Integration Test Tiers
 
 ### Tier 1: Engine Connectivity

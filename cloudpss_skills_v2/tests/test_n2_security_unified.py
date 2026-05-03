@@ -109,5 +109,29 @@ def test_n2_security_checks_specific_pairs():
     assert result["total_pairs"] == 1
 
 
+def test_n2_security_generates_pairs_for_transformers():
+    """Transformer branches should be eligible N-2 outage components."""
+    from cloudpss_skills_v2.poweranalysis.n2_security import N2SecurityAnalysis
+
+    model = PowerSystemModel(
+        buses=[
+            Bus(bus_id=0, name="Bus1", base_kv=230.0, bus_type="SLACK"),
+            Bus(bus_id=1, name="Bus2", base_kv=115.0, bus_type="PQ"),
+            Bus(bus_id=2, name="Bus3", base_kv=115.0, bus_type="PQ"),
+        ],
+        branches=[
+            Branch(from_bus=0, to_bus=1, name="T1", branch_type="TRANSFORMER", r_pu=0.005, x_pu=0.06),
+            Branch(from_bus=1, to_bus=2, name="Line1", branch_type="LINE", r_pu=0.01, x_pu=0.1),
+        ],
+        base_mva=100.0,
+    )
+
+    result = N2SecurityAnalysis().run(model, {"check_pairs": []})
+
+    assert result["status"] == "success"
+    assert result["total_pairs"] == 1
+    assert result["n2_results"][0]["branch_pair"] == ("T1", "Line1")
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

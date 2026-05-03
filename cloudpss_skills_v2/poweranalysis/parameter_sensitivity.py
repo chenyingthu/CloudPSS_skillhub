@@ -10,6 +10,9 @@ from typing import Any
 
 from cloudpss_skills_v2.core.system_model import PowerSystemModel
 from cloudpss_skills_v2.poweranalysis.base import PowerAnalysis
+from cloudpss_skills_v2.powerapi.adapters.handle_converter import (
+    convert_handle_to_power_system_model,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -136,135 +139,7 @@ class ParameterSensitivityAnalysis(PowerAnalysis):
 
     def _convert_handle_to_model(self, handle) -> PowerSystemModel:
         """Convert model handle to unified PowerSystemModel."""
-        from cloudpss_skills_v2.powerskill import ComponentType
-        from cloudpss_skills_v2.core.system_model import Bus, Branch, Load, Generator
-
-        buses = []
-        branches = []
-        loads = []
-        generators = []
-
-        try:
-            # Get ext_grid buses (slack buses) first
-            slack_bus_indices = set()
-            try:
-                ext_grid_components = handle.get_components_by_type(ComponentType.SOURCE)
-                for comp in ext_grid_components:
-                    args = comp.args if hasattr(comp, 'args') and comp.args else {}
-                    bus_idx = args.get('bus', '') if isinstance(args, dict) else ''
-                    if isinstance(bus_idx, int):
-                        slack_bus_indices.add(f"bus:{bus_idx}")
-                    elif bus_idx:
-                        slack_bus_indices.add(str(bus_idx))
-            except Exception:
-                pass
-
-            bus_components = handle.get_components_by_type(ComponentType.BUS)
-            for comp in bus_components:
-                # Get base_kv from component args or use default
-                args = comp.args if hasattr(comp, 'args') and comp.args else {}
-                base_kv = args.get('vn_kv', 110.0) if isinstance(args, dict) else 110.0
-                # Parse bus_id from key (e.g., "bus:0" -> 0)
-                bus_id = comp.key
-                if isinstance(bus_id, str) and ':' in bus_id:
-                    try:
-                        bus_id = int(bus_id.split(':')[-1])
-                    except ValueError:
-                        bus_id = 0
-                # Determine bus type - check if this is a slack bus
-                bus_type = "SLACK" if comp.key in slack_bus_indices else "PQ"
-                bus = Bus(
-                    bus_id=bus_id,
-                    name=comp.name,
-                    base_kv=float(base_kv) if base_kv else 110.0,
-                    v_magnitude_pu=1.0,
-                    bus_type=bus_type,
-                )
-                buses.append(bus)
-
-            branch_components = handle.get_components_by_type(ComponentType.BRANCH)
-            for comp in branch_components:
-                props = comp.properties if hasattr(comp, 'properties') else {}
-                args = comp.args if hasattr(comp, 'args') and comp.args else {}
-                source = args if isinstance(args, dict) and args else props
-                from_bus_key = source.get("from_bus", "")
-                to_bus_key = source.get("to_bus", "")
-
-                # Parse bus IDs from keys (e.g., "bus:0" -> 0)
-                from_bus = from_bus_key
-                if isinstance(from_bus_key, str) and ":" in from_bus_key:
-                    try:
-                        from_bus = int(from_bus_key.split(":")[-1])
-                    except ValueError:
-                        from_bus = 0
-                to_bus = to_bus_key
-                if isinstance(to_bus_key, str) and ":" in to_bus_key:
-                    try:
-                        to_bus = int(to_bus_key.split(":")[-1])
-                    except ValueError:
-                        to_bus = 0
-
-                branch = Branch(
-                    name=comp.key,
-                    from_bus=from_bus,
-                    to_bus=to_bus,
-                    r_pu=source.get("r_pu", 0.001),
-                    x_pu=source.get("x_pu", 0.01),
-                    in_service=source.get("in_service", True),
-                )
-                branches.append(branch)
-
-            load_components = handle.get_components_by_type(ComponentType.LOAD)
-            for comp in load_components:
-                props = comp.properties if hasattr(comp, 'properties') else {}
-                args = comp.args if hasattr(comp, 'args') and comp.args else {}
-                source = args if isinstance(args, dict) and args else props
-                # Parse bus_id from key (e.g., "load:0" -> 0)
-                bus_id = comp.key
-                if isinstance(bus_id, str) and ":" in bus_id:
-                    try:
-                        bus_id = int(bus_id.split(":")[-1])
-                    except ValueError:
-                        bus_id = 0
-                load = Load(
-                    bus_id=bus_id,
-                    name=comp.name,
-                    p_mw=source.get("p_mw", 0),
-                    q_mvar=source.get("q_mvar", 0),
-                    in_service=source.get("in_service", True),
-                )
-                loads.append(load)
-
-            gen_components = handle.get_components_by_type(ComponentType.GENERATOR)
-            for comp in gen_components:
-                props = comp.properties if hasattr(comp, 'properties') else {}
-                args = comp.args if hasattr(comp, 'args') and comp.args else {}
-                source = args if isinstance(args, dict) and args else props
-                # Parse bus_id from key (e.g., "gen:0" -> 0)
-                bus_id = comp.key
-                if isinstance(bus_id, str) and ":" in bus_id:
-                    try:
-                        bus_id = int(bus_id.split(":")[-1])
-                    except ValueError:
-                        bus_id = 0
-                gen = Generator(
-                    bus_id=bus_id,
-                    name=comp.name,
-                    p_gen_mw=source.get("p_gen_mw", 0),
-                    v_set_pu=source.get("v_set_pu", 1.0),
-                    in_service=source.get("in_service", True),
-                )
-                generators.append(gen)
-        except Exception as e:
-            logger.warning(f"Could not convert handle to model: {e}")
-
-        return PowerSystemModel(
-            buses=buses,
-            branches=branches,
-            loads=loads,
-            generators=generators,
-            base_mva=100.0,
-        )
+        return convert_handle_to_power_system_model(handle)
 
     def _run_unified(self, model: PowerSystemModel, config: dict) -> dict:
         """Run sensitivity analysis on unified model.

@@ -11,25 +11,15 @@ from datetime import datetime
 from itertools import combinations
 from typing import Any
 
-from cloudpss_skills_v2.core.system_model import (
-    PowerSystemModel,
-    Bus,
-    Branch,
-)
+from cloudpss_skills_v2.core.system_model import PowerSystemModel
 from cloudpss_skills_v2.poweranalysis.base import PowerAnalysis
 from cloudpss_skills_v2.powerskill import ComponentType
+from cloudpss_skills_v2.powerapi.adapters.handle_converter import (
+    convert_handle_to_power_system_model,
+)
 from cloudpss_skills_v2.core.skill_result import Artifact, SkillResult, SkillStatus
 
 logger = logging.getLogger(__name__)
-
-
-def _as_float(value, default=0.0) -> float:
-    try:
-        if value is None or value == "":
-            return default
-        return float(value)
-    except (TypeError, ValueError):
-        return default
 
 
 class ContingencyAnalysis(PowerAnalysis):
@@ -703,8 +693,6 @@ class ContingencyAnalysis(PowerAnalysis):
         """
         from cloudpss_skills_v2.core.skill_result import SkillResult, SkillStatus
         from cloudpss_skills_v2.powerskill import Engine
-        from cloudpss_skills_v2.core.system_model import PowerSystemModel, Bus, Branch, Generator, Load
-
         start_time = datetime.now()
 
         try:
@@ -817,199 +805,8 @@ class ContingencyAnalysis(PowerAnalysis):
             )
 
     def _convert_handle_to_model(self, handle) -> PowerSystemModel:
-        """Convert model handle to unified PowerSystemModel.
-
-        This is a simplified conversion for demonstration.
-        In production, use the full adapter from powerapi.
-        """
-        from cloudpss_skills_v2.core.system_model import PowerSystemModel, Bus, Branch
-
-        # Placeholder conversion - would use actual adapter
-        buses = []
-        branches = []
-
-        try:
-            # Get ext_grid buses (slack buses) first
-            slack_bus_indices = set()
-            try:
-                ext_grid_components = handle.get_components_by_type(ComponentType.SOURCE)
-                for comp in ext_grid_components:
-                    args = comp.args if hasattr(comp, 'args') and comp.args else {}
-                    bus_idx = args.get('bus', '') if isinstance(args, dict) else ''
-                    # Convert to bus key format (e.g., 0 -> "bus:0")
-                    if isinstance(bus_idx, int):
-                        slack_bus_indices.add(f"bus:{bus_idx}")
-                    elif bus_idx:
-                        slack_bus_indices.add(str(bus_idx))
-            except Exception:
-                pass
-
-            # Try to get buses from handle
-            bus_components = handle.get_components_by_type(ComponentType.BUS)
-            for comp in bus_components:
-                # Get base_kv from component args or use default
-                args = comp.args if hasattr(comp, 'args') and comp.args else {}
-                base_kv = args.get('vn_kv', 110.0) if isinstance(args, dict) else 110.0
-                # Ensure base_kv is a float
-                try:
-                    base_kv = float(base_kv) if base_kv else 110.0
-                except (TypeError, ValueError):
-                    base_kv = 110.0
-
-                # Parse bus_id from key (e.g., "bus:0" -> 0)
-                bus_id = comp.key
-                if isinstance(bus_id, str) and ':' in bus_id:
-                    try:
-                        bus_id = int(bus_id.split(':')[-1])
-                    except ValueError:
-                        bus_id = 0
-                elif isinstance(bus_id, str):
-                    # Try to parse as int directly
-                    try:
-                        bus_id = int(bus_id)
-                    except ValueError:
-                        bus_id = 0
-                elif not isinstance(bus_id, int):
-                    bus_id = 0
-
-                # Determine bus type - check if this is a slack bus
-                bus_type = "SLACK" if comp.key in slack_bus_indices else "PQ"
-                bus = Bus(
-                    bus_id=bus_id,
-                    name=comp.name,
-                    base_kv=base_kv,
-                    v_magnitude_pu=1.0,
-                    bus_type=bus_type,
-                )
-                buses.append(bus)
-
-            # Try to get branches from handle
-            branch_components = handle.get_components_by_type(ComponentType.BRANCH)
-            bus_ids = [bus.bus_id for bus in buses]
-            for comp in branch_components:
-                # Get connected buses
-                args = comp.args if hasattr(comp, "args") and comp.args else {}
-                from_bus_key = args.get("from_bus", "") if isinstance(args, dict) else ""
-                to_bus_key = args.get("to_bus", "") if isinstance(args, dict) else ""
-
-                # Parse bus IDs from keys (e.g., "bus:0" -> 0)
-                from_bus = from_bus_key
-                if isinstance(from_bus_key, str) and ":" in from_bus_key:
-                    try:
-                        from_bus = int(from_bus_key.split(":")[-1])
-                    except ValueError:
-                        from_bus = 0
-                elif isinstance(from_bus_key, str):
-                    try:
-                        from_bus = int(from_bus_key)
-                    except ValueError:
-                        from_bus = 0
-                elif not isinstance(from_bus_key, int):
-                    from_bus = 0
-
-                to_bus = to_bus_key
-                if isinstance(to_bus_key, str) and ":" in to_bus_key:
-                    try:
-                        to_bus = int(to_bus_key.split(":")[-1])
-                    except ValueError:
-                        to_bus = 0
-                elif isinstance(to_bus_key, str):
-                    try:
-                        to_bus = int(to_bus_key)
-                    except ValueError:
-                        to_bus = 0
-                elif not isinstance(to_bus_key, int):
-                    to_bus = 0
-
-                # Skip branches that still connect a bus to itself (invalid)
-                if from_bus == to_bus:
-                    logger.warning(f"Skipping branch {comp.key}: connects bus {from_bus} to itself")
-                    continue
-
-                try:
-                    branch = Branch(
-                        name=comp.key,
-                        from_bus=from_bus,
-                        to_bus=to_bus,
-                        r_pu=0.01,
-                        x_pu=0.1,
-                        in_service=True,
-                    )
-                    branches.append(branch)
-                except ValueError as e:
-                    logger.warning(f"Skipping branch {comp.key}: {e}")
-                    continue
-
-            # Try to get transformers (treated as branches with tap ratio)
-            try:
-                transformer_components = handle.get_components_by_type(ComponentType.TRANSFORMER)
-                for index, comp in enumerate(transformer_components):
-                    args = comp.args if hasattr(comp, "args") and comp.args else {}
-                    from_bus_key = args.get("from_bus", "") if isinstance(args, dict) else ""
-                    to_bus_key = args.get("to_bus", "") if isinstance(args, dict) else ""
-
-                    # Parse bus IDs from keys
-                    from_bus = from_bus_key
-                    if isinstance(from_bus_key, str) and ":" in from_bus_key:
-                        try:
-                            from_bus = int(from_bus_key.split(":")[-1])
-                        except ValueError:
-                            from_bus = 0
-                    elif isinstance(from_bus_key, str):
-                        try:
-                            from_bus = int(from_bus_key)
-                        except ValueError:
-                            from_bus = 0
-                    elif not isinstance(from_bus_key, int):
-                        from_bus = 0
-
-                    to_bus = to_bus_key
-                    if isinstance(to_bus_key, str) and ":" in to_bus_key:
-                        try:
-                            to_bus = int(to_bus_key.split(":")[-1])
-                        except ValueError:
-                            to_bus = 0
-                    elif isinstance(to_bus_key, str):
-                        try:
-                            to_bus = int(to_bus_key)
-                        except ValueError:
-                            to_bus = 0
-                    elif not isinstance(to_bus_key, int):
-                        to_bus = 0
-
-                    if from_bus not in bus_ids or to_bus not in bus_ids:
-                        logger.debug(
-                            f"Skipping transformer {comp.key}: cannot resolve valid bus endpoints"
-                        )
-                        continue
-
-                    if from_bus == to_bus:
-                        logger.debug(f"Skipping transformer {comp.key}: connects bus {from_bus} to itself")
-                        continue
-
-                    try:
-                        transformer_branch = Branch(
-                            name=comp.key,
-                            from_bus=from_bus,
-                            to_bus=to_bus,
-                            r_pu=0.005,  # Transformers typically have lower resistance
-                            x_pu=0.08,   # Transformers typically have lower reactance
-                            in_service=True,
-                        )
-                        branches.append(transformer_branch)
-                    except ValueError as e:
-                        logger.debug(f"Skipping transformer {comp.key}: {e}")
-                        continue
-            except Exception as e:
-                logger.debug(f"Could not get transformers: {e}")
-        except Exception as e:
-            logger.warning(f"Could not convert handle to model: {e}")
-
-        return PowerSystemModel(
-            buses=buses,
-            branches=branches,
-            base_mva=100.0,
-        )
+        """Convert model handle to unified PowerSystemModel."""
+        return convert_handle_to_power_system_model(handle)
 
 
 __all__ = ["ContingencyAnalysis"]

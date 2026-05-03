@@ -6,10 +6,11 @@ from cloudpss_skills_v2.powerskill import ComponentType
 
 
 class FakeComponent:
-    def __init__(self, key, name=None, args=None):
+    def __init__(self, key, name=None, args=None, properties=None):
         self.key = key
         self.name = name or key
-        self.args = args or {}
+        self.args = args
+        self.properties = properties or {}
 
 
 class FakeHandle:
@@ -100,3 +101,27 @@ class TestContingencyAnalysis:
 
         assert len(model.buses) == 2
         assert model.branches == []
+
+    def test_handle_converter_uses_transformer_args(self, instance):
+        handle = FakeHandle(
+            {
+                ComponentType.BUS: [
+                    FakeComponent("bus:0", "Bus 0"),
+                    FakeComponent("bus:1", "Bus 1"),
+                ],
+                ComponentType.SOURCE: [FakeComponent("source:0", args={"bus": "bus:0"})],
+                ComponentType.BRANCH: [],
+                ComponentType.TRANSFORMER: [
+                    FakeComponent(
+                        "trafo:0",
+                        args={"from_bus": "bus:0", "to_bus": "bus:1", "x_pu": 0.08},
+                    )
+                ],
+            }
+        )
+
+        model = instance._convert_handle_to_model(handle)
+
+        assert len(model.branches) == 1
+        assert model.branches[0].branch_type == "TRANSFORMER"
+        assert model.branches[0].x_pu == 0.08

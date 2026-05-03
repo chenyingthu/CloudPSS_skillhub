@@ -197,5 +197,37 @@ def test_parameter_sensitivity_branch_sensitivity():
     assert "sensitivities" in result
 
 
+def test_parameter_sensitivity_includes_transformer_branches():
+    """Transformer branches should participate in branch sensitivity rankings."""
+    model = PowerSystemModel(
+        buses=[
+            Bus(bus_id=0, name="Bus1", base_kv=230.0, bus_type="SLACK"),
+            Bus(bus_id=1, name="Bus2", base_kv=115.0, bus_type="PQ"),
+        ],
+        branches=[
+            Branch(
+                from_bus=0,
+                to_bus=1,
+                name="T1",
+                branch_type="TRANSFORMER",
+                r_pu=0.005,
+                x_pu=0.06,
+                rate_a_mva=80.0,
+                tap_ratio=1.05,
+            ),
+        ],
+        loads=[Load(bus_id=1, name="Load1", p_mw=50, q_mvar=10)],
+        base_mva=100.0,
+    )
+
+    result = ParameterSensitivityAnalysis().run(
+        model, {"target_parameter": "branch.x_pu", "delta": 0.01}
+    )
+
+    assert result["status"] == "success"
+    assert [item["component"] for item in result["sensitivities"]] == ["T1"]
+    assert result["sensitivities"][0]["base_value"] == 0.06
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
