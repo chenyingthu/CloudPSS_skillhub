@@ -24,6 +24,8 @@ from cloudpss_skills_v2.powerskill import (
     ModelHandle,
     ComponentType,
 )
+from cloudpss_skills_v2.poweranalysis.base import PowerAnalysis
+from cloudpss_skills_v2.core.system_model import PowerSystemModel, Branch
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +62,8 @@ def _as_float(value, default=0.0) -> float:
         return default
 
 
-class LossAnalysis:
-    """网损分析与优化技能 - v2 engine-agnostic implementation."""
+class LossAnalysis(PowerAnalysis):
+    """网损分析与优化技能 - v2 engine-agnostic implementation using unified PowerSystemModel."""
 
     name = "loss_analysis"
     description = "网损分析、损耗统计、灵敏度计算、无功优化降损"
@@ -175,6 +177,104 @@ class LossAnalysis:
         self.branch_losses: list[BranchLoss] = []
         self.transformer_losses: list[TransformerLoss] = []
 
+    def run(self, model: PowerSystemModel, config: dict) -> dict:
+        """Run loss analysis on unified PowerSystemModel.
+
+        Args:
+            model: Unified PowerSystemModel containing buses, branches, generators, etc.
+            config: Analysis configuration dictionary with options like:
+                - detail_level: "summary" | "branch" | "full"
+                - include_transformers: bool (default True)
+
+        Returns:
+            Dictionary with analysis results:
+                - status: "success" or "error"
+                - total_loss_mw: Total active power loss in MW
+                - branch_losses: List of per-branch loss breakdown
+                - transformer_losses: List of transformer loss breakdown (if applicable)
+                - error: Error message if status is "error"
+        """
+        # Validate model
+        validation_errors = self.validate_model(model)
+        if validation_errors:
+            return {
+                "status": "error",
+                "error": "; ".join(validation_errors),
+                "total_loss_mw": 0.0,
+                "branch_losses": [],
+            }
+
+        detail_level = config.get("detail_level", "branch")
+        include_transformers = config.get("include_transformers", True)
+
+        branch_losses = []
+        transformer_losses = []
+        total_loss_mw = 0.0
+
+        # Calculate branch losses
+        for branch in model.branches:
+            if not branch.in_service:
+                continue
+
+            # Calculate loss from power flow results
+            if branch.p_from_mw is not None and branch.p_to_mw is not None:
+                # Loss = P_from - (-P_to) = P_from + P_to (since P_to is negative when flowing into branch)
+                p_loss = branch.p_from_mw + branch.p_to_mw
+
+                # Get Q loss if available
+                q_loss = 0.0
+                if branch.q_from_mvar is not None and branch.q_to_mvar is not None:
+                    q_loss = branch.q_from_mvar + branch.q_to_mvar
+
+                # Calculate loading percentage
+                loading_pct = branch.loading_percent if branch.loading_percent is not None else 0.0
+
+                # Get current if available
+                current_ka = 0.0
+                if hasattr(branch, 'current_ka') and branch.current_ka is not None:
+                    current_ka = branch.current_ka
+
+                loss_entry = {
+                    "branch_id": branch.name,
+                    "from_bus": str(branch.from_bus),
+                    "to_bus": str(branch.to_bus),
+                    "p_loss_mw": round(abs(p_loss), 4),
+                    "q_loss_mvar": round(abs(q_loss), 4),
+                    "current_ka": round(current_ka, 4),
+                    "loading_percent": round(loading_pct, 2),
+                    "is_transformer": branch.is_transformer(),
+                }
+
+                branch_losses.append(loss_entry)
+                total_loss_mw += abs(p_loss)
+
+                # Separate transformer tracking
+                if include_transformers and branch.is_transformer():
+                    tf_loss = {
+                        "transformer_id": branch.name,
+                        "hv_bus": str(branch.from_bus),
+                        "lv_bus": str(branch.to_bus),
+                        "total_loss_mw": round(abs(p_loss), 4),
+                        "reactive_loss_mvar": round(abs(q_loss), 4),
+                    }
+                    transformer_losses.append(tf_loss)
+
+        result: dict[str, Any] = {
+            "status": "success",
+            "total_loss_mw": round(total_loss_mw, 4),
+            "branch_losses": branch_losses,
+        }
+
+        if include_transformers:
+            result["transformer_losses"] = transformer_losses
+
+        if detail_level == "summary":
+            # Only return summary
+            result["branch_losses"] = []
+            result["transformer_losses"] = []
+
+        return result
+
     def _log(self, level: str, message: str) -> None:
         self.logs.append(
             LogEntry(timestamp=datetime.now(), level=level, message=message)
@@ -199,7 +299,8 @@ class LossAnalysis:
             errors.append("必须提供 auth.token 或 auth.token_file")
         return len(errors) == 0, errors
 
-    def run(self, config: dict[str, Any]) -> SkillResult:
+    def run_legacy(self, config: dict[str, Any]) -> SkillResult:
+        """Legacy run method using PowerSkill API (backward compatibility)."""
         start_time = datetime.now()
         self.logs = []
         self.artifacts = []
