@@ -11,6 +11,10 @@ from cloudpss_skills_v2.core import Artifact, LogEntry, SkillResult, SkillStatus
 from cloudpss_skills_v2.powerskill import Engine
 
 
+# =============================================================================
+# Legacy Harmonic Analysis (kept for backward compatibility)
+# =============================================================================
+
 class HarmonicAnalysisAnalysis:
     """Harmonic analysis using FFT on waveform data."""
 
@@ -224,4 +228,307 @@ class HarmonicAnalysisAnalysis:
         )
 
 
-__all__ = ["HarmonicAnalysisAnalysis"]
+# =============================================================================
+# Unified Model Harmonic Analysis
+# =============================================================================
+
+from cloudpss_skills_v2.core.system_model import PowerSystemModel
+from cloudpss_skills_v2.poweranalysis.base import PowerAnalysis
+
+
+class HarmonicAnalysis(PowerAnalysis):
+    """Harmonic analysis using unified PowerSystemModel.
+
+    This class performs harmonic power flow analysis on a power system model,
+    calculating harmonic voltages at each bus and total harmonic distortion (THD).
+
+    The analysis:
+    1. Builds harmonic admittance (Ybus) matrix for each harmonic order
+    2. Injects harmonic current sources at specified buses
+    3. Solves for harmonic voltages: V_h = Ybus_h^-1 * I_h
+    4. Calculates THD at each bus
+
+    Example:
+        model = PowerSystemModel(buses=[...], branches=[...])
+        analysis = HarmonicAnalysis()
+        result = analysis.run(model, {
+            "harmonic_orders": [3, 5, 7],
+            "sources": [{"bus": "Bus2", "order": 5, "magnitude": 0.05}]
+        })
+    """
+
+    name = "harmonic_analysis_unified"
+    description = "Harmonic analysis using unified PowerSystemModel"
+
+    def __init__(self):
+        self._harmonic_voltages: dict[int, dict[str, complex]] = {}
+        self._thd: dict[str, float] = {}
+
+    def run(self, model: PowerSystemModel, config: dict) -> dict:
+        """Run harmonic analysis on unified model.
+
+        Args:
+            model: Unified PowerSystemModel containing buses, branches, etc.
+            config: Analysis configuration with keys:
+                - harmonic_orders: List of harmonic orders to analyze (e.g., [3, 5, 7])
+                - sources: List of harmonic sources, each with:
+                    - bus: Bus name where source is connected
+                    - order: Harmonic order of the source
+                    - magnitude: Current magnitude in per unit
+
+        Returns:
+            Dictionary containing:
+                - status: "success" or "error"
+                - harmonic_voltages: Dict mapping harmonic order to bus voltages
+                - thd: Dict mapping bus name to THD percentage
+                - harmonic_orders: List of analyzed harmonic orders
+        """
+        # Validate model
+        errors = self.validate_model(model)
+        if errors:
+            return {
+                "status": "error",
+                "error": "; ".join(errors)
+            }
+
+        # Get configuration
+        harmonic_orders = config.get("harmonic_orders", [3, 5, 7])
+        sources = config.get("sources", [])
+
+        # Initialize results
+        self._harmonic_voltages = {}
+        self._thd = {}
+
+        # Calculate harmonic voltages for each order
+        for h in harmonic_orders:
+            voltages = self._calculate_harmonic_voltages(model, h, sources)
+            self._harmonic_voltages[h] = voltages
+
+        # Calculate THD for each bus
+        self._thd = self._calculate_all_thd(model)
+
+        return {
+            "status": "success",
+            "harmonic_voltages": self._harmonic_voltages,
+            "thd": self._thd,
+            "harmonic_orders": harmonic_orders,
+        }
+
+    def _calculate_harmonic_voltages(
+        self,
+        model: PowerSystemModel,
+        harmonic_order: int,
+        sources: list[dict],
+    ) -> dict[str, complex]:
+        """Calculate harmonic voltages for a specific harmonic order.
+
+        Args:
+            model: PowerSystemModel
+            harmonic_order: Harmonic order h (e.g., 3 for 3rd harmonic)
+            sources: List of harmonic sources
+
+        Returns:
+            Dictionary mapping bus name to complex harmonic voltage (p.u.)
+        """
+        n_buses = len(model.buses)
+        if n_buses == 0:
+            return {}
+
+        # Build harmonic admittance matrix
+        ybus = self._build_harmonic_ybus(model, harmonic_order)
+
+        # Build current injection vector
+        i_inj = self._build_current_injection(model, harmonic_order, sources)
+
+        # Solve for harmonic voltages: V = Y^-1 * I
+        try:
+            # Handle slack bus - set voltage to 0 for harmonics at slack
+            slack_bus = model.get_slack_bus()
+            if slack_bus:
+                slack_idx = self._get_bus_index(model, slack_bus.name)
+                if slack_idx is not None:
+                    # Modify Ybus to ground the slack bus for harmonics
+                    ybus_modified = ybus.copy()
+                    ybus_modified[slack_idx, :] = 0
+                    ybus_modified[:, slack_idx] = 0
+                    ybus_modified[slack_idx, slack_idx] = 1.0
+                    i_inj[slack_idx] = 0.0
+
+                    v_harmonic = np.linalg.solve(ybus_modified, i_inj)
+                else:
+                    v_harmonic = np.linalg.solve(ybus, i_inj)
+            else:
+                # Use pseudo-inverse if Ybus is singular
+                try:
+                    v_harmonic = np.linalg.solve(ybus, i_inj)
+                except np.linalg.LinAlgError:
+                    v_harmonic = np.linalg.lstsq(ybus, i_inj, rcond=None)[0]
+        except np.linalg.LinAlgError:
+            # Singular matrix - return zero voltages
+            v_harmonic = np.zeros(n_buses, dtype=complex)
+
+        # Map back to bus names
+        bus_names = [bus.name for bus in model.buses]
+        return {name: complex(v) for name, v in zip(bus_names, v_harmonic)}
+
+    def _build_harmonic_ybus(
+        self,
+        model: PowerSystemModel,
+        harmonic_order: int,
+    ) -> np.ndarray:
+        """Build harmonic admittance matrix (Ybus) for a given harmonic order.
+
+        At harmonic order h:
+        - Resistance R stays the same
+        - Reactance X becomes h * X (inductive reactance increases with frequency)
+        - Susceptance B becomes B / h (capacitive susceptance decreases with frequency)
+
+        Args:
+            model: PowerSystemModel
+            harmonic_order: Harmonic order h
+
+        Returns:
+            Complex admittance matrix Ybus (n_buses x n_buses)
+        """
+        n_buses = len(model.buses)
+        ybus = np.zeros((n_buses, n_buses), dtype=complex)
+
+        # Build bus index mapping
+        bus_idx = {bus.bus_id: i for i, bus in enumerate(model.buses)}
+
+        for branch in model.branches:
+            if not branch.in_service:
+                continue
+
+            from_idx = bus_idx.get(branch.from_bus)
+            to_idx = bus_idx.get(branch.to_bus)
+
+            if from_idx is None or to_idx is None:
+                continue
+
+            # Get branch parameters
+            r = branch.r_pu
+            x = branch.x_pu
+            b = branch.b_pu
+
+            # Scale for harmonic order
+            # Z_h = R + j * h * X (inductive reactance increases with frequency)
+            # B_h = B / h (capacitive susceptance decreases with frequency)
+            x_h = harmonic_order * x
+            b_h = b / harmonic_order if harmonic_order > 0 else 0
+
+            # Series admittance
+            if r != 0 or x_h != 0:
+                y_series = 1.0 / complex(r, x_h)
+            else:
+                y_series = 0
+
+            # Shunt admittance (half at each end for transmission lines)
+            y_shunt = complex(0, b_h / 2) if b_h != 0 else 0
+
+            # Add to Ybus
+            ybus[from_idx, from_idx] += y_series + y_shunt
+            ybus[to_idx, to_idx] += y_series + y_shunt
+            ybus[from_idx, to_idx] -= y_series
+            ybus[to_idx, from_idx] -= y_series
+
+        return ybus
+
+    def _build_current_injection(
+        self,
+        model: PowerSystemModel,
+        harmonic_order: int,
+        sources: list[dict],
+    ) -> np.ndarray:
+        """Build current injection vector for harmonic analysis.
+
+        Args:
+            model: PowerSystemModel
+            harmonic_order: Harmonic order h
+            sources: List of harmonic sources
+
+        Returns:
+            Current injection vector (n_buses,)
+        """
+        n_buses = len(model.buses)
+        i_inj = np.zeros(n_buses, dtype=complex)
+
+        # Map bus names to indices
+        bus_name_to_idx = {bus.name: i for i, bus in enumerate(model.buses)}
+
+        for source in sources:
+            if source.get("order") != harmonic_order:
+                continue
+
+            bus_name = source.get("bus", "")
+            magnitude = source.get("magnitude", 0.0)
+
+            if bus_name in bus_name_to_idx:
+                idx = bus_name_to_idx[bus_name]
+                # Inject current (assume zero phase angle for simplicity)
+                i_inj[idx] = magnitude * complex(1, 0)
+
+        return i_inj
+
+    def _get_bus_index(self, model: PowerSystemModel, bus_name: str) -> int | None:
+        """Get array index for a bus by name."""
+        for i, bus in enumerate(model.buses):
+            if bus.name == bus_name:
+                return i
+        return None
+
+    def _calculate_all_thd(self, model: PowerSystemModel) -> dict[str, float]:
+        """Calculate THD for all buses.
+
+        THD = sqrt(sum(V_h^2 for h > 1)) / V_1 * 100%
+
+        Args:
+            model: PowerSystemModel
+
+        Returns:
+            Dictionary mapping bus name to THD percentage
+        """
+        thd = {}
+
+        for bus in model.buses:
+            # Collect harmonic voltages for this bus
+            bus_voltages = {}
+            for h, voltages in self._harmonic_voltages.items():
+                if bus.name in voltages:
+                    bus_voltages[h] = abs(voltages[bus.name])
+
+            # Calculate THD
+            thd[bus.name] = self._calculate_thd(bus_voltages)
+
+        return thd
+
+    def _calculate_thd(self, harmonic_voltages: dict[int, float]) -> float:
+        """Calculate Total Harmonic Distortion from harmonic voltages.
+
+        THD = sqrt(sum(V_h^2 for h > 1)) / V_1 * 100%
+
+        Args:
+            harmonic_voltages: Dict mapping harmonic order to voltage magnitude (p.u.)
+
+        Returns:
+            THD as percentage
+        """
+        if not harmonic_voltages or 1 not in harmonic_voltages:
+            # No fundamental - assume fundamental is 1.0 p.u.
+            fundamental = 1.0
+        else:
+            fundamental = harmonic_voltages[1]
+
+        if fundamental == 0:
+            return 0.0
+
+        # Sum of squares of harmonic voltages (excluding fundamental)
+        harmonic_sum_sq = sum(
+            v**2 for h, v in harmonic_voltages.items() if h != 1
+        )
+
+        thd = np.sqrt(harmonic_sum_sq) / fundamental * 100.0
+        return float(thd)
+
+
+__all__ = ["HarmonicAnalysisAnalysis", "HarmonicAnalysis"]
