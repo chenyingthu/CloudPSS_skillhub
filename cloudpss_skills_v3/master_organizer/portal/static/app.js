@@ -3,6 +3,11 @@ const state = {
   selectedCaseId: null,
   selectedResultId: null,
   view: "dashboard",
+  caseTab: "case",
+  resultTab: "table",
+  activeComponentType: "all",
+  activeModelEditor: null,
+  selectedResultDetail: null,
   token: new URLSearchParams(window.location.search).get("token") || "",
   modelEdits: {},
 };
@@ -96,6 +101,59 @@ function editKey(componentId, arg) {
   return `${componentId}::${arg}`;
 }
 
+const defaultModelColumns = {
+  all: ["Name", "name", "base", "rated", "U", "V", "P", "Q", "R", "X", "L", "C"],
+  bus: ["Name", "name", "baseV", "baseVoltage", "V", "U", "angle", "type"],
+  line: ["Name", "name", "R", "X", "L", "C", "length", "Length", "Imax"],
+  transformer: ["Name", "name", "Sn", "rated", "R", "X", "ratio", "tap"],
+  generator: ["Name", "name", "P", "Q", "V", "H", "D", "Sn"],
+  load: ["Name", "name", "P", "Q", "p", "q", "V"],
+  control: ["Name", "name", "K", "T", "T1", "T2", "T3", "T4"],
+  meter: ["Name", "name", "target", "channel", "unit"],
+  channel: ["Name", "name", "target", "variable", "unit"],
+  fault: ["Name", "name", "time", "duration", "R", "X", "type"],
+};
+
+function scalarLike(value) {
+  return value === null || ["string", "number", "boolean", "undefined"].includes(typeof value);
+}
+
+function modelViewKey(editor, type) {
+  const path = editor?.path || "default";
+  return `cloudpss.portal.modelView.${path}.${type || "all"}`;
+}
+
+function modelValueSummary(value) {
+  if (scalarLike(value)) return value ?? "";
+  if (Array.isArray(value)) return `[array:${value.length}]`;
+  if (typeof value === "object") return `{${Object.keys(value || {}).slice(0, 4).join(", ") || "object"}}`;
+  return String(value ?? "");
+}
+
+function selectedModelColumns(editor, type, rows, allColumns) {
+  const key = modelViewKey(editor, type);
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) || "[]");
+    if (Array.isArray(saved) && saved.length) return saved.filter((column) => allColumns.includes(column));
+  } catch (_error) {
+    // Ignore malformed localStorage values.
+  }
+  const preferred = defaultModelColumns[type] || defaultModelColumns.all;
+  const byPreference = allColumns.filter((column) => preferred.some((item) => column.toLowerCase().includes(item.toLowerCase())));
+  const byFrequency = allColumns
+    .map((column) => ({
+      column,
+      count: rows.reduce((total, row) => total + (Object.prototype.hasOwnProperty.call(row.args || {}, column) ? 1 : 0), 0),
+    }))
+    .sort((a, b) => b.count - a.count)
+    .map((item) => item.column);
+  return Array.from(new Set([...byPreference, ...byFrequency])).slice(0, 10);
+}
+
+function saveModelColumnView(editor, type, columns) {
+  localStorage.setItem(modelViewKey(editor, type), JSON.stringify(columns));
+}
+
 function caseDescriptionText(description) {
   try {
     const notes = JSON.parse(description || "{}");
@@ -184,6 +242,29 @@ function switchView(view) {
   const [title, subtitle] = titles[view] || titles.dashboard;
   $("viewTitle").textContent = title;
   $("viewSubtitle").textContent = subtitle;
+}
+
+function switchCaseTab(tab) {
+  state.caseTab = tab || "case";
+  document.querySelectorAll(".case-subtab").forEach((button) => {
+    button.classList.toggle("active", button.dataset.caseTab === state.caseTab);
+  });
+  document.querySelector(".case-list-panel")?.classList.toggle("hidden", state.caseTab !== "case");
+  document.querySelector(".model-workbench")?.classList.toggle("hidden", state.caseTab !== "components");
+  document.querySelector(".edit-panel")?.classList.toggle("hidden", state.caseTab !== "changes");
+}
+
+function switchResultTab(tab) {
+  state.resultTab = tab || "table";
+  document.querySelectorAll(".result-subtab").forEach((button) => {
+    button.classList.toggle("active", button.dataset.resultTab === state.resultTab);
+  });
+  document.querySelectorAll(".result-tab-panel").forEach((panel) => {
+    panel.classList.toggle("hidden", panel.dataset.resultPanel !== state.resultTab);
+  });
+  if (state.resultTab === "data") {
+    window.requestAnimationFrame(drawCharts);
+  }
 }
 
 function render() {
@@ -313,7 +394,10 @@ function resultTableRows(results) {
     { label: "大小", render: (result) => esc(formatBytes(result.size_bytes || 0)) },
     { label: "时间", render: (result) => esc(formatRelativeTime(result.created_at)) },
   ];
-  return dataTable(headers, results.map((result) => ({ item: result, attrs: `data-result-id="${esc(result.id)}"` })), "暂无结果");
+  return dataTable(headers, results.map((result) => ({
+    item: result,
+    attrs: `data-result-id="${esc(result.id)}" class="${state.selectedResultId === result.id ? "selected-row" : ""}"`,
+  })), "暂无结果");
 }
 
 function caseTableRows(cases) {
@@ -402,6 +486,7 @@ function renderCaseTree() {
       state.selectedCaseId = node.dataset.caseId;
       await loadCaseDetail(state.selectedCaseId);
       renderCaseTree();
+      switchCaseTab("components");
     });
   });
 }
@@ -513,6 +598,8 @@ function renderComponentNav(editor) {
 }
 
 function renderParameterTable(editor, filterType) {
+  state.activeModelEditor = editor;
+  state.activeComponentType = filterType || "all";
   const container = $("parameterTable");
   if (!editor || !editor.groups) {
     container.innerHTML = '<div class="detail-empty">选择一个 Case 并点击元件分类查看参数</div>';
@@ -545,10 +632,26 @@ function renderParameterTable(editor, filterType) {
   allRows.forEach(row => {
     Object.keys(row.args || {}).forEach(key => allColumns.add(key));
   });
-  const columns = Array.from(allColumns).sort();
+  const availableColumns = Array.from(allColumns).sort();
+  const columns = selectedModelColumns(editor, filterType, allRows, availableColumns);
 
   // Render table
   container.innerHTML = `
+    <div class="model-viewbar">
+      <div>
+        <strong>${esc(allRows.length)}</strong> 个元件 · 显示 <strong>${esc(columns.length)}</strong> / ${esc(availableColumns.length)} 个属性
+      </div>
+      <div class="model-view-actions">
+        <select id="modelColumnPicker">
+          <option value="">添加属性列...</option>
+          ${availableColumns.filter((column) => !columns.includes(column)).map((column) => `<option value="${esc(column)}">${esc(column)}</option>`).join("")}
+        </select>
+        <button class="button small secondary" id="modelColumnReset">重置视图</button>
+      </div>
+    </div>
+    <div class="model-column-chips">
+      ${columns.map((column) => `<button class="column-chip" data-column="${esc(column)}">${esc(column)} <span>×</span></button>`).join("")}
+    </div>
     <div class="model-table-wrap">
       <table class="data-table model-table">
         <thead>
@@ -574,6 +677,7 @@ function renderParameterTable(editor, filterType) {
   `;
 
   // Bind cell editing
+  bindModelColumnControls(editor, filterType, columns, availableColumns);
   bindParameterCells();
 }
 
@@ -582,7 +686,30 @@ function renderParameterCell(row, column) {
   const encoded = esc(JSON.stringify(value));
   const key = editKey(row.cell_key || row.id, column);
   const isDirty = state.modelEdits[key] !== undefined;
-  return `<td><input class="model-param ${isDirty ? 'dirty' : ''}" data-component-id="${esc(row.id)}" data-cell-key="${esc(row.cell_key || row.id)}" data-arg="${esc(column)}" data-original="${encoded}" value="${esc(value ?? "")}" /></td>`;
+  const summary = modelValueSummary(value);
+  const readonly = scalarLike(value) ? "" : "readonly";
+  const title = scalarLike(value) ? String(value ?? "") : JSON.stringify(value);
+  return `<td><input class="model-param ${isDirty ? 'dirty' : ''} ${readonly ? 'object-param' : ''}" ${readonly} title="${esc(title)}" data-component-id="${esc(row.id)}" data-cell-key="${esc(row.cell_key || row.id)}" data-arg="${esc(column)}" data-original="${encoded}" value="${esc(summary)}" /></td>`;
+}
+
+function bindModelColumnControls(editor, type, columns, availableColumns) {
+  $("modelColumnPicker")?.addEventListener("change", (event) => {
+    const column = event.target.value;
+    if (!column) return;
+    saveModelColumnView(editor, type, Array.from(new Set([...columns, column])));
+    renderParameterTable(editor, type);
+  });
+  $("modelColumnReset")?.addEventListener("click", () => {
+    localStorage.removeItem(modelViewKey(editor, type));
+    renderParameterTable(editor, type);
+  });
+  document.querySelectorAll(".column-chip").forEach((button) => {
+    button.addEventListener("click", () => {
+      const next = columns.filter((column) => column !== button.dataset.column);
+      saveModelColumnView(editor, type, next.length ? next : availableColumns.slice(0, 1));
+      renderParameterTable(editor, type);
+    });
+  });
 }
 
 function bindComponentNav(editor) {
@@ -1174,12 +1301,14 @@ function bindTaskRuns() {
 }
 
 function renderResults() {
-  $("resultList").innerHTML = resultTableRows(state.snapshot.results || []);
+  setHtml("resultList", resultTableRows(state.snapshot.results || []));
+  setText("resultSelectionHint", state.selectedResultId ? `当前选中：${state.selectedResultId}` : "选择一行查看摘要、曲线、产物和报告。");
+  if (state.selectedResultDetail) renderResultDetailTabs(state.selectedResultDetail);
   bindResultClicks();
 }
 
 function bindResultClicks() {
-  document.querySelectorAll("[data-result-id]").forEach((node) => {
+  document.querySelectorAll("#resultList [data-result-id]").forEach((node) => {
     node.addEventListener("click", () => loadResultDetail(node.dataset.resultId));
   });
 }
@@ -1188,80 +1317,189 @@ async function loadResultDetail(resultId) {
   state.selectedResultId = resultId;
   switchView("results");
   const detail = await api(`/api/results/${resultId}`);
+  state.selectedResultDetail = detail;
+  renderResults();
+  renderResultDetailTabs(detail);
+  switchResultTab(state.resultTab === "table" ? "summary" : state.resultTab);
+}
+
+function renderResultDetailTabs(detail) {
+  if (!detail || !detail.result) return;
   const result = detail.result;
-  $("resultDetail").className = "detail-body";
-  $("resultDetail").innerHTML = `
-    <div class="panel-head">
-      <h3>${esc(result.name)}</h3>
-      <div>
-        <button class="button small" id="reportBtn">报告</button>
-        <button class="button small secondary" id="archiveBtn">归档</button>
-      </div>
+  const metadata = result.metadata || {};
+  setText("resultSummaryTitle", result.name || "结果摘要");
+  setText("resultSelectionHint", `当前选中：${result.id}`);
+  setHtml("resultSummaryContent", `
+    <div class="result-summary-grid">
+      ${field("Result ID", result.id)}
+      ${field("Format", result.format)}
+      ${field("Task", result.task_id || "-")}
+      ${field("Case", result.case_id || "-")}
+      ${field("Size", formatBytes(result.size_bytes || 0))}
+      ${field("Directory", detail.directory || "-")}
+      ${field("Job", metadata.job_id || "-")}
+      ${field("Data Source", metadata.data_source || "-")}
+      ${field("Server", metadata.server_url || "-")}
+      ${field("Owner", metadata.server_owner || "-")}
     </div>
-
-    <!-- Action Bar -->
-    <div class="result-actions">
-      <button class="button small secondary" id="exportCsvBtn" title="导出为 CSV">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-          <polyline points="7 10 12 15 17 10"></polyline>
-          <line x1="12" y1="15" x2="12" y2="3"></line>
-        </svg>
-        导出 CSV
-      </button>
-      <button class="button small secondary" id="exportJsonBtn" title="导出为 JSON">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-          <polyline points="7 10 12 15 17 10"></polyline>
-          <line x1="12" y1="15" x2="12" y2="3"></line>
-        </svg>
-        导出 JSON
-      </button>
-      <button class="button small secondary" id="copyResultIdBtn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-        </svg>
-        复制 ID
-      </button>
-    </div>
-
-    <div class="detail-body">
-      <div class="detail-grid">
-        ${field("Result ID", result.id)}
-        ${field("Format", result.format)}
-        ${field("Task", result.task_id)}
-        ${field("Case", result.case_id)}
-        ${field("Size", formatBytes(result.size_bytes))}
-        ${field("Directory", detail.directory)}
-      </div>
-      ${renderResultSummary(detail.summary)}
-      <h4 class="section-title">证据链</h4>
-      <div class="detail-grid">
-        ${field("Case", result.case_id)}
-        ${field("Task", result.task_id)}
-        ${field("Job", (result.metadata || {}).job_id || "-")}
-        ${field("Data Source", (result.metadata || {}).data_source || "-")}
-        ${field("Server", (result.metadata || {}).server_url || "-")}
-        ${field("Owner", (result.metadata || {}).server_owner || "-")}
-      </div>
-      <h4 class="section-title">Metadata</h4>
-      <pre>${esc(JSON.stringify(result.metadata || {}, null, 2))}</pre>
-      <h4 class="section-title">Artifacts</h4>
-      <pre>${esc(JSON.stringify(detail.artifacts || {}, null, 2))}</pre>
-      ${detail.report ? `<h4 class="section-title">Report</h4><pre>${esc(detail.report)}</pre>` : ""}
-    </div>
-  `;
+    ${renderResultHeadline(detail.summary)}
+  `);
+  setHtml("resultDataContent", renderResultData(detail));
+  setHtml("resultArtifactsContent", renderStructuredBlock(detail.artifacts || {}, "暂无 Artifacts"));
+  setHtml("resultMetadataContent", renderStructuredBlock(metadata, "暂无 Metadata"));
+  setHtml("resultReportContent", detail.report ? `<pre class="result-pre">${esc(detail.report)}</pre>` : empty("尚未生成报告"));
+  bindResultActionButtons(result.id);
   window.requestAnimationFrame(drawCharts);
-  $("reportBtn")?.addEventListener("click", () => resultAction(result.id, "report"));
-  $("archiveBtn")?.addEventListener("click", () => resultAction(result.id, "archive"));
+}
 
-  // Export buttons
-  $("exportCsvBtn")?.addEventListener("click", () => exportResultData(resultId, "csv"));
-  $("exportJsonBtn")?.addEventListener("click", () => exportResultData(resultId, "json"));
-  $("copyResultIdBtn")?.addEventListener("click", () => {
+function bindResultActionButtons(resultId) {
+  if ($("reportBtn")) $("reportBtn").onclick = () => resultAction(resultId, "report");
+  if ($("archiveBtn")) $("archiveBtn").onclick = () => resultAction(resultId, "archive");
+  if ($("exportCsvBtn")) $("exportCsvBtn").onclick = () => exportResultData(resultId, "csv");
+  if ($("exportJsonBtn")) $("exportJsonBtn").onclick = () => exportResultData(resultId, "json");
+  if ($("copyResultIdBtn")) $("copyResultIdBtn").onclick = () => {
     navigator.clipboard.writeText(resultId);
     showNotice("结果 ID 已复制到剪贴板");
+  };
+}
+
+function renderStructuredBlock(value, emptyMessage) {
+  if (!value || (typeof value === "object" && Object.keys(value).length === 0)) return empty(emptyMessage);
+  return `<pre class="result-pre">${esc(JSON.stringify(value, null, 2))}</pre>`;
+}
+
+function renderResultHeadline(summary) {
+  if (!summary) return empty("暂无摘要数据");
+  if (summary.kind === "powerflow") {
+    const buses = summary.buses_preview || [];
+    const voltages = buses.map((b) => parseFloat(b.V || b.voltage || 0)).filter((v) => !isNaN(v));
+    const maxV = voltages.length > 0 ? Math.max(...voltages) : 0;
+    const minV = voltages.length > 0 ? Math.min(...voltages) : 0;
+    const avgV = voltages.length > 0 ? voltages.reduce((a, b) => a + b, 0) / voltages.length : 0;
+    const violations = powerflowViolations(summary);
+    return `
+      <div class="stats-panel result-stats-panel">
+        <div class="stat-box"><span class="stat-box-label">最大电压</span><span class="stat-box-value ${maxV > 1.05 ? "text-danger" : ""}">${maxV.toFixed(3)}</span></div>
+        <div class="stat-box"><span class="stat-box-label">最小电压</span><span class="stat-box-value ${minV < 0.95 ? "text-warning" : ""}">${minV.toFixed(3)}</span></div>
+        <div class="stat-box"><span class="stat-box-label">平均电压</span><span class="stat-box-value">${avgV.toFixed(3)}</span></div>
+        <div class="stat-box"><span class="stat-box-label">越限数量</span><span class="stat-box-value ${violations.length > 0 ? "text-danger" : ""}">${violations.length}</span></div>
+      </div>
+      ${renderViolations(violations)}
+    `;
+  }
+  if (summary.kind === "emt") {
+    const channels = summary.channels || [];
+    return `
+      <div class="stats-panel result-stats-panel">
+        <div class="stat-box"><span class="stat-box-label">通道数量</span><span class="stat-box-value">${summary.channel_count || channels.length}</span></div>
+        <div class="stat-box"><span class="stat-box-label">采样点数</span><span class="stat-box-value">${(summary.metadata || {}).sample_points || "-"}</span></div>
+        <div class="stat-box"><span class="stat-box-label">仿真时长</span><span class="stat-box-value">${(summary.metadata || {}).duration || "-"}s</span></div>
+        <div class="stat-box"><span class="stat-box-label">步长</span><span class="stat-box-value">${(summary.metadata || {}).dt || "-"}s</span></div>
+      </div>
+    `;
+  }
+  return empty("未知结果类型");
+}
+
+function renderResultData(detail) {
+  const summary = detail?.summary;
+  if (!summary) return empty("暂无曲线或表格数据");
+  if (summary.kind === "powerflow") {
+    return `
+      <div class="result-data-stack">
+        <section class="result-data-section">
+          <div class="chart-container">
+            <div class="chart-header">
+              <h4>母线电压分布</h4>
+              <div class="chart-controls">
+                <span class="text-muted" style="font-size: 12px;">参考范围: 0.95 ~ 1.05 pu</span>
+              </div>
+            </div>
+            ${renderChartCanvas("busVoltageChart", "bar", summary.bus_chart || {})}
+          </div>
+        </section>
+        <section class="result-data-section">
+          <h4 class="section-title">Bus 表预览</h4>
+          ${renderDataTable(summary.buses_preview || [])}
+        </section>
+        <section class="result-data-section">
+          <h4 class="section-title">Branch 表预览</h4>
+          ${renderDataTable(summary.branches_preview || [])}
+        </section>
+      </div>
+    `;
+  }
+  if (summary.kind === "emt") {
+    const channels = summary.channels || [];
+    const channelStats = emtChannelStats(summary.series || {});
+    return `
+      <div class="result-data-stack">
+        <section class="result-data-section">
+          <h4 class="section-title">通道统计</h4>
+          ${renderDataTable(channelStats)}
+        </section>
+        <section class="result-data-section">
+          <h4 class="section-title">通道曲线</h4>
+          <div class="result-chart-grid">
+            ${renderSeriesCharts(summary.series || {})}
+          </div>
+        </section>
+        <section class="result-data-section">
+          <h4 class="section-title">CSV 预览</h4>
+          ${channels.map((channel) => `
+            <div class="table-row result-channel-preview">
+              <div class="row-title"><span>${esc(channel.trace_key)}</span><span class="pill">${esc(channel.point_count)} points</span></div>
+              <div class="meta">${esc(channel.csv_file)} · ${esc(channel.channel_file)}</div>
+              ${renderCsvPreview((summary.csv_preview || {})[channel.csv_file])}
+            </div>
+          `).join("") || empty("暂无通道")}
+        </section>
+      </div>
+    `;
+  }
+  return empty("暂无可展示数据");
+}
+
+function powerflowViolations(summary) {
+  const violations = [];
+  (summary.buses_preview || []).forEach((bus) => {
+    const v = parseFloat(bus.V || bus.voltage || 0);
+    if (v > 1.05) {
+      violations.push({ bus: bus.name || bus.bus || bus.id, voltage: v, type: "high", severity: v > 1.1 ? "critical" : "warning" });
+    } else if (v < 0.95) {
+      violations.push({ bus: bus.name || bus.bus || bus.id, voltage: v, type: "low", severity: v < 0.9 ? "critical" : "warning" });
+    }
+  });
+  return violations;
+}
+
+function renderViolations(violations) {
+  if (!violations.length) return "";
+  return `
+    <div class="violations-section">
+      <h4>电压越限警告</h4>
+      ${violations.map((v) => `
+        <div class="violation-item ${v.type}">
+          <span class="violation-bus">${esc(v.bus)}</span>
+          <span class="violation-value">${v.voltage.toFixed(4)} pu</span>
+          <span class="violation-severity">${v.severity === "critical" ? "严重" : "警告"}</span>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function emtChannelStats(series) {
+  return Object.entries(series).map(([name, data]) => {
+    const points = data?.points || [];
+    const values = points.map((p) => p.y).filter((v) => Number.isFinite(v));
+    return {
+      name,
+      max: values.length > 0 ? Math.max(...values).toFixed(4) : "-",
+      min: values.length > 0 ? Math.min(...values).toFixed(4) : "-",
+      avg: values.length > 0 ? (values.reduce((a, b) => a + b, 0) / values.length).toFixed(4) : "-",
+      count: points.length,
+    };
   });
 }
 
@@ -1472,7 +1710,7 @@ function renderChartCanvas(id, kind, data) {
 function renderSeriesCharts(series) {
   const entries = Object.entries(series).filter(([, payload]) => payload && payload.points && payload.points.length);
   if (!entries.length) return "";
-  return entries.slice(0, 4).map(([name, payload], index) => `
+  return entries.map(([name, payload], index) => `
     <div class="chart-block">
       <div class="meta">${esc(name)} · ${esc(payload.total_points || payload.points.length)} points</div>
       ${renderChartCanvas(`emtSeriesChart${index}`, "line", payload)}
@@ -1493,6 +1731,13 @@ function drawCharts() {
 }
 
 function drawChart(canvas, kind, data) {
+  const bounds = canvas.getBoundingClientRect();
+  const cssWidth = Math.max(640, Math.floor(bounds.width || canvas.clientWidth || 900));
+  const cssHeight = Math.max(220, Math.floor(bounds.height || canvas.clientHeight || 260));
+  if (canvas.width !== cssWidth || canvas.height !== cssHeight) {
+    canvas.width = cssWidth;
+    canvas.height = cssHeight;
+  }
   const context = canvas.getContext("2d");
   const width = canvas.width;
   const height = canvas.height;
@@ -1774,6 +2019,12 @@ function openEditTaskDialog(task) {
 function setupEvents() {
   document.querySelectorAll(".nav-button").forEach((button) => {
     button.addEventListener("click", () => switchView(button.dataset.view));
+  });
+  document.querySelectorAll(".case-subtab").forEach((button) => {
+    button.addEventListener("click", () => switchCaseTab(button.dataset.caseTab));
+  });
+  document.querySelectorAll(".result-subtab").forEach((button) => {
+    button.addEventListener("click", () => switchResultTab(button.dataset.resultTab));
   });
   $("refreshBtn").addEventListener("click", refresh);
   $("healthBtn").addEventListener("click", async () => {

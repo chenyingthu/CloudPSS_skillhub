@@ -369,25 +369,52 @@ textarea {
 
 .workbook-case-sheet {
   display: grid;
-  grid-template-rows: minmax(150px, 0.28fr) minmax(360px, 1fr) 150px;
+  grid-template-rows: 38px minmax(0, 1fr);
   gap: 10px;
   height: calc(100vh - 150px);
-  min-height: 680px;
+  min-height: 620px;
 }
 
 .workbook-case-sheet .case-list-panel,
 .workbook-case-sheet .model-workbench,
 .workbook-case-sheet .edit-panel {
+  grid-row: 2;
   min-height: 0;
   height: auto;
   max-height: none;
+}
+
+.case-subtabs {
+  grid-row: 1;
+  display: flex;
+  align-items: end;
+  gap: 4px;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.case-subtab {
+  height: 32px;
+  min-width: 112px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 5px 5px 0 0;
+  background: transparent;
+  color: #475569;
+  font-weight: 700;
+}
+
+.case-subtab.active {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #0f172a;
 }
 
 .workbook-case-sheet .case-list-panel .panel-body,
 .workbook-case-sheet .model-workbench .panel-body,
 .workbook-case-sheet .edit-panel .panel-body {
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .workbook-case-sheet .tree {
@@ -396,7 +423,7 @@ textarea {
 
 .workbook-case-sheet .edit-panel .panel-body {
   display: grid;
-  grid-template-columns: 260px 220px minmax(0, 1fr) auto;
+  grid-template-columns: 280px 240px minmax(0, 1fr) 180px;
   gap: 10px;
   align-items: start;
   padding: 10px;
@@ -428,6 +455,7 @@ textarea {
   gap: 6px;
   padding: 8px;
   overflow-x: auto;
+  border-bottom: 1px solid #dbe3ee;
 }
 
 .workbook-app .nav-tab {
@@ -438,6 +466,61 @@ textarea {
 
 .workbook-app .parameter-table-container {
   padding: 0;
+  height: calc(100vh - 326px);
+  min-height: 420px;
+  overflow: auto;
+}
+
+.model-viewbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
+  padding: 7px 10px;
+  border-bottom: 1px solid #dbe3ee;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 13px;
+}
+
+.model-view-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-view-actions select {
+  height: 28px;
+  max-width: 220px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #ffffff;
+}
+
+.model-column-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #dbe3ee;
+  background: #ffffff;
+  overflow-x: auto;
+}
+
+.column-chip {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.column-chip span {
+  color: #64748b;
 }
 
 .workbook-app .data-table,
@@ -455,9 +538,42 @@ textarea {
 }
 
 .workbook-app .model-param {
-  min-width: 96px;
+  min-width: 82px;
+  max-width: 150px;
   height: 28px;
   border-radius: 2px;
+}
+
+.workbook-app .model-param.object-param {
+  background: #f8fafc;
+  color: #64748b;
+  cursor: help;
+}
+
+.workbook-app .model-table {
+  min-width: max-content;
+}
+
+.workbook-app .model-table th:first-child,
+.workbook-app .model-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  min-width: 180px;
+  max-width: 260px;
+  background: #ffffff;
+}
+
+.workbook-app .model-table th:first-child {
+  z-index: 3;
+  background: #f1f5f9;
+}
+
+.workbook-app .model-table th:nth-child(2),
+.workbook-app .model-table td:nth-child(2) {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .workbook-app .task-cards {
@@ -466,6 +582,186 @@ textarea {
 
 .workbook-app .results-workbench {
   grid-template-columns: minmax(520px, 0.8fr) minmax(0, 1.2fr);
+}
+
+.workbook-results-sheet {
+  display: grid;
+  grid-template-rows: 38px minmax(0, 1fr);
+  gap: 10px;
+  height: calc(100vh - 150px);
+  min-height: 620px;
+}
+
+.result-subtabs {
+  grid-row: 1;
+  display: flex;
+  align-items: end;
+  gap: 4px;
+  border-bottom: 1px solid #cbd5e1;
+  overflow-x: auto;
+}
+
+.result-subtab {
+  height: 32px;
+  min-width: 112px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 5px 5px 0 0;
+  background: transparent;
+  color: #475569;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.result-subtab.active {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.workbook-results-sheet .result-tab-panel {
+  grid-row: 2;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workbook-results-sheet .panel-body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.workbook-results-sheet .sheet-table-wrap {
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.workbook-results-sheet .sheet-table {
+  min-width: 980px;
+}
+
+.workbook-results-sheet .sheet-table tr.selected-row td {
+  background: #e8f2ff;
+}
+
+.result-pane-body {
+  padding: 12px;
+  height: 100%;
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+
+.result-data-panel .result-pane-body {
+  padding: 0;
+}
+
+.result-data-stack {
+  display: grid;
+  grid-template-rows: auto;
+  gap: 12px;
+  padding: 12px;
+  min-width: 0;
+}
+
+.result-data-section {
+  min-width: 0;
+  border: 1px solid #dbe3ee;
+  border-radius: 4px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.result-data-section > .section-title:first-child {
+  margin-top: 0;
+}
+
+.result-data-section .data-table-wrap {
+  max-height: 360px;
+  margin-bottom: 0;
+  border-radius: 4px;
+}
+
+.result-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 12px;
+}
+
+.result-chart-grid .chart-block {
+  min-width: 0;
+  border: 1px solid #dbe3ee;
+  border-radius: 4px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.result-channel-preview {
+  background: #ffffff;
+  border-radius: 4px;
+}
+
+.result-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.result-summary-grid .field {
+  min-width: 0;
+  border: 1px solid #dbe3ee;
+  border-radius: 4px;
+  background: #ffffff;
+  padding: 8px 10px;
+}
+
+.result-summary-grid .field strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.result-actions .button {
+  height: 28px;
+}
+
+.result-pre {
+  min-height: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid #dbe3ee;
+  border-radius: 4px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.workbook-results-sheet .chart-container {
+  margin-bottom: 0;
+  border-radius: 4px;
+}
+
+.workbook-results-sheet .result-chart {
+  min-width: 640px;
+  height: 300px;
+  border-radius: 4px;
 }
 
 @media (max-width: 1100px) {
@@ -487,17 +783,39 @@ textarea {
 
   .workbook-app .three-column,
   .workbook-case-sheet,
+  .workbook-results-sheet,
   .workbook-app .results-workbench {
     grid-template-columns: 1fr;
     height: auto;
   }
 
-  .workbook-case-sheet {
-    grid-template-rows: auto auto auto;
+  .workbook-case-sheet,
+  .workbook-results-sheet {
+    grid-template-rows: auto auto;
+  }
+
+  .result-summary-grid {
+    grid-template-columns: 1fr 1fr;
   }
 
   .workbook-case-sheet .edit-panel .panel-body {
     grid-template-columns: 1fr;
+  }
+
+  .task-dialog {
+    width: calc(100vw - 16px);
+    height: calc(100vh - 16px);
+    max-height: calc(100vh - 16px);
+  }
+
+  .sim-type-selector,
+  .task-dialog .channel-selector {
+    grid-template-columns: 1fr;
+  }
+
+  .task-dialog .channel-actions {
+    flex-direction: row;
+    justify-content: center;
   }
 }
 
@@ -1841,9 +2159,6 @@ textarea {
 .result-actions {
   display: flex;
   gap: var(--space-2);
-  padding: var(--space-3);
-  background: var(--gray-50);
-  border-bottom: 1px solid var(--gray-200);
   flex-wrap: wrap;
 }
 
@@ -2485,8 +2800,57 @@ textarea {
    ============================================ */
 
 .task-dialog {
-  width: min(720px, calc(100vw - 32px));
-  max-height: 90vh;
+  width: min(920px, calc(100vw - 32px));
+  height: min(820px, calc(100vh - 32px));
+  max-height: calc(100vh - 32px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.task-dialog .dialog-title {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: 0;
+  padding: 14px 18px;
+  border-bottom: 1px solid #dbe3ee;
+  background: #ffffff;
+}
+
+.task-dialog-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px;
+  background: #f8fafc;
+}
+
+.task-dialog .form-section {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #dbe3ee;
+  border-radius: 4px;
+  background: #ffffff;
+}
+
+.task-dialog .form-section:last-of-type {
+  margin-bottom: 0;
+}
+
+.task-dialog .dialog-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin: 0;
+  padding: 10px 18px;
+  border-top: 1px solid #dbe3ee;
+  background: #ffffff;
+}
+
+.task-dialog .advanced-config textarea {
+  min-height: 160px;
 }
 
 .form-section {
@@ -2534,7 +2898,7 @@ textarea {
 .sim-type-selector {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-3);
+  gap: 10px;
 }
 
 .sim-type-option {
@@ -2553,7 +2917,8 @@ textarea {
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-4);
+  min-height: 92px;
+  padding: 12px;
   border: 2px solid var(--gray-200);
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -2603,7 +2968,11 @@ textarea {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   gap: var(--space-3);
-  min-height: 200px;
+  min-height: 240px;
+}
+
+.task-dialog .channel-selector {
+  min-height: 260px;
 }
 
 .channel-list {
@@ -2641,7 +3010,7 @@ textarea {
   flex: 1;
   overflow-y: auto;
   padding: var(--space-1);
-  max-height: 200px;
+  max-height: 260px;
 }
 
 .channel-item {

@@ -79,6 +79,11 @@
 
         <section id="casesView" class="view">
           <div class="workbook-case-sheet">
+            <div class="case-subtabs" role="tablist" aria-label="算例与模型数据视图">
+              <button class="case-subtab active" data-case-tab="case">算例信息</button>
+              <button class="case-subtab" data-case-tab="components">元件列表</button>
+              <button class="case-subtab" data-case-tab="changes">修改记录</button>
+            </div>
             <section class="panel case-list-panel">
               <div class="panel-head">
                 <h3>Case 数据表</h3>
@@ -89,7 +94,7 @@
               </div>
             </section>
 
-            <section class="panel model-workbench">
+            <section class="panel model-workbench hidden">
               <div class="panel-head">
                 <h3 id="workbenchTitle">模型参数表</h3>
                 <div class="panel-actions">
@@ -152,7 +157,7 @@
               </div>
             </section>
 
-            <section class="panel edit-panel">
+            <section class="panel edit-panel hidden">
               <div class="panel-head">
                 <h3>修改记录</h3>
                 <button id="discardChangesBtn" class="button small danger" disabled>放弃修改</button>
@@ -223,13 +228,68 @@
         </section>
 
         <section id="resultsView" class="view">
-          <div class="workbench results-workbench">
-            <section class="panel list-panel">
-              <div class="panel-head"><h3>结果列表</h3></div>
-              <div id="resultList" class="compact-list"></div>
+          <div class="workbook-results-sheet">
+            <div class="result-subtabs" role="tablist" aria-label="结果数据视图">
+              <button class="result-subtab active" data-result-tab="table">结果表</button>
+              <button class="result-subtab" data-result-tab="summary">摘要</button>
+              <button class="result-subtab" data-result-tab="data">曲线与表格</button>
+              <button class="result-subtab" data-result-tab="artifacts">Artifacts</button>
+              <button class="result-subtab" data-result-tab="metadata">Metadata</button>
+              <button class="result-subtab" data-result-tab="report">报告</button>
+            </div>
+
+            <section class="panel result-tab-panel result-table-panel" data-result-panel="table">
+              <div class="panel-head">
+                <h3>Result 数据表</h3>
+                <span id="resultSelectionHint" class="text-muted text-sm">选择一行查看摘要、曲线、产物和报告。</span>
+              </div>
+              <div class="panel-body">
+                <div id="resultList" class="compact-list"></div>
+              </div>
             </section>
-            <section class="panel detail-panel results-detail">
-              <div id="resultDetail" class="detail-empty">选择一个 Result 查看详细分析。</div>
+
+            <section class="panel result-tab-panel result-summary-panel hidden" data-result-panel="summary">
+              <div class="panel-head">
+                <h3 id="resultSummaryTitle">结果摘要</h3>
+                <div class="panel-actions result-actions">
+                  <button class="button small" id="reportBtn">报告</button>
+                  <button class="button small secondary" id="archiveBtn">归档</button>
+                  <button class="button small secondary" id="exportCsvBtn">导出 CSV</button>
+                  <button class="button small secondary" id="exportJsonBtn">导出 JSON</button>
+                  <button class="button small secondary" id="copyResultIdBtn">复制 ID</button>
+                </div>
+              </div>
+              <div id="resultSummaryContent" class="panel-body result-pane-body">
+                <div class="detail-empty">选择一个 Result 查看摘要。</div>
+              </div>
+            </section>
+
+            <section class="panel result-tab-panel result-data-panel hidden" data-result-panel="data">
+              <div class="panel-head"><h3>曲线与表格</h3></div>
+              <div id="resultDataContent" class="panel-body result-pane-body">
+                <div class="detail-empty">选择一个 Result 查看曲线和表格。</div>
+              </div>
+            </section>
+
+            <section class="panel result-tab-panel result-artifacts-panel hidden" data-result-panel="artifacts">
+              <div class="panel-head"><h3>Artifacts</h3></div>
+              <div id="resultArtifactsContent" class="panel-body result-pane-body">
+                <div class="detail-empty">选择一个 Result 查看产物清单。</div>
+              </div>
+            </section>
+
+            <section class="panel result-tab-panel result-metadata-panel hidden" data-result-panel="metadata">
+              <div class="panel-head"><h3>Metadata</h3></div>
+              <div id="resultMetadataContent" class="panel-body result-pane-body">
+                <div class="detail-empty">选择一个 Result 查看元数据。</div>
+              </div>
+            </section>
+
+            <section class="panel result-tab-panel result-report-panel hidden" data-result-panel="report">
+              <div class="panel-head"><h3>报告</h3></div>
+              <div id="resultReportContent" class="panel-body result-pane-body">
+                <div class="detail-empty">选择一个 Result 查看报告。</div>
+              </div>
             </section>
           </div>
         </section>
@@ -290,220 +350,222 @@
 
     <dialog id="taskDialog">
       <form method="dialog" id="taskForm" class="dialog-form task-dialog">
-        <h3>新建仿真任务</h3>
+        <h3 class="dialog-title">新建仿真任务</h3>
         <input name="case_id" type="hidden" />
 
-        <!-- Task Basic Info -->
-        <div class="form-section">
-          <h4 class="form-section-title">基本信息</h4>
-          <label>任务名称<input name="name" required placeholder="例如：IEEE39 潮流计算" /></label>
-        </div>
-
-        <!-- Simulation Type Selector -->
-        <div class="form-section">
-          <h4 class="form-section-title">仿真类型</h4>
-          <div class="sim-type-selector">
-            <label class="sim-type-option">
-              <input type="radio" name="sim_type" value="powerflow" checked />
-              <span class="sim-type-card">
-                <svg class="sim-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <path d="M12 6v6l4 2"/>
-                </svg>
-                <span class="sim-type-name">潮流计算</span>
-                <span class="sim-type-desc">稳态分析</span>
-              </span>
-            </label>
-            <label class="sim-type-option">
-              <input type="radio" name="sim_type" value="emt" />
-              <span class="sim-type-card">
-                <svg class="sim-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-                </svg>
-                <span class="sim-type-name">EMT 仿真</span>
-                <span class="sim-type-desc">电磁暂态</span>
-              </span>
-            </label>
-            <label class="sim-type-option">
-              <input type="radio" name="sim_type" value="stability" />
-              <span class="sim-type-card">
-                <svg class="sim-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 2v20M2 12h20"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-                <span class="sim-type-name">稳定性分析</span>
-                <span class="sim-type-desc">机电暂态</span>
-              </span>
-            </label>
-          </div>
-        </div>
-
-        <!-- Powerflow Config Form -->
-        <div id="powerflowConfig" class="sim-config-form">
+        <div class="task-dialog-body">
+          <!-- Task Basic Info -->
           <div class="form-section">
-            <h4 class="form-section-title">求解器设置</h4>
-            <div class="form-row">
-              <label class="form-col">
-                最大迭代次数
-                <input type="number" name="pf_max_iter" value="20" min="1" max="100" />
+            <h4 class="form-section-title">基本信息</h4>
+            <label>任务名称<input name="name" required placeholder="例如：IEEE39 潮流计算" /></label>
+          </div>
+
+          <!-- Simulation Type Selector -->
+          <div class="form-section">
+            <h4 class="form-section-title">仿真类型</h4>
+            <div class="sim-type-selector">
+              <label class="sim-type-option">
+                <input type="radio" name="sim_type" value="powerflow" checked />
+                <span class="sim-type-card">
+                  <svg class="sim-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 6v6l4 2"/>
+                  </svg>
+                  <span class="sim-type-name">潮流计算</span>
+                  <span class="sim-type-desc">稳态分析</span>
+                </span>
               </label>
-              <label class="form-col">
-                收敛容差
-                <input type="text" name="pf_tolerance" value="1e-6" />
+              <label class="sim-type-option">
+                <input type="radio" name="sim_type" value="emt" />
+                <span class="sim-type-card">
+                  <svg class="sim-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                  </svg>
+                  <span class="sim-type-name">EMT 仿真</span>
+                  <span class="sim-type-desc">电磁暂态</span>
+                </span>
+              </label>
+              <label class="sim-type-option">
+                <input type="radio" name="sim_type" value="stability" />
+                <span class="sim-type-card">
+                  <svg class="sim-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2v20M2 12h20"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                  <span class="sim-type-name">稳定性分析</span>
+                  <span class="sim-type-desc">机电暂态</span>
+                </span>
               </label>
             </div>
           </div>
-          <div class="form-section">
-            <h4 class="form-section-title">初始条件</h4>
-            <label class="form-row-inline">
-              <input type="checkbox" name="pf_flat_start" checked />
-              <span>使用平启动 (Flat Start)</span>
-            </label>
-            <label>
-              电压初值来源
-              <select name="pf_voltage_source">
-                <option value="flat">平启动 (1.0 pu)</option>
-                <option value="prev">上次结果</option>
-                <option value="custom">自定义</option>
-              </select>
-            </label>
-          </div>
-          <div class="form-section">
-            <h4 class="form-section-title">输出设置</h4>
-            <label>
-              输出格式
-              <select name="pf_output_format">
-                <option value="json">JSON</option>
-                <option value="csv">CSV</option>
-                <option value="hdf5">HDF5</option>
-              </select>
-            </label>
-            <label class="form-row-inline">
-              <input type="checkbox" name="pf_output_bus" checked />
-              <span>母线结果表</span>
-            </label>
-            <label class="form-row-inline">
-              <input type="checkbox" name="pf_output_branch" checked />
-              <span>支路结果表</span>
-            </label>
-          </div>
-        </div>
 
-        <!-- EMT Config Form -->
-        <div id="emtConfig" class="sim-config-form hidden">
-          <div class="form-section">
-            <h4 class="form-section-title">时间设置</h4>
-            <div class="form-row">
-              <label class="form-col">
-                开始时间 (s)
-                <input type="number" name="emt_t_start" value="0" step="0.001" />
-              </label>
-              <label class="form-col">
-                结束时间 (s)
-                <input type="number" name="emt_t_end" value="1" step="0.001" />
-              </label>
-              <label class="form-col">
-                步长 (s)
-                <input type="number" name="emt_dt" value="1e-5" step="1e-6" />
-              </label>
+          <!-- Powerflow Config Form -->
+          <div id="powerflowConfig" class="sim-config-form">
+            <div class="form-section">
+              <h4 class="form-section-title">求解器设置</h4>
+              <div class="form-row">
+                <label class="form-col">
+                  最大迭代次数
+                  <input type="number" name="pf_max_iter" value="20" min="1" max="100" />
+                </label>
+                <label class="form-col">
+                  收敛容差
+                  <input type="text" name="pf_tolerance" value="1e-6" />
+                </label>
+              </div>
             </div>
-          </div>
-          <div class="form-section">
-            <h4 class="form-section-title">求解器设置</h4>
-            <div class="form-row">
-              <label class="form-col">
-                求解器类型
-                <select name="emt_solver">
-                  <option value="euler">前向欧拉</option>
-                  <option value="trapezoidal">梯形法</option>
-                  <option value="ode45">ODE45</option>
-                </select>
+            <div class="form-section">
+              <h4 class="form-section-title">初始条件</h4>
+              <label class="form-row-inline">
+                <input type="checkbox" name="pf_flat_start" checked />
+                <span>使用平启动 (Flat Start)</span>
               </label>
-              <label class="form-col">
-                初始化方式
-                <select name="emt_init">
-                  <option value="powerflow">潮流初始化</option>
-                  <option value="zero">零初始化</option>
+              <label>
+                电压初值来源
+                <select name="pf_voltage_source">
+                  <option value="flat">平启动 (1.0 pu)</option>
+                  <option value="prev">上次结果</option>
                   <option value="custom">自定义</option>
                 </select>
               </label>
             </div>
-          </div>
-          <div class="form-section">
-            <h4 class="form-section-title">通道选择</h4>
-            <div class="channel-selector">
-              <div class="channel-list">
-                <div class="channel-list-header">
-                  <span>可用通道</span>
-                  <input type="text" id="availableChannelSearch" placeholder="搜索..." />
-                </div>
-                <div id="availableChannelList" class="channel-list-body">
-                  <div class="channel-empty">加载中...</div>
-                </div>
-              </div>
-              <div class="channel-actions">
-                <button type="button" id="addChannelBtn" class="button small">→</button>
-                <button type="button" id="removeChannelBtn" class="button small">←</button>
-              </div>
-              <div class="channel-list">
-                <div class="channel-list-header">
-                  <span>已选通道 (<span id="selectedChannelCount">0</span>)</span>
-                </div>
-                <div id="selectedChannelList" class="channel-list-body">
-                  <div class="channel-empty">暂无选择</div>
-                </div>
-                <input type="hidden" name="emt_channels" id="emtChannelsInput" />
-              </div>
+            <div class="form-section">
+              <h4 class="form-section-title">输出设置</h4>
+              <label>
+                输出格式
+                <select name="pf_output_format">
+                  <option value="json">JSON</option>
+                  <option value="csv">CSV</option>
+                  <option value="hdf5">HDF5</option>
+                </select>
+              </label>
+              <label class="form-row-inline">
+                <input type="checkbox" name="pf_output_bus" checked />
+                <span>母线结果表</span>
+              </label>
+              <label class="form-row-inline">
+                <input type="checkbox" name="pf_output_branch" checked />
+                <span>支路结果表</span>
+              </label>
             </div>
           </div>
-        </div>
 
-        <!-- Stability Config Form -->
-        <div id="stabilityConfig" class="sim-config-form hidden">
-          <div class="form-section">
-            <h4 class="form-section-title">仿真设置</h4>
-            <div class="form-row">
-              <label class="form-col">
-                仿真时长 (s)
-                <input type="number" name="stab_t_end" value="10" step="0.1" />
-              </label>
-              <label class="form-col">
-                步长 (s)
-                <input type="number" name="stab_dt" value="0.01" step="0.001" />
-              </label>
+          <!-- EMT Config Form -->
+          <div id="emtConfig" class="sim-config-form hidden">
+            <div class="form-section">
+              <h4 class="form-section-title">时间设置</h4>
+              <div class="form-row">
+                <label class="form-col">
+                  开始时间 (s)
+                  <input type="number" name="emt_t_start" value="0" step="0.001" />
+                </label>
+                <label class="form-col">
+                  结束时间 (s)
+                  <input type="number" name="emt_t_end" value="1" step="0.001" />
+                </label>
+                <label class="form-col">
+                  步长 (s)
+                  <input type="number" name="emt_dt" value="1e-5" step="1e-6" />
+                </label>
+              </div>
+            </div>
+            <div class="form-section">
+              <h4 class="form-section-title">求解器设置</h4>
+              <div class="form-row">
+                <label class="form-col">
+                  求解器类型
+                  <select name="emt_solver">
+                    <option value="euler">前向欧拉</option>
+                    <option value="trapezoidal">梯形法</option>
+                    <option value="ode45">ODE45</option>
+                  </select>
+                </label>
+                <label class="form-col">
+                  初始化方式
+                  <select name="emt_init">
+                    <option value="powerflow">潮流初始化</option>
+                    <option value="zero">零初始化</option>
+                    <option value="custom">自定义</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div class="form-section">
+              <h4 class="form-section-title">通道选择</h4>
+              <div class="channel-selector">
+                <div class="channel-list">
+                  <div class="channel-list-header">
+                    <span>可用通道</span>
+                    <input type="text" id="availableChannelSearch" placeholder="搜索..." />
+                  </div>
+                  <div id="availableChannelList" class="channel-list-body">
+                    <div class="channel-empty">加载中...</div>
+                  </div>
+                </div>
+                <div class="channel-actions">
+                  <button type="button" id="addChannelBtn" class="button small">→</button>
+                  <button type="button" id="removeChannelBtn" class="button small">←</button>
+                </div>
+                <div class="channel-list">
+                  <div class="channel-list-header">
+                    <span>已选通道 (<span id="selectedChannelCount">0</span>)</span>
+                  </div>
+                  <div id="selectedChannelList" class="channel-list-body">
+                    <div class="channel-empty">暂无选择</div>
+                  </div>
+                  <input type="hidden" name="emt_channels" id="emtChannelsInput" />
+                </div>
+              </div>
             </div>
           </div>
-          <div class="form-section">
-            <h4 class="form-section-title">故障设置</h4>
-            <label>
-              故障类型
-              <select name="stab_fault_type">
-                <option value="none">无故障</option>
-                <option value="three_phase">三相短路</option>
-                <option value="single_phase">单相接地</option>
-                <option value="line_trip">线路跳闸</option>
-              </select>
-            </label>
-            <div class="form-row">
-              <label class="form-col">
-                故障时间 (s)
-                <input type="number" name="stab_fault_time" value="1" step="0.01" />
-              </label>
-              <label class="form-col">
-                故障持续时间 (s)
-                <input type="number" name="stab_fault_duration" value="0.1" step="0.01" />
-              </label>
-            </div>
-          </div>
-        </div>
 
-        <!-- Advanced Config Toggle -->
-        <div class="form-section">
-          <button type="button" id="toggleAdvancedConfig" class="button small secondary">
-            高级配置
-          </button>
-          <div id="advancedConfig" class="advanced-config hidden">
-            <label>高级 JSON 配置<textarea name="config_json" spellcheck="false" placeholder='{"custom": "value"}'></textarea></label>
+          <!-- Stability Config Form -->
+          <div id="stabilityConfig" class="sim-config-form hidden">
+            <div class="form-section">
+              <h4 class="form-section-title">仿真设置</h4>
+              <div class="form-row">
+                <label class="form-col">
+                  仿真时长 (s)
+                  <input type="number" name="stab_t_end" value="10" step="0.1" />
+                </label>
+                <label class="form-col">
+                  步长 (s)
+                  <input type="number" name="stab_dt" value="0.01" step="0.001" />
+                </label>
+              </div>
+            </div>
+            <div class="form-section">
+              <h4 class="form-section-title">故障设置</h4>
+              <label>
+                故障类型
+                <select name="stab_fault_type">
+                  <option value="none">无故障</option>
+                  <option value="three_phase">三相短路</option>
+                  <option value="single_phase">单相接地</option>
+                  <option value="line_trip">线路跳闸</option>
+                </select>
+              </label>
+              <div class="form-row">
+                <label class="form-col">
+                  故障时间 (s)
+                  <input type="number" name="stab_fault_time" value="1" step="0.01" />
+                </label>
+                <label class="form-col">
+                  故障持续时间 (s)
+                  <input type="number" name="stab_fault_duration" value="0.1" step="0.01" />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Advanced Config Toggle -->
+          <div class="form-section">
+            <button type="button" id="toggleAdvancedConfig" class="button small secondary">
+              高级配置
+            </button>
+            <div id="advancedConfig" class="advanced-config hidden">
+              <label>高级 JSON 配置<textarea name="config_json" spellcheck="false" placeholder='{"custom": "value"}'></textarea></label>
+            </div>
           </div>
         </div>
 
