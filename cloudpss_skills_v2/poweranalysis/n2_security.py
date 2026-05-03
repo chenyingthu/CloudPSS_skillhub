@@ -37,6 +37,49 @@ class N2SecurityAnalysis(PowerAnalysis):
     name = "n2_security"
     description = "N-2安全校核 - 检查支路对同时断开的安全"
 
+    @property
+    def config_schema(self) -> dict[str, Any]:
+        """JSON Schema for configuration validation."""
+        return {
+            "type": "object",
+            "required": ["model"],
+            "properties": {
+                "skill": {"type": "string"},
+                "model": {
+                    "type": "object",
+                    "required": ["rid"],
+                    "properties": {
+                        "rid": {"type": "string"},
+                        "source": {"type": "string", "enum": ["cloud", "local"]},
+                    },
+                },
+                "engine": {"type": "string", "enum": ["cloudpss", "pandapower"], "default": "pandapower"},
+                "auth": {"type": "object"},
+                "analysis": {
+                    "type": "object",
+                    "properties": {
+                        "branches": {"type": "array", "items": {"type": "string"}},
+                        "max_scenarios": {"type": "integer"},
+                    },
+                },
+                "check_pairs": {"type": "array", "default": []},
+                "voltage_threshold": {"type": "number", "default": 0.05},
+                "thermal_threshold": {"type": "number", "default": 1.0},
+            },
+        }
+
+    def get_default_config(self) -> dict[str, Any]:
+        """Return default configuration."""
+        return {
+            "skill": "n2_security",
+            "engine": "pandapower",
+            "model": {"rid": "case14", "source": "local"},
+            "analysis": {"branches": ["line:0", "line:1"], "max_scenarios": 1},
+            "check_pairs": [],
+            "voltage_threshold": 0.05,
+            "thermal_threshold": 1.0,
+        }
+
     def validate(self, config: dict[str, Any]) -> tuple[bool, list[str]]:
         """Validate configuration for backward compatibility."""
         errors = []
