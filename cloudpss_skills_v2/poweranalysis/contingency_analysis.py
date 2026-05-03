@@ -103,9 +103,15 @@ class ContingencyAnalysis(PowerAnalysis):
         errors = []
         if not config.get("model", {}).get("rid"):
             errors.append("必须指定 model.rid")
-        auth = config.get("auth", {})
-        if not auth.get("token") and not auth.get("token_file"):
-            errors.append("必须提供 auth.token 或 auth.token_file")
+
+        # Only require auth token for CloudPSS engine
+        engine = config.get("engine", "cloudpss")
+        model_source = config.get("model", {}).get("source", "cloud")
+        if engine == "cloudpss" or model_source == "cloud":
+            auth = config.get("auth", {})
+            if not auth.get("token") and not auth.get("token_file"):
+                errors.append("必须提供 auth.token 或 auth.token_file")
+
         return len(errors) == 0, errors
 
     def _discover_components(self, handle, component_types: list[str], excluded: list[str]) -> list[dict]:
