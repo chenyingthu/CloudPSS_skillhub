@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 
 from cloudpss_skills_v2.core.skill_result import SkillStatus
+from cloudpss_skills_v2.core.system_model import Bus, Branch, PowerSystemModel
 from cloudpss_skills_v2.libs.data_lib import SeverityLevel
 from cloudpss_skills_v2.poweranalysis.n1_security import N1SecurityAnalysis
 
@@ -29,12 +30,31 @@ class _FakeHandle:
 class TestN1SecurityAnalysis:
     def test_collects_voltage_and_thermal_violations_without_overwriting(self, monkeypatch):
         skill = N1SecurityAnalysis()
+
+        # Create unified model for testing
+        test_model = PowerSystemModel(
+            buses=[
+                Bus(bus_id=0, name="Bus 1", base_kv=230.0, bus_type="PQ",
+                    v_magnitude_pu=0.92, vm_min_pu=0.95, vm_max_pu=1.05),
+                Bus(bus_id=1, name="Bus 2", base_kv=230.0, bus_type="SLACK",
+                    v_magnitude_pu=1.0, vm_min_pu=0.95, vm_max_pu=1.05),
+            ],
+            branches=[
+                Branch(from_bus=0, to_bus=1, name="Line 1",
+                       rate_a_mva=100.0, loading_percent=135.0, in_service=True),
+            ],
+            base_mva=100.0,
+            name="Test Model"
+        )
+
         handle = _FakeHandle()
         fake_api = SimpleNamespace(
             adapter=SimpleNamespace(engine_name="fake_pf"),
             get_model_handle=lambda model_rid: handle,
+            get_system_model=lambda job_id: test_model,
             run_power_flow=lambda **kwargs: SimpleNamespace(
                 is_success=True,
+                job_id="test_job_1",
                 data={
                     "buses": [{"name": "Bus 1", "voltage_pu": 0.92}],
                     "branches": [{"name": "Line 1", "loading_pct": 135.0}],

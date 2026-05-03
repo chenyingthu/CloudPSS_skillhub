@@ -1,6 +1,9 @@
 from cloudpss_skills_v2.poweranalysis.n1_security import N1SecurityAnalysis
 from cloudpss_skills_v2.poweranalysis.contingency_analysis import ContingencyAnalysis
-from cloudpss_skills_v2.poweranalysis.voltage_stability import VoltageStabilityAnalysis
+from cloudpss_skills_v2.poweranalysis.voltage_stability import (
+    VoltageStabilityAnalysis,
+    VoltageStabilityAnalysisLegacy,
+)
 from cloudpss_skills_v2.poweranalysis.loss_analysis import LossAnalysis
 from cloudpss_skills_v2.poweranalysis.short_circuit import ShortCircuitAnalysis
 from cloudpss_skills_v2.poweranalysis.batch_powerflow import BatchPowerFlowAnalysis
@@ -14,6 +17,7 @@ from cloudpss_skills_v2.poweranalysis.maintenance_security import (
 from cloudpss_skills_v2.poweranalysis.n2_security import N2SecurityAnalysis
 from cloudpss_skills_v2.poweranalysis.thevenin_equivalent import (
     TheveninEquivalentAnalysis,
+    TheveninEquivalentAnalysisLegacy,
 )
 from cloudpss_skills_v2.poweranalysis.power_quality_analysis import (
     PowerQualityAnalysisAnalysis,
@@ -66,6 +70,7 @@ __all__ = [
     "N1SecurityAnalysis",
     "ContingencyAnalysis",
     "VoltageStabilityAnalysis",
+    "VoltageStabilityAnalysisLegacy",
     "LossAnalysis",
     "ShortCircuitAnalysis",
     "BatchPowerFlowAnalysis",
@@ -74,6 +79,7 @@ __all__ = [
     "MaintenanceSecurityAnalysis",
     "N2SecurityAnalysis",
     "TheveninEquivalentAnalysis",
+    "TheveninEquivalentAnalysisLegacy",
     "PowerQualityAnalysisAnalysis",
     "FaultSeverityScanAnalysis",
     "ProtectionCoordinationAnalysis",

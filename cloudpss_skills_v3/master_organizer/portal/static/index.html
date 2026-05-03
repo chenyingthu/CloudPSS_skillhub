@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CloudPSS 收纳大师 Portal</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app workbook-app">
+      <header class="workbook-header">
+        <div class="brand">
+          <div class="brand-mark">CP</div>
+          <div>
+            <h1>收纳大师</h1>
+            <p id="workspaceRoot">-</p>
+          </div>
+        </div>
+        <div class="workbook-menubar">
+          <button class="menu-button">文件</button>
+          <button class="menu-button">编辑</button>
+          <button class="menu-button">仿真</button>
+          <button class="menu-button">结果</button>
+          <button class="menu-button">报告</button>
+        </div>
+        <div class="topbar-actions">
+          <button id="quickNewCaseBtn" class="button">新建 Case</button>
+          <button id="quickNewTaskBtn" class="button secondary">新建任务</button>
+          <button id="refreshBtn" class="button secondary">刷新</button>
+          <button id="healthBtn" class="button secondary">检查工作区</button>
+        </div>
+      </header>
+
+      <nav class="workbook-tabs" aria-label="工作簿对象">
+        <button class="nav-button active" data-view="dashboard">总览</button>
+        <button class="nav-button" data-view="cases">算例与模型</button>
+        <button class="nav-button" data-view="tasks">任务表</button>
+        <button class="nav-button" data-view="results">结果表</button>
+        <button class="nav-button" data-view="reports">报告归档</button>
+        <button class="nav-button" data-view="servers">服务凭据</button>
+        <button class="nav-button" data-view="audit">审计日志</button>
+      </nav>
+
+      <main class="main">
+        <section class="sheet-titlebar">
+          <div>
+            <h2 id="viewTitle">总览</h2>
+            <p id="viewSubtitle">模型、配置、任务、结果、分析和报告的统一工作台</p>
+          </div>
+          <div class="sheet-summary">
+            <span>Servers <strong id="countServers">0</strong></span>
+            <span>Cases <strong id="countCases">0</strong></span>
+            <span>Tasks <strong id="countTasks">0</strong></span>
+            <span>Results <strong id="countResults">0</strong></span>
+            <span>Storage <strong id="storageTotal">0 MB</strong></span>
+          </div>
+        </section>
+
+        <section id="notice" class="notice hidden"></section>
+
+        <section id="dashboardView" class="view active">
+          <div class="dashboard-split sheet-grid">
+            <section class="panel sheet-panel">
+              <div class="panel-header">
+                <h3>最近任务数据</h3>
+                <span class="text-muted text-sm">最近 8 个</span>
+              </div>
+              <div id="recentTasks" class="panel-body"></div>
+            </section>
+            <section class="panel sheet-panel">
+              <div class="panel-header">
+                <h3>最近结果数据</h3>
+                <span class="text-muted text-sm">最近 8 个</span>
+              </div>
+              <div id="recentResults" class="panel-body"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="casesView" class="view">
+          <div class="workbook-case-sheet">
+            <section class="panel case-list-panel">
+              <div class="panel-head">
+                <h3>Case 数据表</h3>
+                <button id="newCaseBtn" class="button small">新建</button>
+              </div>
+              <div class="panel-body">
+                <div id="caseTree" class="tree"></div>
+              </div>
+            </section>
+
+            <section class="panel model-workbench">
+              <div class="panel-head">
+                <h3 id="workbenchTitle">模型参数表</h3>
+                <div class="panel-actions">
+                  <button id="saveModelBtn" class="button small primary" disabled>保存修改</button>
+                  <button id="backupModelBtn" class="button small secondary" disabled>备份</button>
+                  <button id="createTaskFromCaseBtn" class="button small">创建任务</button>
+                </div>
+              </div>
+              <div class="panel-body">
+                <!-- Component Navigation -->
+                <nav class="component-nav" id="componentNav">
+                  <button class="nav-tab active" data-type="all">
+                    <span class="nav-label">全部</span>
+                    <span class="nav-count" id="countAll">0</span>
+                  </button>
+                  <button class="nav-tab" data-type="bus">
+                    <span class="nav-label">母线</span>
+                    <span class="nav-count" id="countBus">0</span>
+                  </button>
+                  <button class="nav-tab" data-type="line">
+                    <span class="nav-label">线路</span>
+                    <span class="nav-count" id="countLine">0</span>
+                  </button>
+                  <button class="nav-tab" data-type="transformer">
+                    <span class="nav-label">变压器</span>
+                    <span class="nav-count" id="countTransformer">0</span>
+                  </button>
+                  <button class="nav-tab" data-type="generator">
+                    <span class="nav-label">发电机</span>
+                    <span class="nav-count" id="countGenerator">0</span>
+                  </button>
+                  <button class="nav-tab" data-type="load">
+                    <span class="nav-label">负荷</span>
+                    <span class="nav-count" id="countLoad">0</span>
+                  </button>
+                  <button class="nav-tab" data-type="control">
+                    <span class="nav-label">控制器</span>
+                    <span class="nav-count" id="countControl">0</span>
+                  </button>
+                  <button class="nav-tab" data-type="meter">
+                    <span class="nav-label">测量</span>
+                    <span class="nav-count" id="countMeter">0</span>
+                  </button>
+                  <button class="nav-tab" data-type="channel">
+                    <span class="nav-label">通道</span>
+                    <span class="nav-count" id="countChannel">0</span>
+                  </button>
+                  <button class="nav-tab" data-type="fault">
+                    <span class="nav-label">故障</span>
+                    <span class="nav-count" id="countFault">0</span>
+                  </button>
+                </nav>
+
+                <!-- Parameter Table Container -->
+                <div class="parameter-table-container">
+                  <div id="parameterTable" class="parameter-table">
+                    <div class="detail-empty">选择一个 Case 并点击元件分类查看参数</div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel edit-panel">
+              <div class="panel-head">
+                <h3>修改记录</h3>
+                <button id="discardChangesBtn" class="button small danger" disabled>放弃修改</button>
+              </div>
+              <div class="panel-body">
+                <!-- Case Info Summary -->
+                <div id="caseInfoSummary" class="case-info-summary hidden">
+                  <div class="info-item">
+                    <span class="info-label">Case</span>
+                    <strong id="editPanelCaseName" class="info-value">-</strong>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">模型</span>
+                    <span id="editPanelModelName" class="info-value">-</span>
+                  </div>
+                </div>
+
+                <!-- Change Stats -->
+                <div class="change-stats" id="changeStats">
+                  <div class="stat-item">
+                    <span class="stat-label">待保存</span>
+                    <strong id="pendingChangesCount" class="stat-value">0</strong>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-label">已修改</span>
+                    <strong id="modifiedParamsCount" class="stat-value">0</strong>
+                  </div>
+                </div>
+
+                <!-- Change History -->
+                <div class="change-history">
+                  <h4 class="history-title">修改历史</h4>
+                  <div id="changeHistoryList" class="history-list">
+                    <div class="history-empty">暂无修改</div>
+                  </div>
+                </div>
+
+                <div class="edit-actions">
+                  <button id="exportChangesBtn" class="button small secondary" disabled>导出差异</button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="tasksView" class="view">
+          <div class="tasks-container">
+            <!-- Task Filters -->
+            <div class="tasks-toolbar">
+              <div class="task-filters">
+                <button class="filter-btn active" data-filter="all">全部</button>
+                <button class="filter-btn" data-filter="running">运行中</button>
+                <button class="filter-btn" data-filter="completed">已完成</button>
+                <button class="filter-btn" data-filter="failed">失败</button>
+              </div>
+              <div class="tasks-stats">
+                <span class="stat-badge"><span class="dot running"></span>运行中: <strong id="runningCount">0</strong></span>
+                <span class="stat-badge"><span class="dot completed"></span>已完成: <strong id="completedCount">0</strong></span>
+                <span class="stat-badge"><span class="dot failed"></span>失败: <strong id="failedCount">0</strong></span>
+              </div>
+            </div>
+
+            <!-- Task Cards Grid -->
+            <div id="taskCards" class="task-cards">
+              <div class="detail-empty">加载中...</div>
+            </div>
+          </div>
+        </section>
+
+        <section id="resultsView" class="view">
+          <div class="workbench results-workbench">
+            <section class="panel list-panel">
+              <div class="panel-head"><h3>结果列表</h3></div>
+              <div id="resultList" class="compact-list"></div>
+            </section>
+            <section class="panel detail-panel results-detail">
+              <div id="resultDetail" class="detail-empty">选择一个 Result 查看详细分析。</div>
+            </section>
+          </div>
+        </section>
+
+        <section id="reportsView" class="view">
+          <div class="panel">
+            <div class="panel-head"><h3>报告与归档</h3></div>
+            <div id="reportList" class="compact-list"></div>
+          </div>
+        </section>
+
+        <section id="serversView" class="view">
+          <div class="panel">
+            <div class="panel-head"><h3>服务与凭据</h3></div>
+            <div id="serverList" class="table"></div>
+          </div>
+        </section>
+
+        <section id="auditView" class="view">
+          <div class="panel">
+            <div class="panel-head"><h3>审计日志</h3></div>
+            <div id="auditList" class="audit-list"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="caseDialog">
+      <form method="dialog" id="caseForm" class="dialog-form">
+        <h3>新建 Case</h3>
+        <label>名称<input name="name" required /></label>
+        <label>CloudPSS RID<input name="rid" required pattern="model\/.+\/.+" placeholder="model/chenying/IEEE39" /></label>
+        <label>本地模型源<input name="model_source" placeholder="examples/basic/ieee3-emt-prepared.yaml" /></label>
+        <label>标签<input name="tags" placeholder="ieee39,powerflow" /></label>
+        <label>描述<textarea name="description"></textarea></label>
+        <div class="dialog-actions">
+          <button value="cancel" class="button secondary">取消</button>
+          <button id="createCaseSubmit" value="default" class="button">创建</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="editCaseDialog">
+      <form method="dialog" id="editCaseForm" class="dialog-form">
+        <h3>编辑 Case</h3>
+        <input name="case_id" type="hidden" />
+        <label>名称<input name="name" required /></label>
+        <label>CloudPSS RID<input name="rid" required pattern="model\/.+\/.+" placeholder="model/chenying/IEEE39" /></label>
+        <label>本地模型源<input name="model_source" placeholder="examples/basic/ieee3-emt-prepared.yaml" /></label>
+        <label>标签<input name="tags" placeholder="ieee39,powerflow" /></label>
+        <label>描述<textarea name="description"></textarea></label>
+        <div class="dialog-actions">
+          <button value="cancel" class="button secondary">取消</button>
+          <button id="editCaseSubmit" value="default" class="button">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="taskDialog">
+      <form method="dialog" id="taskForm" class="dialog-form task-dialog">
+        <h3>新建仿真任务</h3>
+        <input name="case_id" type="hidden" />
+
+        <!-- Task Basic Info -->
+        <div class="form-section">
+          <h4 class="form-section-title">基本信息</h4>
+          <label>任务名称<input name="name" required placeholder="例如：IEEE39 潮流计算" /></label>
+        </div>
+
+        <!-- Simulation Type Selector -->
+        <div class="form-section">
+          <h4 class="form-section-title">仿真类型</h4>
+          <div class="sim-type-selector">
+            <label class="sim-type-option">
+              <input type="radio" name="sim_type" value="powerflow" checked />
+              <span class="sim-type-card">
+                <svg class="sim-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 6v6l4 2"/>
+                </svg>
+                <span class="sim-type-name">潮流计算</span>
+                <span class="sim-type-desc">稳态分析</span>
+              </span>
+            </label>
+            <label class="sim-type-option">
+              <input type="radio" name="sim_type" value="emt" />
+              <span class="sim-type-card">
+                <svg class="sim-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                </svg>
+                <span class="sim-type-name">EMT 仿真</span>
+                <span class="sim-type-desc">电磁暂态</span>
+              </span>
+            </label>
+            <label class="sim-type-option">
+              <input type="radio" name="sim_type" value="stability" />
+              <span class="sim-type-card">
+                <svg class="sim-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2v20M2 12h20"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+                <span class="sim-type-name">稳定性分析</span>
+                <span class="sim-type-desc">机电暂态</span>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Powerflow Config Form -->
+        <div id="powerflowConfig" class="sim-config-form">
+          <div class="form-section">
+            <h4 class="form-section-title">求解器设置</h4>
+            <div class="form-row">
+              <label class="form-col">
+                最大迭代次数
+                <input type="number" name="pf_max_iter" value="20" min="1" max="100" />
+              </label>
+              <label class="form-col">
+                收敛容差
+                <input type="text" name="pf_tolerance" value="1e-6" />
+              </label>
+            </div>
+          </div>
+          <div class="form-section">
+            <h4 class="form-section-title">初始条件</h4>
+            <label class="form-row-inline">
+              <input type="checkbox" name="pf_flat_start" checked />
+              <span>使用平启动 (Flat Start)</span>
+            </label>
+            <label>
+              电压初值来源
+              <select name="pf_voltage_source">
+                <option value="flat">平启动 (1.0 pu)</option>
+                <option value="prev">上次结果</option>
+                <option value="custom">自定义</option>
+              </select>
+            </label>
+          </div>
+          <div class="form-section">
+            <h4 class="form-section-title">输出设置</h4>
+            <label>
+              输出格式
+              <select name="pf_output_format">
+                <option value="json">JSON</option>
+                <option value="csv">CSV</option>
+                <option value="hdf5">HDF5</option>
+              </select>
+            </label>
+            <label class="form-row-inline">
+              <input type="checkbox" name="pf_output_bus" checked />
+              <span>母线结果表</span>
+            </label>
+            <label class="form-row-inline">
+              <input type="checkbox" name="pf_output_branch" checked />
+              <span>支路结果表</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- EMT Config Form -->
+        <div id="emtConfig" class="sim-config-form hidden">
+          <div class="form-section">
+            <h4 class="form-section-title">时间设置</h4>
+            <div class="form-row">
+              <label class="form-col">
+                开始时间 (s)
+                <input type="number" name="emt_t_start" value="0" step="0.001" />
+              </label>
+              <label class="form-col">
+                结束时间 (s)
+                <input type="number" name="emt_t_end" value="1" step="0.001" />
+              </label>
+              <label class="form-col">
+                步长 (s)
+                <input type="number" name="emt_dt" value="1e-5" step="1e-6" />
+              </label>
+            </div>
+          </div>
+          <div class="form-section">
+            <h4 class="form-section-title">求解器设置</h4>
+            <div class="form-row">
+              <label class="form-col">
+                求解器类型
+                <select name="emt_solver">
+                  <option value="euler">前向欧拉</option>
+                  <option value="trapezoidal">梯形法</option>
+                  <option value="ode45">ODE45</option>
+                </select>
+              </label>
+              <label class="form-col">
+                初始化方式
+                <select name="emt_init">
+                  <option value="powerflow">潮流初始化</option>
+                  <option value="zero">零初始化</option>
+                  <option value="custom">自定义</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div class="form-section">
+            <h4 class="form-section-title">通道选择</h4>
+            <div class="channel-selector">
+              <div class="channel-list">
+                <div class="channel-list-header">
+                  <span>可用通道</span>
+                  <input type="text" id="availableChannelSearch" placeholder="搜索..." />
+                </div>
+                <div id="availableChannelList" class="channel-list-body">
+                  <div class="channel-empty">加载中...</div>
+                </div>
+              </div>
+              <div class="channel-actions">
+                <button type="button" id="addChannelBtn" class="button small">→</button>
+                <button type="button" id="removeChannelBtn" class="button small">←</button>
+              </div>
+              <div class="channel-list">
+                <div class="channel-list-header">
+                  <span>已选通道 (<span id="selectedChannelCount">0</span>)</span>
+                </div>
+                <div id="selectedChannelList" class="channel-list-body">
+                  <div class="channel-empty">暂无选择</div>
+                </div>
+                <input type="hidden" name="emt_channels" id="emtChannelsInput" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stability Config Form -->
+        <div id="stabilityConfig" class="sim-config-form hidden">
+          <div class="form-section">
+            <h4 class="form-section-title">仿真设置</h4>
+            <div class="form-row">
+              <label class="form-col">
+                仿真时长 (s)
+                <input type="number" name="stab_t_end" value="10" step="0.1" />
+              </label>
+              <label class="form-col">
+                步长 (s)
+                <input type="number" name="stab_dt" value="0.01" step="0.001" />
+              </label>
+            </div>
+          </div>
+          <div class="form-section">
+            <h4 class="form-section-title">故障设置</h4>
+            <label>
+              故障类型
+              <select name="stab_fault_type">
+                <option value="none">无故障</option>
+                <option value="three_phase">三相短路</option>
+                <option value="single_phase">单相接地</option>
+                <option value="line_trip">线路跳闸</option>
+              </select>
+            </label>
+            <div class="form-row">
+              <label class="form-col">
+                故障时间 (s)
+                <input type="number" name="stab_fault_time" value="1" step="0.01" />
+              </label>
+              <label class="form-col">
+                故障持续时间 (s)
+                <input type="number" name="stab_fault_duration" value="0.1" step="0.01" />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Advanced Config Toggle -->
+        <div class="form-section">
+          <button type="button" id="toggleAdvancedConfig" class="button small secondary">
+            高级配置
+          </button>
+          <div id="advancedConfig" class="advanced-config hidden">
+            <label>高级 JSON 配置<textarea name="config_json" spellcheck="false" placeholder='{"custom": "value"}'></textarea></label>
+          </div>
+        </div>
+
+        <div class="dialog-actions">
+          <button value="cancel" class="button secondary">取消</button>
+          <button id="createTaskSubmit" value="default" class="button">创建任务</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="editTaskDialog">
+      <form method="dialog" id="editTaskForm" class="dialog-form">
+        <h3>配置 Task</h3>
+        <input name="task_id" type="hidden" />
+        <label>名称<input name="name" required /></label>
+        <label>类型
+          <select name="type">
+            <option value="powerflow">powerflow</option>
+            <option value="emt">emt</option>
+          </select>
+        </label>
+        <label>模型源文件<input name="model_source" placeholder="examples/basic/ieee3-emt-prepared.yaml" /></label>
+        <label>EMT 通道<input name="channels" placeholder="plot-2/vac:0,plot-0/#wr1:0" /></label>
+        <label>高级配置 JSON<textarea name="config_json" spellcheck="false"></textarea></label>
+        <div class="dialog-actions">
+          <button value="cancel" class="button secondary">取消</button>
+          <button id="editTaskSubmit" value="default" class="button">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="taskDetailDialog">
+      <div class="dialog-form task-detail-dialog">
+        <div class="task-detail-header">
+          <h3 id="taskDetailTitle">任务详情</h3>
+          <span id="taskDetailStatus" class="pill">-</span>
+        </div>
+
+        <!-- Task Timeline -->
+        <div class="task-timeline">
+          <div class="timeline-item" id="timelineCreated">
+            <div class="timeline-dot"></div>
+            <div class="timeline-content">
+              <span class="timeline-label">创建</span>
+              <span class="timeline-time" id="taskCreatedTime">-</span>
+            </div>
+          </div>
+          <div class="timeline-item" id="timelineSubmitted">
+            <div class="timeline-dot"></div>
+            <div class="timeline-content">
+              <span class="timeline-label">提交</span>
+              <span class="timeline-time" id="taskSubmittedTime">-</span>
+            </div>
+          </div>
+          <div class="timeline-item" id="timelineStarted">
+            <div class="timeline-dot"></div>
+            <div class="timeline-content">
+              <span class="timeline-label">开始</span>
+              <span class="timeline-time" id="taskStartedTime">-</span>
+            </div>
+          </div>
+          <div class="timeline-item" id="timelineCompleted">
+            <div class="timeline-dot"></div>
+            <div class="timeline-content">
+              <span class="timeline-label">完成</span>
+              <span class="timeline-time" id="taskCompletedTime">-</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="task-progress-section" id="taskProgressSection">
+          <div class="progress-header">
+            <span>进度</span>
+            <span id="taskProgressPercent">0%</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="taskProgressFill" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- Error Display -->
+        <div class="task-error-section hidden" id="taskErrorSection">
+          <h4>错误信息</h4>
+          <pre id="taskErrorMessage" class="error-message"></pre>
+        </div>
+
+        <!-- Task Config Summary -->
+        <div class="task-config-summary">
+          <h4>配置摘要</h4>
+          <div class="config-grid" id="taskConfigGrid">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <!-- Log Viewer -->
+        <div class="task-logs">
+          <div class="logs-header">
+            <h4>运行日志</h4>
+            <button type="button" id="refreshLogsBtn" class="button small secondary">刷新</button>
+          </div>
+          <div class="logs-container" id="taskLogsContainer">
+            <pre class="logs-content" id="taskLogsContent">暂无日志</pre>
+          </div>
+        </div>
+
+        <div class="dialog-actions">
+          <button type="button" class="button secondary" id="closeTaskDetailBtn">关闭</button>
+          <button type="button" class="button" id="cloneTaskBtn">复制任务</button>
+          <button type="button" class="button danger hidden" id="cancelTaskBtn">取消任务</button>
+          <button type="button" class="button secondary hidden" id="rerunTaskBtn">重跑任务</button>
+          <button type="button" class="button" id="viewResultBtn">查看结果</button>
+        </div>
+      </div>
+    </dialog>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,60 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: CP
+      - generic [ref=e6]:
+        - heading "收纳大师" [level=1] [ref=e7]
+        - paragraph [ref=e8]: CloudPSS Organizer
+    - navigation [ref=e9]:
+      - button "总览" [ref=e10] [cursor=pointer]
+      - button "模型与算例" [ref=e11] [cursor=pointer]
+      - button "任务" [ref=e12] [cursor=pointer]
+      - button "结果" [ref=e13] [cursor=pointer]
+      - button "报告与归档" [ref=e14] [cursor=pointer]
+      - button "服务" [ref=e15] [cursor=pointer]
+      - button "审计" [ref=e16] [cursor=pointer]
+    - generic [ref=e17]:
+      - generic [ref=e18]: Workspace
+      - strong [ref=e19]: "-"
+  - main [ref=e20]:
+    - generic [ref=e21]:
+      - generic [ref=e22]:
+        - heading "总览" [level=2] [ref=e23]
+        - paragraph [ref=e24]: 模型、配置、任务、结果、分析和报告的统一工作台
+      - generic [ref=e25]:
+        - button "刷新" [ref=e26] [cursor=pointer]
+        - button "检查工作区" [ref=e27] [cursor=pointer]
+    - generic [ref=e29]:
+      - generic [ref=e30]:
+        - generic [ref=e31] [cursor=pointer]:
+          - generic [ref=e32]: Servers
+          - strong [ref=e33]: "0"
+        - generic [ref=e34] [cursor=pointer]:
+          - generic [ref=e35]: Cases
+          - strong [ref=e36]: "0"
+        - generic [ref=e37] [cursor=pointer]:
+          - generic [ref=e38]: Tasks
+          - strong [ref=e39]: "0"
+        - generic [ref=e40] [cursor=pointer]:
+          - generic [ref=e41]: Results
+          - strong [ref=e42]: "0"
+        - generic [ref=e43] [cursor=pointer]:
+          - generic [ref=e44]: Storage
+          - strong [ref=e45]: 0 MB
+      - generic [ref=e46]:
+        - generic [ref=e48]:
+          - heading "最近任务" [level=3] [ref=e49]
+          - generic [ref=e50]: 最近 8 个
+        - generic [ref=e53]:
+          - heading "最近结果" [level=3] [ref=e54]
+          - generic [ref=e55]: 最近 8 个
+      - generic [ref=e57]:
+        - button "新建 Case" [ref=e58] [cursor=pointer]:
+          - img [ref=e59]
+          - text: 新建 Case
+        - button "新建任务" [ref=e60] [cursor=pointer]:
+          - img [ref=e61]
+          - text: 新建任务
+        - button "刷新" [ref=e63] [cursor=pointer]:
+          - img [ref=e64]
+          - text: 刷新

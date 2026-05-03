@@ -14,7 +14,7 @@ from .id_generator import EntityType, IDGenerator
 from .models import Result, Task
 from .registries import CaseRegistry, ResultRegistry, ServerRegistry, TaskRegistry
 from .result_storage import safe_artifact_name, store_emt_result, store_powerflow_result
-from .server_auth import decrypt_server_token, get_default_server
+from .server_auth import decrypt_server_token, get_default_server, migrate_server_token_to_workspace_key
 from .release_ops import materialize_entity, refresh_index, transition_task, write_audit
 
 
@@ -101,6 +101,7 @@ def execute_task(
 
     server_id, server = _resolve_server(task, case.server_id, servers)
     token = decrypt_server_token(server)
+    migrate_server_token_to_workspace_key(server_id, servers)
 
     submitted_at = datetime.now().isoformat()
     transition_task(task_id, "submitted", {"submitted_at": submitted_at, "server_id": server_id}, tasks)

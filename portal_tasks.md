@@ -1,0 +1,53 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: CP
+      - generic [ref=e6]:
+        - heading "收纳大师" [level=1] [ref=e7]
+        - paragraph [ref=e8]: CloudPSS Organizer
+    - navigation [ref=e9]:
+      - button "总览" [ref=e10] [cursor=pointer]
+      - button "模型与算例" [ref=e11] [cursor=pointer]
+      - button "任务" [active] [ref=e12] [cursor=pointer]
+      - button "结果" [ref=e13] [cursor=pointer]
+      - button "报告与归档" [ref=e14] [cursor=pointer]
+      - button "服务" [ref=e15] [cursor=pointer]
+      - button "审计" [ref=e16] [cursor=pointer]
+    - generic [ref=e17]:
+      - text: Workspace
+      - strong [ref=e18]: /home/chenying/.cloudpss
+  - main [ref=e19]:
+    - generic [ref=e20]:
+      - generic [ref=e21]:
+        - heading "任务" [level=2] [ref=e261]
+        - paragraph [ref=e23]: 创建、运行并追踪 CloudPSS 作业
+      - generic [ref=e24]:
+        - button "刷新" [ref=e25] [cursor=pointer]
+        - button "检查工作区" [ref=e26] [cursor=pointer]
+    - generic [ref=e263]:
+      - heading "任务队列" [level=3] [ref=e265]
+      - generic [ref=e266]:
+        - generic [ref=e267]:
+          - generic [ref=e268]:
+            - generic [ref=e269]: task_test_1
+            - generic [ref=e270]: completed
+          - generic [ref=e271]: task_20260502_122526_769ca475 · powerflow · result result_20260502_13...80273654
+          - generic [ref=e272]: "Config: {}"
+          - generic [ref=e273]: "Job: 55e046b3-3927-40f7-8835-20c4cfa57d79 · submitted 2026-05-02T13:15:08.364841 · completed 2026-05-02T13:15:12.872767"
+          - button "检查" [ref=e274] [cursor=pointer]
+        - generic [ref=e275]:
+          - generic [ref=e276]:
+            - generic [ref=e277]: test-emt
+            - generic [ref=e278]: completed
+          - generic [ref=e279]: task_20260502_131630_ccfaf9c0 · emt · result result_20260502_13...ad22e398
+          - generic [ref=e280]: "Config: {}"
+          - generic [ref=e281]: "Job: 591277af-c4d4-4f20-8d21-bd482ec20fb6 · submitted 2026-05-02T13:16:46.046074 · completed 2026-05-02T13:17:08.910020"
+          - button "检查" [ref=e282] [cursor=pointer]
+        - generic [ref=e283]:
+          - generic [ref=e284]:
+            - generic [ref=e285]: test3_ieee3
+            - generic [ref=e286]: completed
+          - generic [ref=e287]: task_20260502_160447_48e30dad · emt · result result_20260502_16...9dd613ac
+          - generic [ref=e288]: "Config: {}"
+          - generic [ref=e289]: "Job: 768f78e4-9438-4a9c-ad4f-2a345bb7cd7a · submitted 2026-05-02T16:04:51.809164 · completed 2026-05-02T16:05:02.404848"
+          - button "检查" [ref=e290] [cursor=pointer]

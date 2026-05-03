@@ -141,6 +141,15 @@ def _cmd_run_placeholder(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_compare_placeholder(args: argparse.Namespace) -> int:
+    """对比多个配置结果（占位符实现）"""
+    print_info("对比功能将在 Task 3 中实现")
+    print_info(f"配置文件: {', '.join(args.configs)}")
+    if args.output:
+        print_info(f"输出路径: {args.output}")
+    return 0
+
+
 def _cmd_version(args: argparse.Namespace) -> int:
     """显示版本信息"""
     from cloudpss_skills_v2 import __version__

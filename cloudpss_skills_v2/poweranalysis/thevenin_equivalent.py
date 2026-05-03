@@ -331,8 +331,8 @@ class TheveninEquivalentAnalysisLegacy:
     New code should use TheveninEquivalentAnalysis with PowerSystemModel.
     """
 
-    name = "thevenin_equivalent_legacy"
-    description = "戴维南等效 - 计算PCC点戴维南阻抗和短路容量 (Legacy)"
+    name = "thevenin_equivalent"
+    description = "戴维南等效 - 计算PCC点戴维南阻抗和短路容量"
 
     @property
     def config_schema(self) -> dict[str, Any]:

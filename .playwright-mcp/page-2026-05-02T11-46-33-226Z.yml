@@ -1,0 +1,46 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: CP
+      - generic [ref=e6]:
+        - heading "收纳大师" [level=1] [ref=e7]
+        - paragraph [ref=e8]: CloudPSS Organizer
+    - navigation [ref=e9]:
+      - button "总览" [ref=e10] [cursor=pointer]
+      - button "模型与算例" [ref=e11] [cursor=pointer]
+      - button "任务" [ref=e12] [cursor=pointer]
+      - button "结果" [active] [ref=e13] [cursor=pointer]
+      - button "报告与归档" [ref=e14] [cursor=pointer]
+      - button "服务" [ref=e15] [cursor=pointer]
+      - button "审计" [ref=e16] [cursor=pointer]
+    - generic [ref=e17]:
+      - text: Workspace
+      - strong [ref=e18]: /home/chenying/.cloudpss
+  - main [ref=e19]:
+    - generic [ref=e20]:
+      - generic [ref=e21]:
+        - heading "结果" [level=2] [ref=e291]
+        - paragraph [ref=e23]: 查看 manifest、metadata、潮流表和 EMT 通道
+      - generic [ref=e24]:
+        - button "刷新" [ref=e25] [cursor=pointer]
+        - button "检查工作区" [ref=e26] [cursor=pointer]
+    - generic [ref=e293]:
+      - generic [ref=e294]:
+        - heading "结果" [level=3] [ref=e296]
+        - generic [ref=e297]:
+          - generic [ref=e298]:
+            - generic [ref=e299]:
+              - generic [ref=e300]: task_test_1 result
+              - generic [ref=e301]: powerflow
+            - generic [ref=e302]: result_20260502_13...80273654 · 77201 bytes
+          - generic [ref=e303]:
+            - generic [ref=e304]:
+              - generic [ref=e305]: test-emt result
+              - generic [ref=e306]: emt
+            - generic [ref=e307]: result_20260502_13...ad22e398 · 7636068 bytes
+          - generic [ref=e308]:
+            - generic [ref=e309]:
+              - generic [ref=e310]: test3_ieee3 result
+              - generic [ref=e311]: emt
+            - generic [ref=e312]: result_20260502_16...9dd613ac · 2498103 bytes
+      - generic [ref=e314]: 选择一个 Result 查看 manifest、metadata 和 artifacts。

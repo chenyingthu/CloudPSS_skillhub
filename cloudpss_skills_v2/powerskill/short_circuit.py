@@ -20,6 +20,7 @@ from cloudpss_skills_v2.libs.data_lib.types import (
     FaultData,
     FaultType,
 )
+from cloudpss_skills_v2.core.system_model import PowerSystemModel
 
 
 class ShortCircuit(SimulationAPI):
@@ -74,6 +75,29 @@ class ShortCircuit(SimulationAPI):
 
     def get_raw_result(self, job_id: str) -> SimulationResult:
         return self._adapter.get_result(job_id)
+
+    def get_system_model(self, job_id: str) -> PowerSystemModel | None:
+        """Get unified PowerSystemModel for a completed short circuit job.
+
+        This is the new architecture method for accessing results
+        in an engine-agnostic format using DataClass components.
+
+        Args:
+            job_id: The simulation job ID
+
+        Returns:
+            Unified PowerSystemModel or None if not available
+        """
+        # First try to get from result's system_model field (new architecture)
+        result = self._adapter.get_result(job_id)
+        if result.system_model is not None:
+            return result.system_model
+
+        # Fall back to adapter's unified model cache
+        if hasattr(self._adapter, 'get_unified_model'):
+            return self._adapter.get_unified_model(job_id)
+
+        return None
 
 
 __all__ = ["ShortCircuit"]

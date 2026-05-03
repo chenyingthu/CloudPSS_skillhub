@@ -29,6 +29,7 @@ def main():
     print("  python -m cloudpss_skills_v3.master_organizer init")
     print("  python -m cloudpss_skills_v3.master_organizer.cli.main server list")
     print("  python -m cloudpss_skills_v3.master_organizer.cli.main query tree")
+    print("  python -m cloudpss_skills_v3.master_organizer.portal.server --port 8765")
     print()
     print("文档: docs/CLOUDPSS_MASTER_ORGANIZER_PLAN.md")
     print("=" * 60)

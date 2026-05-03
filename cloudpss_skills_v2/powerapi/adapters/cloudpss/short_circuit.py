@@ -30,6 +30,13 @@ from cloudpss_skills_v2.powerapi.adapters.cloudpss._component_utils import (
     get_components_by_definition,
     update_component_args,
 )
+from cloudpss_skills_v2.core.system_model import (
+    Bus,
+    Branch,
+    Generator,
+    Load,
+    PowerSystemModel,
+)
 
 _FAULT_TYPE_MAP = {
     "3phase": "3ph",
@@ -75,11 +82,12 @@ class CloudPSSShortCircuitAdapter(EngineAdapter):
         super().__init__(config)
         self._model_cache = {}
         self._result_cache = {}
-        
+        self._unified_model_cache: dict[str, PowerSystemModel] = {}
+
         auth = _resolve_auth(self._config)
         base_url = _resolve_base_url(self._config, auth)
         token = TokenManager.get_token(auth)
-        
+
         self._cloud_pss_adapter = CloudPSSAdapter(token=token, api_url=base_url)
 
     @property
@@ -102,6 +110,21 @@ class CloudPSSShortCircuitAdapter(EngineAdapter):
     def _do_disconnect(self) -> None:
         self._model_cache.clear()
         self._result_cache.clear()
+        self._unified_model_cache.clear()
+
+    def get_unified_model(self, job_id: str) -> PowerSystemModel | None:
+        """Get unified PowerSystemModel for a completed job.
+
+        This is the new architecture method for accessing results
+        in an engine-agnostic format.
+
+        Args:
+            job_id: The simulation job ID
+
+        Returns:
+            Unified PowerSystemModel or None if not found
+        """
+        return self._unified_model_cache.get(job_id)
 
     def _do_load_model(self, model_id: str) -> bool:
         from cloudpss import Model
@@ -233,14 +256,29 @@ class CloudPSSShortCircuitAdapter(EngineAdapter):
                 },
             }
 
+            # Build unified PowerSystemModel (new architecture)
+            # For short circuit, create a simplified model with fault information
+            system_model = self._to_unified_model(
+                fault_currents=fault_currents,
+                bus_voltages=bus_voltages,
+                fault_type=fault_type,
+                base_mva=100.0,
+            )
+
             sim_result = SimulationResult(
                 job_id=getattr(job, "id", job_id),
                 status=SimulationStatus.COMPLETED,
                 data=result_data,
                 started_at=started,
                 completed_at=datetime.now(),
+                system_model=system_model,  # New architecture: unified model
             )
-            self._result_cache[getattr(job, "id", job_id)] = sim_result
+
+            # Cache the unified model separately
+            job_id_key = getattr(job, "id", job_id)
+            self._unified_model_cache[job_id_key] = system_model
+
+            self._result_cache[job_id_key] = sim_result
             return sim_result
 
         except Exception as e:
@@ -272,6 +310,68 @@ class CloudPSSShortCircuitAdapter(EngineAdapter):
 
     def _setup_auth(self, config: dict[str, Any]) -> CloudPSSAdapter:
         return build_cloudpss_adapter(config)
+
+    # -------------------------------------------------------------------------
+    # Unified Model Conversion (New Architecture)
+    # -------------------------------------------------------------------------
+
+    def _to_unified_model(
+        self,
+        fault_currents: list[dict[str, Any]],
+        bus_voltages: list[dict[str, Any]],
+        fault_type: str,
+        base_mva: float = 100.0,
+    ) -> PowerSystemModel:
+        """Convert short circuit result to unified PowerSystemModel.
+
+        For short circuit analysis, creates a simplified model with fault info.
+
+        Args:
+            fault_currents: Extracted fault current data
+            bus_voltages: Extracted bus voltage data
+            fault_type: Type of fault simulated
+            base_mva: System base MVA
+
+        Returns:
+            Unified PowerSystemModel with fault information
+        """
+        # Create buses from voltage data
+        buses = []
+        for i, bv in enumerate(bus_voltages):
+            bus = Bus(
+                bus_id=i,
+                name=bv.get("channel", f"Bus_{i}"),
+                base_kv=230.0,  # Default, would need actual model data
+                bus_type="PQ",
+                v_magnitude_pu=bv.get("voltage_pu", 1.0),
+                vm_min_pu=0.9,
+                vm_max_pu=1.1,
+            )
+            buses.append(bus)
+
+        # Create branches from fault current data (representing fault paths)
+        branches = []
+        for i, fc in enumerate(fault_currents):
+            branch = Branch(
+                from_bus=0,
+                to_bus=1 if len(buses) > 1 else 0,
+                name=fc.get("channel", f"Fault_{i}"),
+                branch_type="LINE",
+                rate_a_mva=100.0,
+                p_from_mw=fc.get("current_ka", 0) * 230.0,  # Approximate power
+                loading_percent=min(fc.get("current_ka", 0) * 100, 500),  # Cap at 500%
+            )
+            branches.append(branch)
+
+        return PowerSystemModel(
+            buses=buses,
+            branches=branches,
+            generators=[],
+            loads=[],
+            base_mva=base_mva,
+            source_engine="cloudpss_sc",
+            name=f"ShortCircuit_{fault_type}",
+        )
 
     def _extract_fault_currents(self, emt_result: Any) -> list[dict[str, Any]]:
         """Extract fault current magnitudes from EMT waveform data."""

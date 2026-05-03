@@ -1,0 +1,130 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]: CP
+        - generic [ref=e6]:
+          - heading "收纳大师" [level=1] [ref=e7]
+          - paragraph [ref=e8]: CloudPSS Organizer
+      - navigation [ref=e9]:
+        - button "总览" [ref=e10] [cursor=pointer]
+        - button "模型与算例" [ref=e11] [cursor=pointer]
+        - button "任务" [ref=e12] [cursor=pointer]
+        - button "结果" [ref=e13] [cursor=pointer]
+        - button "报告与归档" [ref=e14] [cursor=pointer]
+        - button "服务" [ref=e15] [cursor=pointer]
+        - button "审计" [ref=e16] [cursor=pointer]
+      - generic [ref=e17]:
+        - generic [ref=e18]: Workspace
+        - strong [ref=e19]: "-"
+    - main [ref=e20]:
+      - generic [ref=e21]:
+        - generic [ref=e22]:
+          - heading "总览" [level=2] [ref=e23]
+          - paragraph [ref=e24]: 模型、配置、任务、结果、分析和报告的统一工作台
+        - generic [ref=e25]:
+          - button "刷新" [ref=e26] [cursor=pointer]
+          - button "检查工作区" [ref=e27] [cursor=pointer]
+      - generic [ref=e29]:
+        - generic [ref=e30]:
+          - generic [ref=e31] [cursor=pointer]:
+            - generic [ref=e32]: Servers
+            - strong [ref=e33]: "0"
+          - generic [ref=e34] [cursor=pointer]:
+            - generic [ref=e35]: Cases
+            - strong [ref=e36]: "0"
+          - generic [ref=e37] [cursor=pointer]:
+            - generic [ref=e38]: Tasks
+            - strong [ref=e39]: "0"
+          - generic [ref=e40] [cursor=pointer]:
+            - generic [ref=e41]: Results
+            - strong [ref=e42]: "0"
+          - generic [ref=e43] [cursor=pointer]:
+            - generic [ref=e44]: Storage
+            - strong [ref=e45]: 0 MB
+        - generic [ref=e46]:
+          - generic [ref=e48]:
+            - heading "最近任务" [level=3] [ref=e49]
+            - generic [ref=e50]: 最近 8 个
+          - generic [ref=e53]:
+            - heading "最近结果" [level=3] [ref=e54]
+            - generic [ref=e55]: 最近 8 个
+        - generic [ref=e57]:
+          - button "新建 Case" [ref=e58] [cursor=pointer]:
+            - img [ref=e59]
+            - text: 新建 Case
+          - button "新建任务" [ref=e60] [cursor=pointer]:
+            - img [ref=e61]
+            - text: 新建任务
+          - button "刷新" [ref=e63] [cursor=pointer]:
+            - img [ref=e64]
+            - text: 刷新
+  - dialog [ref=e67]:
+    - generic [ref=e68]:
+      - heading "新建仿真任务" [level=3] [ref=e69]
+      - generic [ref=e70]:
+        - heading "基本信息" [level=4] [ref=e71]
+        - generic [ref=e72]:
+          - text: 任务名称
+          - textbox "任务名称" [active] [ref=e73]:
+            - /placeholder: 例如：IEEE39 潮流计算
+      - generic [ref=e74]:
+        - heading "仿真类型" [level=4] [ref=e75]
+        - generic [ref=e76]:
+          - generic [ref=e77] [cursor=pointer]:
+            - radio "潮流计算 稳态分析" [checked]
+            - generic [ref=e78]:
+              - img [ref=e79]
+              - generic [ref=e82]: 潮流计算
+              - generic [ref=e83]: 稳态分析
+          - generic [ref=e84] [cursor=pointer]:
+            - radio "EMT 仿真 电磁暂态"
+            - generic [ref=e85]:
+              - img [ref=e86]
+              - generic [ref=e88]: EMT 仿真
+              - generic [ref=e89]: 电磁暂态
+          - generic [ref=e90] [cursor=pointer]:
+            - radio "稳定性分析 机电暂态"
+            - generic [ref=e91]:
+              - img [ref=e92]
+              - generic [ref=e95]: 稳定性分析
+              - generic [ref=e96]: 机电暂态
+      - generic [ref=e97]:
+        - generic [ref=e98]:
+          - heading "求解器设置" [level=4] [ref=e99]
+          - generic [ref=e100]:
+            - generic [ref=e101]:
+              - text: 最大迭代次数
+              - spinbutton "最大迭代次数" [ref=e102]: "20"
+            - generic [ref=e103]:
+              - text: 收敛容差
+              - textbox "收敛容差" [ref=e104]: "1e-6"
+        - generic [ref=e105]:
+          - heading "初始条件" [level=4] [ref=e106]
+          - generic [ref=e107] [cursor=pointer]:
+            - checkbox "使用平启动 (Flat Start)" [checked] [ref=e108]
+            - generic [ref=e109]: 使用平启动 (Flat Start)
+          - generic [ref=e110]:
+            - text: 电压初值来源
+            - combobox "电压初值来源" [ref=e111]:
+              - option "平启动 (1.0 pu)" [selected]
+              - option "上次结果"
+              - option "自定义"
+        - generic [ref=e112]:
+          - heading "输出设置" [level=4] [ref=e113]
+          - generic [ref=e114]:
+            - text: 输出格式
+            - combobox "输出格式" [ref=e115]:
+              - option "JSON" [selected]
+              - option "CSV"
+              - option "HDF5"
+          - generic [ref=e116] [cursor=pointer]:
+            - checkbox "母线结果表" [checked] [ref=e117]
+            - generic [ref=e118]: 母线结果表
+          - generic [ref=e119] [cursor=pointer]:
+            - checkbox "支路结果表" [checked] [ref=e120]
+            - generic [ref=e121]: 支路结果表
+      - button "高级配置" [ref=e123] [cursor=pointer]
+      - generic [ref=e124]:
+        - button "取消" [ref=e125] [cursor=pointer]
+        - button "创建任务" [ref=e126] [cursor=pointer]

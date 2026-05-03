@@ -1,0 +1,80 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: CP
+      - generic [ref=e6]:
+        - heading "收纳大师" [level=1] [ref=e7]
+        - paragraph [ref=e8]: CloudPSS Organizer
+    - navigation [ref=e9]:
+      - button "总览" [ref=e10] [cursor=pointer]
+      - button "模型与算例" [ref=e11] [cursor=pointer]
+      - button "任务" [ref=e12] [cursor=pointer]
+      - button "结果" [ref=e13] [cursor=pointer]
+      - button "报告与归档" [ref=e14] [cursor=pointer]
+      - button "服务" [ref=e15] [cursor=pointer]
+      - button "审计" [ref=e16] [cursor=pointer]
+    - generic [ref=e17]:
+      - text: Workspace
+      - strong [ref=e18]: /home/chenying/.cloudpss
+  - main [ref=e19]:
+    - generic [ref=e20]:
+      - generic [ref=e21]:
+        - heading "总览" [level=2] [ref=e22]
+        - paragraph [ref=e23]: 模型、配置、任务、结果、分析和报告的统一工作台
+      - generic [ref=e24]:
+        - button "刷新" [ref=e25] [cursor=pointer]
+        - button "检查工作区" [ref=e26] [cursor=pointer]
+    - generic [ref=e27]:
+      - generic [ref=e28]:
+        - generic [ref=e29]:
+          - generic [ref=e30]: Servers
+          - strong [ref=e31]: "1"
+        - generic [ref=e32]:
+          - generic [ref=e33]: Cases
+          - strong [ref=e34]: "2"
+        - generic [ref=e35]:
+          - generic [ref=e36]: Tasks
+          - strong [ref=e37]: "3"
+        - generic [ref=e38]:
+          - generic [ref=e39]: Results
+          - strong [ref=e40]: "3"
+        - generic [ref=e41]:
+          - generic [ref=e42]: Storage
+          - strong [ref=e43]: 9.777 MB
+      - generic [ref=e44]:
+        - generic [ref=e45]:
+          - heading "最近任务" [level=3] [ref=e47]
+          - generic [ref=e48]:
+            - generic [ref=e49]:
+              - generic [ref=e50]:
+                - generic [ref=e51]: test3_ieee3
+                - generic [ref=e52]: completed
+              - generic [ref=e53]: task_20260502_160447_48e30dad · emt · case case_20260502_160422_3d26b996
+            - generic [ref=e54]:
+              - generic [ref=e55]:
+                - generic [ref=e56]: test-emt
+                - generic [ref=e57]: completed
+              - generic [ref=e58]: task_20260502_131630_ccfaf9c0 · emt · case case_20260502_122459_a78b866f
+            - generic [ref=e59]:
+              - generic [ref=e60]:
+                - generic [ref=e61]: task_test_1
+                - generic [ref=e62]: completed
+              - generic [ref=e63]: task_20260502_122526_769ca475 · powerflow · case case_20260502_122459_a78b866f
+        - generic [ref=e64]:
+          - heading "最近结果" [level=3] [ref=e66]
+          - generic [ref=e67]:
+            - generic [ref=e68]:
+              - generic [ref=e69]:
+                - generic [ref=e70]: test3_ieee3 result
+                - generic [ref=e71]: emt
+              - generic [ref=e72]: result_20260502_16...9dd613ac · 2498103 bytes
+            - generic [ref=e73]:
+              - generic [ref=e74]:
+                - generic [ref=e75]: test-emt result
+                - generic [ref=e76]: emt
+              - generic [ref=e77]: result_20260502_13...ad22e398 · 7636068 bytes
+            - generic [ref=e78]:
+              - generic [ref=e79]:
+                - generic [ref=e80]: task_test_1 result
+                - generic [ref=e81]: powerflow
+              - generic [ref=e82]: result_20260502_13...80273654 · 77201 bytes

@@ -51,20 +51,12 @@ class FakePowerFlow:
 @pytest.fixture(autouse=True)
 def avoid_engine_claims(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
-        "cloudpss_skills_v2.poweranalysis.thevenin_equivalent.Engine.create_powerflow_for_skill",
+        "cloudpss_skills_v2.powerskill.Engine.create_powerflow_for_skill",
         lambda **kwargs: FakePowerFlow(),
     )
     monkeypatch.setattr(
-        "cloudpss_skills_v2.poweranalysis.power_quality_analysis.Engine.create_powerflow_for_skill",
-        lambda **kwargs: FakePowerFlow(),
-    )
-    monkeypatch.setattr(
-        "cloudpss_skills_v2.poweranalysis.protection_coordination.Engine.create_powerflow",
-        lambda engine: FakePowerFlow(),
-    )
-    monkeypatch.setattr(
-        "cloudpss_skills_v2.poweranalysis.renewable_integration.Engine.create_powerflow",
-        lambda engine: FakePowerFlow(),
+        "cloudpss_skills_v2.powerskill.Engine.create_powerflow",
+        lambda engine, **kwargs: FakePowerFlow(),
     )
 
 

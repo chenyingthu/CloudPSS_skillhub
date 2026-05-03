@@ -82,7 +82,25 @@ def decrypt_server_token(server: Server, *, key_path: Optional[Path] = None) -> 
         raise ValueError(f"server {server.id} does not have an encrypted token")
     if not encrypted.startswith("ENC:"):
         raise ValueError(f"server {server.id} token is not encrypted")
-    return get_crypto_manager(key_path or _workspace_key_path()).decrypt(encrypted[4:])
+    candidate_paths = [key_path or _workspace_key_path(), Path.home() / ".cloudpss_key"]
+    errors = []
+    for candidate in dict.fromkeys(candidate_paths):
+        try:
+            return get_crypto_manager(candidate).decrypt(encrypted[4:])
+        except ValueError as exc:
+            errors.append(f"{candidate}: {exc}")
+    raise ValueError("Decryption failed with workspace and legacy keys: " + " | ".join(errors))
+
+
+def migrate_server_token_to_workspace_key(server_id: str, registry: Optional[ServerRegistry] = None) -> bool:
+    """Re-encrypt a server token with the current workspace key if it can be decrypted."""
+    registry = registry or ServerRegistry()
+    server = registry.get(server_id)
+    if not server:
+        return False
+    token = decrypt_server_token(server)
+    auth = build_auth_metadata(token, {k: v for k, v in server.auth.items() if k != "encrypted_token"})
+    return registry.update(server_id, {"auth": auth})
 
 
 def get_default_server(registry: Optional[ServerRegistry] = None) -> tuple[str, Server] | None:

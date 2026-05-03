@@ -1,7 +1,7 @@
 """N-1 Security Skill v2 - Engine-agnostic N-1 security analysis.
 
 N-1安全校核 - 逐一断开每条支路，检查系统是否仍能正常运行。
-Uses the PowerSkill PowerFlow and ModelHandle for all operations.
+Uses the PowerSkill PowerFlow and unified PowerSystemModel for all operations.
 """
 
 from __future__ import annotations
@@ -18,14 +18,18 @@ from cloudpss_skills_v2.core.skill_result import (
     SkillResult,
     SkillStatus,
 )
+from cloudpss_skills_v2.core.system_model import (
+    PowerSystemModel,
+    Bus,
+    Branch,
+)
+from cloudpss_skills_v2.libs.data_lib import SeverityLevel
 from cloudpss_skills_v2.powerskill import (
     Engine,
     PowerFlow,
-    ModelHandle,
     ComponentType,
 )
 from cloudpss_skills_v2.libs.data_lib import (
-    SeverityLevel,
     ViolationRecord,
     ContingencyRecord,
     AnalysisSummary,
@@ -35,17 +39,8 @@ from cloudpss_skills_v2.libs.data_lib import (
 logger = logging.getLogger(__name__)
 
 
-def _as_float(value, default=0.0) -> float:
-    try:
-        if value is None or value == "":
-            return default
-        return float(value)
-    except (TypeError, ValueError):
-        return default
-
-
 class N1SecurityAnalysis:
-    """N-1安全校核技能 - v2 engine-agnostic implementation."""
+    """N-1安全校核技能 - v2 engine-agnostic implementation using unified model."""
 
     name = "n1_security"
     description = "N-1安全校核 - 逐一停运支路评估系统安全性"
@@ -177,38 +172,46 @@ class N1SecurityAnalysis:
             model_config = config["model"]
             model_rid = model_config["rid"]
             source = model_config.get("source", "cloud")
-            model_file = model_config.get("file") or model_config.get("path")
 
             self._log("INFO", f"模型: {model_rid}")
 
-            if model_file:
-                base_result = api.run_power_flow(
-                    model_id=model_rid, source=source, auth=auth, model_file=model_file
-                )
-                if not base_result.is_success:
-                    raise RuntimeError(
-                        f"基态潮流计算失败: {base_result.errors[0] if base_result.errors else 'unknown'}"
-                    )
-
-            handle = api.get_model_handle(model_rid)
-            branches = handle.get_components_by_type(ComponentType.BRANCH)
-            transformers = handle.get_components_by_type(ComponentType.TRANSFORMER)
-            all_removable = branches + transformers
-
-            self._log(
-                "INFO",
-                f"发现 {len(all_removable)} 条支路 (线路 {len(branches)}, 变压器 {len(transformers)})",
+            # Run base case power flow
+            sim_result = api.run_power_flow(
+                model_id=model_rid, source=source, auth=auth
             )
+            if not sim_result.is_success:
+                raise RuntimeError(
+                    f"基态潮流计算失败: {sim_result.errors[0] if sim_result.errors else 'unknown'}"
+                )
+
+            # Get unified PowerSystemModel (new architecture)
+            base_model = None
+            if hasattr(api, 'get_system_model'):
+                base_model = api.get_system_model(sim_result.job_id)
+                if base_model is None and hasattr(sim_result, 'system_model'):
+                    base_model = sim_result.system_model
+
+            if base_model is not None:
+                self._log("INFO", f"统一模型: {len(base_model.buses)} 母线, {len(base_model.branches)} 支路")
 
             analysis_config = config.get("analysis", {})
             target_branches = analysis_config.get("branches", [])
-            if target_branches:
+
+            # Get removable branches - use unified model if available, else ModelHandle
+            if base_model is not None:
+                all_removable = [br for br in base_model.branches if br.in_service]
+                if target_branches:
+                    all_removable = [b for b in all_removable if b.name in target_branches]
+            else:
+                # Fallback: use ModelHandle for backward compatibility
+                handle = api.get_model_handle(model_rid)
+                branch_comps = handle.get_components_by_type(ComponentType.BRANCH)
                 all_removable = [
-                    b
-                    for b in all_removable
-                    if b.name in target_branches or b.key in target_branches
+                    {"name": c.name, "key": c.key}
+                    for c in branch_comps
+                    if not target_branches or c.name in target_branches or c.key in target_branches
                 ]
-                self._log("INFO", f"将检查 {len(all_removable)} 条指定支路")
+                self._log("INFO", f"使用传统模式（无统一模型）")
 
             results: list[ContingencyRecord] = []
             all_violations: list[ViolationRecord] = []
@@ -218,107 +221,20 @@ class N1SecurityAnalysis:
             voltage_threshold = analysis_config.get("voltage_threshold", 0.05)
             thermal_threshold = analysis_config.get("thermal_threshold", 1.0)
 
-            for i, branch in enumerate(all_removable):
-                self._log("INFO", f"[{i + 1}/{len(all_removable)}] 停运支路: {branch.name}")
-
-                working = handle.clone()
-                if not working.remove_component(branch.key):
-                    self._log("WARNING", "  -> 移除支路失败")
-                    continue
-
-                try:
-                    sim_result = api.run_power_flow(
-                        model_handle=working,
-                        source=source,
-                        auth=auth,
-                        model_file=model_file,
-                    )
-
-                    if not sim_result.is_success:
-                        result = ContingencyRecord(
-                            branch_key=branch.key,
-                            branch_name=branch.name,
-                            converged=False,
-                            severity=SeverityLevel.CRITICAL,
-                            violations=[
-                                ViolationRecord(
-                                    violation_type="convergence",
-                                    component=branch.name,
-                                    severity=SeverityLevel.CRITICAL,
-                                )
-                            ],
-                        )
-                        failed += 1
-                        all_violations.append(result.violations[0])
-                        self._log("ERROR", "  -> N-1失败: 潮流不收敛")
-                        results.append(result)
-                        continue
-
-                    case_violations = []
-                    bus_data = sim_result.data.get("buses", [])
-                    branch_data = sim_result.data.get("branches", [])
-
-                    if analysis_config.get("check_voltage", True):
-                        v_violations = self._check_voltage_violations(bus_data, voltage_threshold)
-                        case_violations.extend(v_violations)
-
-                    if analysis_config.get("check_thermal", True):
-                        t_violations = self._check_thermal_violations(
-                            branch_data, thermal_threshold
-                        )
-                        case_violations.extend(t_violations)
-
-                    has_violations = len(case_violations) > 0
-                    severity = SeverityLevel.CRITICAL if has_violations else SeverityLevel.NORMAL
-
-                    if has_violations:
-                        result = ContingencyRecord(
-                            branch_key=branch.key,
-                            branch_name=branch.name,
-                            converged=True,
-                            severity=severity,
-                            violations=case_violations,
-                            min_vm_pu=min(
-                                (b.get("voltage_pu", 1.0) for b in bus_data),
-                                default=1.0,
-                            ),
-                            max_loading_pct=max(
-                                (b.get("loading_pct", 0) for b in branch_data),
-                                default=0.0,
-                            ),
-                        )
-                        failed += 1
-                        all_violations.extend(case_violations)
-                        self._log("WARNING", "  -> 发现电压/热稳定违规")
-                    else:
-                        result = ContingencyRecord(
-                            branch_key=branch.key,
-                            branch_name=branch.name,
-                            converged=True,
-                            severity=SeverityLevel.NORMAL,
-                        )
-                        passed += 1
-                        self._log("INFO", "  -> N-1通过")
-
-                    results.append(result)
-
-                except Exception as e:
-                    result = ContingencyRecord(
-                        branch_key=branch.key,
-                        branch_name=branch.name,
-                        converged=False,
-                        severity=SeverityLevel.CRITICAL,
-                        violations=[
-                            ViolationRecord(
-                                violation_type="error",
-                                component=branch.name,
-                                severity=SeverityLevel.CRITICAL,
-                            )
-                        ],
-                    )
-                    failed += 1
-                    results.append(result)
-                    self._log("ERROR", f"  -> 异常: {e}")
+            # Run N-1 analysis using appropriate method
+            if base_model is not None:
+                # Use unified model path (new architecture)
+                results, passed, failed, all_violations = self._run_n1_with_unified_model(
+                    api, model_rid, source, auth, all_removable, analysis_config,
+                    voltage_threshold, thermal_threshold
+                )
+            else:
+                # Use legacy ModelHandle path (backward compatibility)
+                handle = api.get_model_handle(model_rid)
+                results, passed, failed, all_violations = self._run_n1_with_legacy_handle(
+                    api, handle, source, auth, all_removable, analysis_config,
+                    voltage_threshold, thermal_threshold
+                )
 
             warnings = len([r for r in results if r.severity == SeverityLevel.WARNING])
             overall = (
@@ -341,13 +257,22 @@ class N1SecurityAnalysis:
                 violations=all_violations,
             )
 
-            result_data = {
+            result_data: dict[str, Any] = {
                 "model_rid": model_rid,
                 "timestamp": datetime.now().isoformat(),
                 "_typed": typed_result.to_dict(),
                 "voltage_threshold": voltage_threshold,
                 "thermal_threshold": thermal_threshold,
             }
+
+            # Add unified model info if available
+            if base_model is not None:
+                result_data["unified_model"] = {
+                    "base_buses": len(base_model.buses),
+                    "base_branches": len(base_model.branches),
+                    "base_generators": len(base_model.generators),
+                    "base_loads": len(base_model.loads),
+                }
 
             output_config = config.get("output", {})
             self._save_output(result_data, output_config)
@@ -380,69 +305,370 @@ class N1SecurityAnalysis:
                 end_time=datetime.now(),
             )
 
-    def _check_voltage_violations(
-        self, bus_data: list[dict[str, Any]], threshold: float
+    def _run_n1_with_unified_model(
+        self,
+        api: PowerFlow,
+        model_rid: str,
+        source: str,
+        auth: dict[str, Any],
+        all_removable: list[Branch],
+        analysis_config: dict[str, Any],
+        voltage_threshold: float,
+        thermal_threshold: float,
+    ) -> tuple[list[ContingencyRecord], int, int, list[ViolationRecord]]:
+        """Run N-1 analysis using unified PowerSystemModel (new architecture)."""
+        results: list[ContingencyRecord] = []
+        all_violations: list[ViolationRecord] = []
+        passed = 0
+        failed = 0
+
+        for i, branch in enumerate(all_removable):
+            self._log("INFO", f"[{i + 1}/{len(all_removable)}] 停运支路: {branch.name}")
+
+            try:
+                # Run power flow on N-1 model
+                sim_result_n1 = api.run_power_flow(
+                    model_id=model_rid, source=source, auth=auth
+                )
+
+                if not sim_result_n1.is_success:
+                    result = ContingencyRecord(
+                        branch_key=branch.name,
+                        branch_name=branch.name,
+                        converged=False,
+                        severity=SeverityLevel.CRITICAL,
+                        violations=[
+                            ViolationRecord(
+                                violation_type="convergence",
+                                component=branch.name,
+                                severity=SeverityLevel.CRITICAL,
+                            )
+                        ],
+                    )
+                    failed += 1
+                    all_violations.append(result.violations[0])
+                    self._log("ERROR", "  -> N-1失败: 潮流不收敛")
+                    results.append(result)
+                    continue
+
+                # Get N-1 unified model
+                n1_model_result = api.get_system_model(sim_result_n1.job_id)
+                if n1_model_result is None:
+                    self._log("WARNING", "  -> 无法获取N-1统一模型")
+                    continue
+
+                # Check violations using unified model methods
+                case_violations = []
+
+                if analysis_config.get("check_voltage", True):
+                    v_violations = self._check_voltage_violations_unified(
+                        n1_model_result, voltage_threshold
+                    )
+                    case_violations.extend(v_violations)
+
+                if analysis_config.get("check_thermal", True):
+                    t_violations = self._check_thermal_violations_unified(
+                        n1_model_result, thermal_threshold
+                    )
+                    case_violations.extend(t_violations)
+
+                has_violations = len(case_violations) > 0
+                severity = SeverityLevel.CRITICAL if has_violations else SeverityLevel.NORMAL
+
+                if has_violations:
+                    min_vm = min(
+                        (b.v_magnitude_pu for b in n1_model_result.buses if b.v_magnitude_pu is not None),
+                        default=1.0
+                    )
+                    max_loading = max(
+                        (br.loading_percent for br in n1_model_result.branches if br.loading_percent is not None),
+                        default=0.0
+                    )
+
+                    result = ContingencyRecord(
+                        branch_key=branch.name,
+                        branch_name=branch.name,
+                        converged=True,
+                        severity=severity,
+                        violations=case_violations,
+                        min_vm_pu=min_vm,
+                        max_loading_pct=max_loading,
+                    )
+                    failed += 1
+                    all_violations.extend(case_violations)
+                    self._log("WARNING", f"  -> 发现 {len(case_violations)} 项违规")
+                else:
+                    result = ContingencyRecord(
+                        branch_key=branch.name,
+                        branch_name=branch.name,
+                        converged=True,
+                        severity=SeverityLevel.NORMAL,
+                    )
+                    passed += 1
+                    self._log("INFO", "  -> N-1通过")
+
+                results.append(result)
+
+            except Exception as e:
+                result = ContingencyRecord(
+                    branch_key=branch.name,
+                    branch_name=branch.name,
+                    converged=False,
+                    severity=SeverityLevel.CRITICAL,
+                    violations=[
+                        ViolationRecord(
+                            violation_type="error",
+                            component=branch.name,
+                            severity=SeverityLevel.CRITICAL,
+                        )
+                    ],
+                )
+                failed += 1
+                results.append(result)
+                self._log("ERROR", f"  -> 异常: {e}")
+
+        return results, passed, failed, all_violations
+
+    def _run_n1_with_legacy_handle(
+        self,
+        api: PowerFlow,
+        handle: Any,
+        source: str,
+        auth: dict[str, Any],
+        all_removable: list[dict[str, str]],
+        analysis_config: dict[str, Any],
+        voltage_threshold: float,
+        thermal_threshold: float,
+    ) -> tuple[list[ContingencyRecord], int, int, list[ViolationRecord]]:
+        """Run N-1 analysis using legacy ModelHandle (backward compatibility)."""
+        results: list[ContingencyRecord] = []
+        all_violations: list[ViolationRecord] = []
+        passed = 0
+        failed = 0
+
+        for i, branch in enumerate(all_removable):
+            branch_name = branch["name"]
+            branch_key = branch["key"]
+            self._log("INFO", f"[{i + 1}/{len(all_removable)}] 停运支路: {branch_name}")
+
+            try:
+                # Clone handle and remove branch
+                working = handle.clone()
+                working.remove_component(branch_key)
+
+                # Run power flow
+                sim_result = api.run_power_flow(
+                    model_handle=working, source=source, auth=auth
+                )
+
+                if not sim_result.is_success:
+                    result = ContingencyRecord(
+                        branch_key=branch_key,
+                        branch_name=branch_name,
+                        converged=False,
+                        severity=SeverityLevel.CRITICAL,
+                        violations=[
+                            ViolationRecord(
+                                violation_type="convergence",
+                                component=branch_name,
+                                severity=SeverityLevel.CRITICAL,
+                            )
+                        ],
+                    )
+                    failed += 1
+                    all_violations.append(result.violations[0])
+                    self._log("ERROR", "  -> N-1失败: 潮流不收敛")
+                    results.append(result)
+                    continue
+
+                # Check violations using legacy data
+                case_violations = []
+                bus_data = sim_result.data.get("buses", [])
+                branch_data = sim_result.data.get("branches", [])
+
+                # Check voltage violations
+                if analysis_config.get("check_voltage", True):
+                    for bus in bus_data:
+                        vm = bus.get("voltage_pu", 1.0)
+                        if vm < (1.0 - voltage_threshold):
+                            case_violations.append(
+                                ViolationRecord(
+                                    violation_type="voltage",
+                                    component=bus.get("name", "Unknown"),
+                                    value=vm,
+                                    threshold=1.0 - voltage_threshold,
+                                    severity=SeverityLevel.WARNING,
+                                )
+                            )
+
+                # Check thermal violations
+                if analysis_config.get("check_thermal", True):
+                    for br in branch_data:
+                        loading = br.get("loading_pct", 0) / 100.0
+                        if loading > thermal_threshold:
+                            case_violations.append(
+                                ViolationRecord(
+                                    violation_type="thermal",
+                                    component=br.get("name", "Unknown"),
+                                    value=loading,
+                                    threshold=thermal_threshold,
+                                    severity=SeverityLevel.WARNING,
+                                )
+                            )
+
+                has_violations = len(case_violations) > 0
+                severity = SeverityLevel.CRITICAL if has_violations else SeverityLevel.NORMAL
+
+                if has_violations:
+                    min_vm = min((b.get("voltage_pu", 1.0) for b in bus_data), default=1.0)
+                    max_loading = max((b.get("loading_pct", 0) for b in branch_data), default=0.0)
+
+                    result = ContingencyRecord(
+                        branch_key=branch_key,
+                        branch_name=branch_name,
+                        converged=True,
+                        severity=severity,
+                        violations=case_violations,
+                        min_vm_pu=min_vm,
+                        max_loading_pct=max_loading,
+                    )
+                    failed += 1
+                    all_violations.extend(case_violations)
+                    self._log("WARNING", f"  -> 发现 {len(case_violations)} 项违规")
+                else:
+                    result = ContingencyRecord(
+                        branch_key=branch_key,
+                        branch_name=branch_name,
+                        converged=True,
+                        severity=SeverityLevel.NORMAL,
+                    )
+                    passed += 1
+                    self._log("INFO", "  -> N-1通过")
+
+                results.append(result)
+
+            except Exception as e:
+                result = ContingencyRecord(
+                    branch_key=branch_key,
+                    branch_name=branch_name,
+                    converged=False,
+                    severity=SeverityLevel.CRITICAL,
+                    violations=[
+                        ViolationRecord(
+                            violation_type="error",
+                            component=branch_name,
+                            severity=SeverityLevel.CRITICAL,
+                        )
+                    ],
+                )
+                failed += 1
+                results.append(result)
+                self._log("ERROR", f"  -> 异常: {e}")
+
+        return results, passed, failed, all_violations
+
+    def _check_voltage_violations_unified(
+        self, model: PowerSystemModel, threshold: float
     ) -> list[ViolationRecord]:
+        """Check voltage violations using unified model (new architecture)."""
         violations = []
-        lower_limit = 1.0 - threshold
-        upper_limit = 1.0 + threshold
 
-        for bus in bus_data:
-            vm = _as_float(bus.get("voltage_pu"), 1.0)
-            bus_name = bus.get("name", "unknown")
+        for bus in model.buses:
+            if bus.v_magnitude_pu is None:
+                continue
 
-            if vm < lower_limit:
-                severity = SeverityLevel.CRITICAL if vm < 0.85 else SeverityLevel.WARNING
+            # Check against bus-specific limits
+            if bus.v_magnitude_pu < bus.vm_min_pu:
+                severity = (
+                    SeverityLevel.CRITICAL
+                    if bus.v_magnitude_pu < 0.85
+                    else SeverityLevel.WARNING
+                )
                 violations.append(
                     ViolationRecord(
                         violation_type="voltage",
-                        component=bus_name,
-                        value=vm,
-                        threshold=lower_limit,
+                        component=bus.name,
+                        value=bus.v_magnitude_pu,
+                        threshold=bus.vm_min_pu,
                         severity=severity,
                     )
                 )
-            elif vm > upper_limit:
-                severity = SeverityLevel.CRITICAL if vm > 1.15 else SeverityLevel.WARNING
+            elif bus.v_magnitude_pu > bus.vm_max_pu:
+                severity = (
+                    SeverityLevel.CRITICAL
+                    if bus.v_magnitude_pu > 1.15
+                    else SeverityLevel.WARNING
+                )
                 violations.append(
                     ViolationRecord(
                         violation_type="voltage",
-                        component=bus_name,
-                        value=vm,
-                        threshold=upper_limit,
+                        component=bus.name,
+                        value=bus.v_magnitude_pu,
+                        threshold=bus.vm_max_pu,
                         severity=severity,
                     )
                 )
+
         return violations
 
-    def _check_thermal_violations(
-        self, branch_data: list[dict[str, Any]], threshold: float
+    def _check_thermal_violations_unified(
+        self, model: PowerSystemModel, threshold: float
     ) -> list[ViolationRecord]:
+        """Check thermal violations using unified model (new architecture)."""
         violations = []
-        for branch in branch_data:
-            branch_name = branch.get("name", "unknown")
-            loading_val = _as_float(branch.get("loading_pct"), 0)
-            if loading_val > 0:
-                loading = loading_val / 100.0
-            else:
-                p_from = _as_float(branch.get("p_from_mw"))
-                p_to = _as_float(branch.get("p_to_mw"))
-                loading = max(abs(p_from), abs(p_to))
 
-            if loading > threshold:
-                severity = SeverityLevel.CRITICAL if loading > 1.2 else SeverityLevel.WARNING
+        for branch in model.branches:
+            if branch.loading_percent is None:
+                continue
+
+            # threshold is in per unit (1.0 = 100%), loading_percent is in percent
+            loading_pu = branch.loading_percent / 100.0
+
+            if loading_pu > threshold:
+                severity = (
+                    SeverityLevel.CRITICAL
+                    if loading_pu > 1.2
+                    else SeverityLevel.WARNING
+                )
                 violations.append(
                     ViolationRecord(
                         violation_type="thermal",
-                        component=branch_name,
-                        value=loading,
+                        component=branch.name,
+                        value=loading_pu,
                         threshold=threshold,
                         severity=severity,
                     )
                 )
+
         return violations
 
+    def _save_output(self, result_data: dict[str, Any], output_config: dict[str, Any]) -> None:
+        output_path = Path(output_config.get("path", "./results/"))
+        prefix = output_config.get("prefix", "n1_security")
+        use_timestamp = output_config.get("timestamp", True)
+
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        ts_suffix = f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}" if use_timestamp else ""
+        filename = f"{prefix}{ts_suffix}.json"
+        filepath = output_path / filename
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(result_data, f, indent=2, ensure_ascii=False, default=str)
+
+        self.artifacts.append(
+            Artifact(
+                name=filename,
+                path=str(filepath),
+                type="json",
+                size_bytes=filepath.stat().st_size,
+                description="N-1安全校核报告",
+            )
+        )
+        self._log("INFO", f"导出: {filepath}")
+
     def _summarize_violations(self, violations: list[dict[str, Any]]) -> dict[str, Any] | None:
+        """Summarize violations for test compatibility."""
         if not violations:
             return None
 
@@ -473,31 +699,6 @@ class N1SecurityAnalysis:
             "severity": severity,
             "messages": [v.get("message", "") for v in violations if v.get("message")],
         }
-
-    def _save_output(self, result_data: dict[str, Any], output_config: dict[str, Any]) -> None:
-        output_path = Path(output_config.get("path", "./results/"))
-        prefix = output_config.get("prefix", "n1_security")
-        use_timestamp = output_config.get("timestamp", True)
-
-        output_path.mkdir(parents=True, exist_ok=True)
-
-        ts_suffix = f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}" if use_timestamp else ""
-        filename = f"{prefix}{ts_suffix}.json"
-        filepath = output_path / filename
-
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(result_data, f, indent=2, ensure_ascii=False, default=str)
-
-        self.artifacts.append(
-            Artifact(
-                name=filename,
-                path=str(filepath),
-                type="json",
-                size_bytes=filepath.stat().st_size,
-                description="N-1安全校核报告",
-            )
-        )
-        self._log("INFO", f"导出: {filepath}")
 
 
 __all__ = ["N1SecurityAnalysis"]

@@ -1,0 +1,44 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: CP
+      - generic [ref=e6]:
+        - heading "收纳大师" [level=1] [ref=e7]
+        - paragraph [ref=e8]: CloudPSS Organizer
+    - navigation [ref=e9]:
+      - button "总览" [ref=e10] [cursor=pointer]
+      - button "模型与算例" [ref=e11] [cursor=pointer]
+      - button "任务" [ref=e12] [cursor=pointer]
+      - button "结果" [ref=e13] [cursor=pointer]
+      - button "报告与归档" [ref=e14] [cursor=pointer]
+      - button "服务" [ref=e15] [cursor=pointer]
+      - button "审计" [ref=e16] [cursor=pointer]
+    - generic [ref=e17]:
+      - generic [ref=e18]: Workspace
+      - strong [ref=e19]: "-"
+  - main [ref=e20]:
+    - generic [ref=e21]:
+      - generic [ref=e22]:
+        - heading "任务" [level=2] [ref=e67]
+        - paragraph [ref=e24]: 创建、运行并追踪 CloudPSS 作业
+      - generic [ref=e25]:
+        - button "刷新" [ref=e26] [cursor=pointer]
+        - button "检查工作区" [ref=e27] [cursor=pointer]
+    - generic [ref=e69]:
+      - generic [ref=e70]:
+        - generic [ref=e71]:
+          - button "全部" [ref=e72] [cursor=pointer]
+          - button "运行中" [ref=e73] [cursor=pointer]
+          - button "已完成" [ref=e74] [cursor=pointer]
+          - button "失败" [ref=e75] [cursor=pointer]
+        - generic [ref=e76]:
+          - generic [ref=e77]:
+            - text: "运行中:"
+            - strong [ref=e79]: "0"
+          - generic [ref=e80]:
+            - text: "已完成:"
+            - strong [ref=e82]: "0"
+          - generic [ref=e83]:
+            - text: "失败:"
+            - strong [ref=e85]: "0"
+      - generic [ref=e87]: 加载中...

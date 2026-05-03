@@ -239,6 +239,8 @@ def generate_result_report(result_id: str, output: Path | None = None) -> Path:
     if not result:
         raise ValueError(f"结果不存在: {result_id}")
     result_dir = pm.get_result_path(result_id)
+    case = CaseRegistry().get(result.case_id)
+    task = TaskRegistry().get(result.task_id)
     report_path = output or (result_dir / "report.md")
     report_path = report_path.expanduser().resolve()
     report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -253,8 +255,74 @@ def generate_result_report(result_id: str, output: Path | None = None) -> Path:
         f"- Created At: `{result.created_at}`",
         f"- Size: `{result.size_bytes}` bytes",
         "",
-        "## Metadata",
+        "## Case",
     ]
+    if case:
+        lines.extend(
+            [
+                f"- Name: `{case.name}`",
+                f"- RID: `{case.rid}`",
+                f"- Server ID: `{case.server_id}`",
+                f"- Status: `{case.status}`",
+                f"- Tags: `{', '.join(case.tags)}`",
+            ]
+        )
+    else:
+        lines.append("- Case registry entry not found")
+
+    lines.extend(["", "## Task"])
+    if task:
+        lines.extend(
+            [
+                f"- Name: `{task.name}`",
+                f"- Type: `{task.type}`",
+                f"- Status: `{task.status}`",
+                f"- Job ID: `{task.job_id}`",
+                f"- Submitted At: `{task.submitted_at}`",
+                f"- Completed At: `{task.completed_at}`",
+                "",
+                "### Task Config",
+                "",
+                "```json",
+                json.dumps(task.config, ensure_ascii=False, indent=2),
+                "```",
+            ]
+        )
+    else:
+        lines.append("- Task registry entry not found")
+
+    lines.extend(
+        [
+            "",
+            "## Result Summary",
+            f"- Data Source: `{result.metadata.get('data_source', '-')}`",
+            f"- Server URL: `{result.metadata.get('server_url', '-')}`",
+            f"- Server Owner: `{result.metadata.get('server_owner', '-')}`",
+            f"- Model RID: `{result.metadata.get('model_rid', '-')}`",
+        ]
+    )
+    if result.format == "powerflow":
+        lines.extend(
+            [
+                f"- Bus Rows: `{result.metadata.get('bus_rows', '-')}`",
+                f"- Branch Rows: `{result.metadata.get('branch_rows', '-')}`",
+            ]
+        )
+    if result.format == "emt":
+        lines.extend(
+            [
+                f"- Plot Count: `{result.metadata.get('plot_count', '-')}`",
+                f"- Channel Count: `{result.metadata.get('channel_count', '-')}`",
+                f"- Sample Points: `{result.metadata.get('sample_points', '-')}`",
+            ]
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Metadata",
+        ]
+    )
     if result.metadata:
         for key, value in result.metadata.items():
             lines.append(f"- `{key}`: `{value}`")

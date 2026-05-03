@@ -48,6 +48,7 @@ from .release_ops import (
     transition_task,
     write_audit,
 )
+from .server_auth import migrate_server_token_to_workspace_key
 
 __all__ = [
     # ID 生成器
@@ -104,6 +105,7 @@ __all__ = [
     'transition_case',
     'transition_task',
     'write_audit',
+    'migrate_server_token_to_workspace_key',
 ]
 
 __version__ = '1.0.0'

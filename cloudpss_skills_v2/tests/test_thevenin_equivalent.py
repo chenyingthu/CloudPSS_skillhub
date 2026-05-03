@@ -5,7 +5,7 @@ import math
 import pytest
 
 from cloudpss_skills_v2.poweranalysis.thevenin_equivalent import (
-    TheveninEquivalentAnalysis,
+    TheveninEquivalentAnalysisLegacy as TheveninEquivalentAnalysis,
 )
 
 

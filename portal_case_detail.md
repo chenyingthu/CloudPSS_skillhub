@@ -1,0 +1,178 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: CP
+      - generic [ref=e6]:
+        - heading "收纳大师" [level=1] [ref=e7]
+        - paragraph [ref=e8]: CloudPSS Organizer
+    - navigation [ref=e9]:
+      - button "总览" [ref=e10] [cursor=pointer]
+      - button "模型与算例" [ref=e11] [cursor=pointer]
+      - button "任务" [ref=e12] [cursor=pointer]
+      - button "结果" [ref=e13] [cursor=pointer]
+      - button "报告与归档" [ref=e14] [cursor=pointer]
+      - button "服务" [ref=e15] [cursor=pointer]
+      - button "审计" [ref=e16] [cursor=pointer]
+    - generic [ref=e17]:
+      - text: Workspace
+      - strong [ref=e18]: /home/chenying/.cloudpss
+  - main [ref=e19]:
+    - generic [ref=e20]:
+      - generic [ref=e21]:
+        - heading "模型与算例" [level=2] [ref=e83]
+        - paragraph [ref=e23]: 围绕 Case 组织模型、变体、任务和结果
+      - generic [ref=e24]:
+        - button "刷新" [ref=e25] [cursor=pointer]
+        - button "检查工作区" [ref=e26] [cursor=pointer]
+    - generic [ref=e85]:
+      - generic [ref=e86]:
+        - generic [ref=e87]:
+          - heading "Case 树" [level=3] [ref=e88]
+          - button "新建" [ref=e89] [cursor=pointer]
+        - generic [ref=e90]:
+          - generic [ref=e117] [cursor=pointer]:
+            - generic [ref=e118]:
+              - generic [ref=e119]: test1
+              - generic [ref=e120]: active
+            - generic [ref=e121]: case_20260502_122459_a78b866f
+            - generic [ref=e122]: "RID: model/chenying/IEEE39"
+            - generic [ref=e123]:
+              - generic [ref=e124]: "Variants: 0"
+              - generic [ref=e125]: "Tasks: 2"
+              - generic [ref=e126]:
+                - text: task_test_1
+                - generic [ref=e127]: completed
+              - generic [ref=e128]:
+                - text: test-emt
+                - generic [ref=e129]: completed
+          - generic [ref=e130] [cursor=pointer]:
+            - generic [ref=e131]:
+              - generic [ref=e132]: test2
+              - generic [ref=e133]: active
+            - generic [ref=e134]: case_20260502_160422_3d26b996
+            - generic [ref=e135]: "RID: model/chenying/IEEE3"
+            - generic [ref=e136]:
+              - generic [ref=e137]: "Variants: 0"
+              - generic [ref=e138]: "Tasks: 1"
+              - generic [ref=e139]:
+                - text: test3_ieee3
+                - generic [ref=e140]: completed
+      - generic [ref=e116]:
+        - generic [ref=e141]:
+          - heading "test1" [level=3] [ref=e142]
+          - generic [ref=e143]:
+            - button "编辑" [ref=e144] [cursor=pointer]
+            - button "新建任务" [ref=e145] [cursor=pointer]
+        - generic [ref=e146]:
+          - generic [ref=e147]:
+            - generic [ref=e148]:
+              - generic [ref=e149]: 任务
+              - strong [ref=e150]: "2"
+            - generic [ref=e151]:
+              - generic [ref=e152]: 可运行
+              - strong [ref=e153]: "0"
+            - generic [ref=e154]:
+              - generic [ref=e155]: 结果
+              - strong [ref=e156]: "2"
+            - generic [ref=e157]:
+              - generic [ref=e158]: 下一步
+              - strong [ref=e159]: 查看结果或生成报告
+          - generic [ref=e160]:
+            - generic [ref=e161]:
+              - heading "模型" [level=4] [ref=e162]
+              - generic [ref=e163]:
+                - generic [ref=e164]:
+                  - generic [ref=e165]: Case ID
+                  - strong [ref=e166]: case_20260502_122459_a78b866f
+                - generic [ref=e167]:
+                  - generic [ref=e168]: Status
+                  - strong [ref=e169]: active
+                - generic [ref=e170]:
+                  - generic [ref=e171]: RID
+                  - strong [ref=e172]: model/chenying/IEEE39
+                - generic [ref=e173]:
+                  - generic [ref=e174]: Local Model
+                  - strong [ref=e175]: "-"
+                - generic [ref=e176]:
+                  - generic [ref=e177]: Server
+                  - strong [ref=e178]: CloudPSS Internal / chenying
+                - generic [ref=e179]:
+                  - generic [ref=e180]: Tags
+                  - strong [ref=e181]: "-"
+                - generic [ref=e182]:
+                  - generic [ref=e183]: Case YAML
+                  - strong [ref=e184]: /home/chenying/.cloudpss/cases/case_20260502_122459_a78b866f/case.yaml
+            - generic [ref=e185]:
+              - heading "运行前检查" [level=4] [ref=e186]
+              - generic [ref=e187]:
+                - generic [ref=e188]:
+                  - generic [ref=e189]: OK
+                  - strong [ref=e190]: CloudPSS RID
+                  - emphasis [ref=e191]: model/chenying/IEEE39
+                - generic [ref=e192]:
+                  - generic [ref=e193]: OK
+                  - strong [ref=e194]: Server
+                  - emphasis [ref=e195]: http://166.111.60.76:50001/ (chenying)
+                - generic [ref=e196]:
+                  - generic [ref=e197]: OK
+                  - strong [ref=e198]: Token
+                  - emphasis [ref=e199]: token 可解密
+                - generic [ref=e200]:
+                  - generic [ref=e201]: OK
+                  - strong [ref=e202]: Case Status
+                  - emphasis [ref=e203]: active
+          - heading "模型元件" [level=4] [ref=e204]
+          - generic [ref=e205]: 当前 Case 使用远端 RID。请先在任务中配置本地 model_source，Portal 才能表格化编辑模型文件。
+          - heading "仿真任务" [level=4] [ref=e206]
+          - generic [ref=e207]:
+            - generic [ref=e208]:
+              - generic [ref=e209]:
+                - generic [ref=e210]: task_test_1
+                - generic [ref=e211]: completed
+              - generic [ref=e212]:
+                - generic [ref=e213]:
+                  - generic [ref=e214]: 类型
+                  - strong [ref=e215]: powerflow
+                - generic [ref=e216]:
+                  - generic [ref=e217]: 模型源
+                  - strong [ref=e218]: CloudPSS RID
+                - generic [ref=e219]:
+                  - generic [ref=e220]: 通道
+                  - strong [ref=e221]: 默认通道
+                - generic [ref=e222]:
+                  - generic [ref=e223]: 结果
+                  - strong [ref=e224]: result_20260502_131512_80273654
+              - generic [ref=e225]: "{}"
+              - button "检查" [ref=e227] [cursor=pointer]
+            - generic [ref=e228]:
+              - generic [ref=e229]:
+                - generic [ref=e230]: test-emt
+                - generic [ref=e231]: completed
+              - generic [ref=e232]:
+                - generic [ref=e233]:
+                  - generic [ref=e234]: 类型
+                  - strong [ref=e235]: emt
+                - generic [ref=e236]:
+                  - generic [ref=e237]: 模型源
+                  - strong [ref=e238]: CloudPSS RID
+                - generic [ref=e239]:
+                  - generic [ref=e240]: 通道
+                  - strong [ref=e241]: 默认通道
+                - generic [ref=e242]:
+                  - generic [ref=e243]: 结果
+                  - strong [ref=e244]: result_20260502_131708_ad22e398
+              - generic [ref=e245]: "{}"
+              - button "检查" [ref=e247] [cursor=pointer]
+          - heading "变体" [level=4] [ref=e248]
+          - generic [ref=e249]: 暂无变体
+          - heading "结果" [level=4] [ref=e250]
+          - generic [ref=e251]:
+            - generic [ref=e252]:
+              - generic [ref=e253]: task_test_1 result
+              - generic [ref=e254]: powerflow
+            - generic [ref=e255]: result_20260502_13...80273654 · 77201 bytes
+          - generic [ref=e256]:
+            - generic [ref=e257]:
+              - generic [ref=e258]: test-emt result
+              - generic [ref=e259]: emt
+            - generic [ref=e260]: result_20260502_13...ad22e398 · 7636068 bytes

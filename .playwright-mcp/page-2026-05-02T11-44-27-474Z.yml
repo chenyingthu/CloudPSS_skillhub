@@ -1,0 +1,60 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: CP
+      - generic [ref=e6]:
+        - heading "收纳大师" [level=1] [ref=e7]
+        - paragraph [ref=e8]: CloudPSS Organizer
+    - navigation [ref=e9]:
+      - button "总览" [ref=e10] [cursor=pointer]
+      - button "模型与算例" [active] [ref=e11] [cursor=pointer]
+      - button "任务" [ref=e12] [cursor=pointer]
+      - button "结果" [ref=e13] [cursor=pointer]
+      - button "报告与归档" [ref=e14] [cursor=pointer]
+      - button "服务" [ref=e15] [cursor=pointer]
+      - button "审计" [ref=e16] [cursor=pointer]
+    - generic [ref=e17]:
+      - text: Workspace
+      - strong [ref=e18]: /home/chenying/.cloudpss
+  - main [ref=e19]:
+    - generic [ref=e20]:
+      - generic [ref=e21]:
+        - heading "模型与算例" [level=2] [ref=e83]
+        - paragraph [ref=e23]: 围绕 Case 组织模型、变体、任务和结果
+      - generic [ref=e24]:
+        - button "刷新" [ref=e25] [cursor=pointer]
+        - button "检查工作区" [ref=e26] [cursor=pointer]
+    - generic [ref=e85]:
+      - generic [ref=e86]:
+        - generic [ref=e87]:
+          - heading "Case 树" [level=3] [ref=e88]
+          - button "新建" [ref=e89] [cursor=pointer]
+        - generic [ref=e90]:
+          - generic [ref=e91] [cursor=pointer]:
+            - generic [ref=e92]:
+              - generic [ref=e93]: test1
+              - generic [ref=e94]: active
+            - generic [ref=e95]: case_20260502_122459_a78b866f
+            - generic [ref=e96]: "RID: model/chenying/IEEE39"
+            - generic [ref=e97]:
+              - generic [ref=e98]: "Variants: 0"
+              - generic [ref=e99]: "Tasks: 2"
+              - generic [ref=e100]:
+                - text: task_test_1
+                - generic [ref=e101]: completed
+              - generic [ref=e102]:
+                - text: test-emt
+                - generic [ref=e103]: completed
+          - generic [ref=e104] [cursor=pointer]:
+            - generic [ref=e105]:
+              - generic [ref=e106]: test2
+              - generic [ref=e107]: active
+            - generic [ref=e108]: case_20260502_160422_3d26b996
+            - generic [ref=e109]: "RID: model/chenying/IEEE3"
+            - generic [ref=e110]:
+              - generic [ref=e111]: "Variants: 0"
+              - generic [ref=e112]: "Tasks: 1"
+              - generic [ref=e113]:
+                - text: test3_ieee3
+                - generic [ref=e114]: completed
+      - generic [ref=e116]: 选择一个 Case 查看模型、配置、任务和结果。

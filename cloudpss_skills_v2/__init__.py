@@ -47,7 +47,7 @@ from cloudpss_skills_v2.metadata import SkillMetadata
 from cloudpss_skills_v2.poweranalysis import (
     N1SecurityAnalysis,
     ContingencyAnalysis,
-    VoltageStabilityAnalysis,
+    VoltageStabilityAnalysisLegacy,
     LossAnalysis,
     ShortCircuitAnalysis,
     BatchPowerFlowAnalysis,
@@ -55,7 +55,7 @@ from cloudpss_skills_v2.poweranalysis import (
     ParameterSensitivityAnalysis,
     MaintenanceSecurityAnalysis,
     N2SecurityAnalysis,
-    TheveninEquivalentAnalysis,
+    TheveninEquivalentAnalysisLegacy,
     PowerQualityAnalysisAnalysis,
     FaultSeverityScanAnalysis,
     ProtectionCoordinationAnalysis,
@@ -74,6 +74,10 @@ from cloudpss_skills_v2.poweranalysis import (
     RenewableIntegrationAnalysis,
     VSIWeakBusAnalysis,
 )
+
+# Backward compatibility aliases
+VoltageStabilityAnalysis = VoltageStabilityAnalysisLegacy
+TheveninEquivalentAnalysis = TheveninEquivalentAnalysisLegacy
 from cloudpss_skills_v2.powerskill.presets import PowerFlowPreset, EMTPreset
 
 SkillRegistry.register("n1_security", "poweranalysis", N1SecurityAnalysis, "N-1安全校核")

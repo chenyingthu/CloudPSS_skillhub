@@ -67,6 +67,40 @@ python -m cloudpss_skills_v3.master_organizer.cli.main result report <result_id>
 python -m cloudpss_skills_v3.master_organizer.cli.main result archive <result_id> --output result.tar.gz
 ```
 
+## Portal
+
+收纳大师 Portal 是一个本地可视化工作台，零新增前端依赖，直接复用 v3 的
+registry、task runner、result storage 和 release ops。
+
+启动：
+
+```bash
+python -m cloudpss_skills_v3.master_organizer.portal.server --host 127.0.0.1 --port 8765
+```
+
+局域网访问时绑定 `0.0.0.0`。Portal 会自动生成访问 token，并在启动日志中打印带
+`?token=...` 的 URL；也可以显式传入固定 token：
+
+```bash
+python -m cloudpss_skills_v3.master_organizer.portal.server --host 0.0.0.0 --port 8766 --token <portal-token>
+```
+
+打开：
+
+```text
+http://127.0.0.1:8765
+```
+
+第一版 Portal 覆盖：
+
+- Dashboard：workspace、实体数量、存储和最近任务/结果。
+- Case 工作台：Case 树、模型 RID、Server、Variant、Task、Result 关系。
+- Task Runner：创建 powerflow/EMT 任务，一键运行 `task submit --wait` 生产路径。
+- Result Viewer：查看 metadata、manifest、JSON artifacts、潮流表预览和 EMT 通道预览。
+- Reports：生成包含 Case、Task、配置、结果摘要和文件清单的报告，并归档结果目录。
+- Servers：查看 server URL、owner、默认状态和 token 来源；API 输出会隐藏加密 token。
+- Audit：查看 `logs/audit.log`。
+
 EMT 任务可以记录本地模型源和导出通道：
 
 ```bash
