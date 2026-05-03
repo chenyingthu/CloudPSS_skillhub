@@ -59,6 +59,10 @@ def test_voltage_stability_runs_on_unified_model():
     assert result["status"] == "success", f"Expected status 'success', got '{result.get('status')}'"
     assert "pv_curve" in result, "Expected 'pv_curve' in result"
     assert "critical_point" in result, "Expected 'critical_point' in result"
+    assert result["analysis_mode"] == "screening_proxy"
+    assert result["confidence_level"] == "screening_proxy_not_cpf"
+    assert result["limitations"]
+    assert "continuation power-flow" in result["standard_basis"]
 
     # Print PV curve data
     pv_curve = result["pv_curve"]
@@ -152,6 +156,29 @@ def test_voltage_stability_collapse_detection():
     assert len(result["pv_curve"]) > 0, "Expected PV curve to have data points"
 
     print("✅ VoltageStabilityAnalysis collapse detection test passed")
+
+
+def test_voltage_stability_marks_singular_ybus_screening_path():
+    """Singular topology should be reported as approximate screening, not hidden."""
+    from cloudpss_skills_v2.poweranalysis.voltage_stability import VoltageStabilityAnalysis
+
+    model = PowerSystemModel(
+        buses=[
+            Bus(bus_id=0, name="Slack", base_kv=230.0, bus_type="SLACK", v_magnitude_pu=1.0),
+            Bus(bus_id=1, name="Load", base_kv=230.0, bus_type="PQ", v_magnitude_pu=0.98),
+        ],
+        branches=[
+            Branch(from_bus=0, to_bus=1, name="ZeroZ", branch_type="LINE", r_pu=0.0, x_pu=0.0),
+        ],
+        loads=[Load(bus_id=1, name="L1", p_mw=30, q_mvar=5)],
+        base_mva=100.0,
+    )
+
+    result = VoltageStabilityAnalysis().run(model, {"load_scaling": [1.0]})
+
+    assert result["status"] == "success"
+    assert result["used_singular_ybus_approximation"] is True
+    assert result["analysis_mode"] == "screening_proxy"
 
 
 if __name__ == "__main__":

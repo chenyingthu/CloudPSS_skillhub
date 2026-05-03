@@ -2,6 +2,22 @@ import pytest
 
 from cloudpss_skills_v2.core.skill_result import SkillStatus
 from cloudpss_skills_v2.poweranalysis.contingency_analysis import ContingencyAnalysis
+from cloudpss_skills_v2.powerskill import ComponentType
+
+
+class FakeComponent:
+    def __init__(self, key, name=None, args=None):
+        self.key = key
+        self.name = name or key
+        self.args = args or {}
+
+
+class FakeHandle:
+    def __init__(self, by_type):
+        self.by_type = by_type
+
+    def get_components_by_type(self, component_type):
+        return self.by_type.get(component_type, [])
 
 
 class TestContingencyAnalysis:
@@ -53,11 +69,34 @@ class TestContingencyAnalysis:
 
         assert result.status == SkillStatus.SUCCESS
         summary = result.data["summary"]
-        # Code runs full N-1 analysis on all branches, not just specified components
-        assert summary["total_cases"] == 15  # case14 has 15 branches
-        assert summary["passed"] == 15
+        assert summary["total_cases"] == 2
+        assert summary["passed"] == 2
         assert summary["failed"] == 0
         assert summary["pass_rate"] == 100.0
         assert len(result.data["all_results"]) == summary["total_cases"]
         # Status can be "normal" or "PASS" depending on implementation
         assert all(case["status"] in ("normal", "PASS") for case in result.data["all_results"])
+        assert [case["components"] for case in result.data["all_results"]] == [
+            ["line:0"],
+            ["line:1"],
+        ]
+
+    def test_handle_converter_skips_transformer_without_valid_endpoints(self, instance):
+        handle = FakeHandle(
+            {
+                ComponentType.BUS: [
+                    FakeComponent("bus:0", "Bus 0"),
+                    FakeComponent("bus:1", "Bus 1"),
+                ],
+                ComponentType.SOURCE: [FakeComponent("source:0", args={"bus": "bus:0"})],
+                ComponentType.BRANCH: [],
+                ComponentType.TRANSFORMER: [
+                    FakeComponent("trafo:bad", args={"from_bus": "", "to_bus": ""})
+                ],
+            }
+        )
+
+        model = instance._convert_handle_to_model(handle)
+
+        assert len(model.buses) == 2
+        assert model.branches == []

@@ -977,9 +977,11 @@ class ContingencyAnalysis(PowerAnalysis):
                     elif not isinstance(to_bus_key, int):
                         to_bus = 0
 
-                    if (from_bus == to_bus or from_bus not in bus_ids or to_bus not in bus_ids) and len(bus_ids) >= 2:
-                        from_bus = bus_ids[index % len(bus_ids)]
-                        to_bus = bus_ids[(index + 1) % len(bus_ids)]
+                    if from_bus not in bus_ids or to_bus not in bus_ids:
+                        logger.debug(
+                            f"Skipping transformer {comp.key}: cannot resolve valid bus endpoints"
+                        )
+                        continue
 
                     if from_bus == to_bus:
                         logger.debug(f"Skipping transformer {comp.key}: connects bus {from_bus} to itself")

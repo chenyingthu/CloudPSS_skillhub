@@ -132,17 +132,21 @@ class RenewableIntegrationAnalysis:
             "renewable": {
                 "type": "pv",
                 "capacity_mw": 50.0,
-                "short_circuit_mva": 1000.0,
+                "short_circuit_mva": 175.0,
                 "point_of_interconnection": "",
-                "capacity_series_mw": [],
+                "capacity_series_mw": [20.0, 25.0, 30.0, 28.0],
             },
             "harmonics": {
                 "fundamental_voltage": 1.0,
-                "orders": {},
+                "orders": {"5": 0.02, "7": 0.015},
                 "limit_thd": 0.05,
             },
             "lvrt": {
-                "profile": [],
+                "profile": [
+                    {"time_s": 0.0, "voltage_pu": 1.0},
+                    {"time_s": 0.15, "voltage_pu": 0.2},
+                    {"time_s": 1.0, "voltage_pu": 0.92},
+                ],
                 "min_voltage_pu": 0.15,
                 "max_recovery_time_s": 1.5,
             },

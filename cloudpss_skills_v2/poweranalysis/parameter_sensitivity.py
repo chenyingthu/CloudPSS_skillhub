@@ -100,7 +100,7 @@ class ParameterSensitivityAnalysis(PowerAnalysis):
             analysis_config = config.get("analysis", {})
 
             # Run analysis with unified model
-            result = self.run_unified(model, {
+            result = self._run_unified(model, {
                 "target_parameter": analysis_config.get("target_parameter", ""),
                 "delta": analysis_config.get("delta", 0.01),
             })
@@ -185,8 +185,10 @@ class ParameterSensitivityAnalysis(PowerAnalysis):
             branch_components = handle.get_components_by_type(ComponentType.BRANCH)
             for comp in branch_components:
                 props = comp.properties if hasattr(comp, 'properties') else {}
-                from_bus_key = props.get("from_bus", "")
-                to_bus_key = props.get("to_bus", "")
+                args = comp.args if hasattr(comp, 'args') and comp.args else {}
+                source = args if isinstance(args, dict) and args else props
+                from_bus_key = source.get("from_bus", "")
+                to_bus_key = source.get("to_bus", "")
 
                 # Parse bus IDs from keys (e.g., "bus:0" -> 0)
                 from_bus = from_bus_key
@@ -206,15 +208,17 @@ class ParameterSensitivityAnalysis(PowerAnalysis):
                     name=comp.key,
                     from_bus=from_bus,
                     to_bus=to_bus,
-                    r_pu=props.get("r_pu", 0.001),
-                    x_pu=props.get("x_pu", 0.01),
-                    in_service=props.get("in_service", True),
+                    r_pu=source.get("r_pu", 0.001),
+                    x_pu=source.get("x_pu", 0.01),
+                    in_service=source.get("in_service", True),
                 )
                 branches.append(branch)
 
             load_components = handle.get_components_by_type(ComponentType.LOAD)
             for comp in load_components:
                 props = comp.properties if hasattr(comp, 'properties') else {}
+                args = comp.args if hasattr(comp, 'args') and comp.args else {}
+                source = args if isinstance(args, dict) and args else props
                 # Parse bus_id from key (e.g., "load:0" -> 0)
                 bus_id = comp.key
                 if isinstance(bus_id, str) and ":" in bus_id:
@@ -225,15 +229,17 @@ class ParameterSensitivityAnalysis(PowerAnalysis):
                 load = Load(
                     bus_id=bus_id,
                     name=comp.name,
-                    p_mw=props.get("p_mw", 0),
-                    q_mvar=props.get("q_mvar", 0),
-                    in_service=props.get("in_service", True),
+                    p_mw=source.get("p_mw", 0),
+                    q_mvar=source.get("q_mvar", 0),
+                    in_service=source.get("in_service", True),
                 )
                 loads.append(load)
 
             gen_components = handle.get_components_by_type(ComponentType.GENERATOR)
             for comp in gen_components:
                 props = comp.properties if hasattr(comp, 'properties') else {}
+                args = comp.args if hasattr(comp, 'args') and comp.args else {}
+                source = args if isinstance(args, dict) and args else props
                 # Parse bus_id from key (e.g., "gen:0" -> 0)
                 bus_id = comp.key
                 if isinstance(bus_id, str) and ":" in bus_id:
@@ -244,9 +250,9 @@ class ParameterSensitivityAnalysis(PowerAnalysis):
                 gen = Generator(
                     bus_id=bus_id,
                     name=comp.name,
-                    p_gen_mw=props.get("p_gen_mw", 0),
-                    v_set_pu=props.get("v_set_pu", 1.0),
-                    in_service=props.get("in_service", True),
+                    p_gen_mw=source.get("p_gen_mw", 0),
+                    v_set_pu=source.get("v_set_pu", 1.0),
+                    in_service=source.get("in_service", True),
                 )
                 generators.append(gen)
         except Exception as e:

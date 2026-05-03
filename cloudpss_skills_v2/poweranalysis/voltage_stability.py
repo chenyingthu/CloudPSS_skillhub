@@ -1,7 +1,7 @@
-"""Voltage Stability Skill v2 - Unified model implementation.
+"""Voltage Stability Skill v2 - Unified model screening implementation.
 
-电压稳定性分析 - 通过连续潮流计算PV曲线，识别电压崩溃点
-支持负荷增长扫描和关键母线电压监测
+电压稳定性筛查 - 通过负荷缩放和近似电压降生成PV筛查曲线
+支持负荷增长扫描和关键母线电压监测；不等同于连续潮流(CPF)认证计算。
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from cloudpss_skills_v2.core.system_model import (
     Load,
     PowerSystemModel,
 )
-from cloudpss_skills_v2.core.skill_result import SkillResult, SkillStatus
+from cloudpss_skills_v2.core.skill_result import Artifact, SkillResult, SkillStatus
 from cloudpss_skills_v2.powerskill import Engine
 
 logger = logging.getLogger(__name__)
@@ -37,14 +37,15 @@ def _as_float(value, default=0.0) -> float:
 
 
 class VoltageStabilityAnalysis(PowerAnalysis):
-    """电压稳定性分析技能 - unified PowerSystemModel implementation.
+    """电压稳定性筛查技能 - unified PowerSystemModel implementation.
 
-    Performs PV curve analysis by scaling loads and computing power flow
-    at each load level to identify voltage collapse points.
+    Performs screening PV curve analysis by scaling loads and applying an
+    approximate voltage-drop calculation for each load level. It does not
+    run a full AC continuation power-flow solver.
     """
 
     name = "voltage_stability"
-    description = "电压稳定性分析 - 通过连续潮流计算PV曲线，识别电压崩溃点"
+    description = "电压稳定性筛查 - 通过负荷缩放和近似电压降生成PV筛查曲线"
 
     @property
     def config_schema(self) -> dict[str, Any]:
@@ -236,6 +237,7 @@ class VoltageStabilityAnalysis(PowerAnalysis):
         critical_point = None
         max_loadability = None
         converged_cases = []
+        used_singular_ybus_approximation = False
 
         # Store original loads for restoration
         original_loads = {load.bus_id: (load.p_mw, load.q_mvar) for load in model.loads}
@@ -267,7 +269,10 @@ class VoltageStabilityAnalysis(PowerAnalysis):
 
             # Perform simplified power flow calculation (DC approximation for speed)
             # For more accurate results, this could call an external power flow solver
-            voltages = self._calculate_voltages(scaled_model)
+            voltages, used_approximation = self._calculate_voltages(scaled_model)
+            used_singular_ybus_approximation = (
+                used_singular_ybus_approximation or used_approximation
+            )
 
             if voltages:
                 # Record converged case
@@ -302,10 +307,31 @@ class VoltageStabilityAnalysis(PowerAnalysis):
             "load_scaling": load_scaling,
             "collapse_threshold": collapse_threshold,
             "converged_cases": len(converged_cases),
+            "analysis_mode": "screening_proxy",
+            "data_source": {
+                "model": "PowerSystemModel converted from selected engine result",
+                "load_scaling": "scan.load_scaling",
+                "voltage_estimate": "approximate impedance/load voltage-drop screening",
+            },
+            "confidence_level": "screening_proxy_not_cpf",
+            "standard_basis": (
+                "Load-scaling voltage stability screening using simplified voltage-drop "
+                "estimates; not a continuation power-flow standard calculation"
+            ),
+            "assumptions": [
+                "Branch impedance and load data in the unified model are suitable for screening",
+                "Voltage drops can be approximated from local connected-branch impedance",
+            ],
+            "limitations": [
+                "Does not run full AC continuation power flow",
+                "Does not certify a true voltage-collapse nose point",
+                "Use a dedicated power-flow or CPF engine before operational decisions",
+            ],
+            "used_singular_ybus_approximation": used_singular_ybus_approximation,
             "timestamp": datetime.now().isoformat(),
         }
 
-    def _calculate_voltages(self, model: PowerSystemModel) -> dict[str, float] | None:
+    def _calculate_voltages(self, model: PowerSystemModel) -> tuple[dict[str, float] | None, bool]:
         """Calculate bus voltages using simplified power flow.
 
         This is a simplified DC power flow approximation. For production use,
@@ -315,15 +341,15 @@ class VoltageStabilityAnalysis(PowerAnalysis):
             model: PowerSystemModel to analyze
 
         Returns:
-            Dictionary mapping bus names to voltage magnitudes, or None if diverged
+            Tuple of voltage mapping and whether the singular-Ybus approximation was used.
         """
         if not model.buses or not model.branches:
-            return None
+            return None, False
 
         # Get slack bus as reference
         slack_bus = model.get_slack_bus()
         if slack_bus is None:
-            return None
+            return None, False
 
         # Build bus index mapping
         bus_idx = {bus.bus_id: i for i, bus in enumerate(model.buses)}
@@ -360,9 +386,14 @@ class VoltageStabilityAnalysis(PowerAnalysis):
                 Y[i, i] += b_shunt
                 Y[j, j] += b_shunt
 
-        # Check if Ybus is singular
+        # The legacy converter can produce incomplete topology for CloudPSS canvas
+        # handles. Keep the screening approximation available instead of treating
+        # that conversion gap as a hard PV-scan failure.
         if np.linalg.matrix_rank(Y) < n_buses - 1:
-            return None
+            logger.warning("Voltage screening using approximate drop model with singular Ybus")
+            used_singular_ybus_approximation = True
+        else:
+            used_singular_ybus_approximation = False
 
         # Simplified voltage calculation
         # For a more accurate solution, we'd solve the full AC power flow
@@ -403,7 +434,7 @@ class VoltageStabilityAnalysis(PowerAnalysis):
                 else:
                     voltages[bus.name] = slack_bus.v_magnitude_pu or 1.0
 
-        return voltages
+        return voltages, used_singular_ybus_approximation
 
     def _generate_report(
         self,
@@ -506,10 +537,18 @@ class VoltageStabilityAnalysis(PowerAnalysis):
                 auth=auth,
             )
 
-            handle = api.get_model_handle(model_rid)
-
-            # Convert to unified model (simplified conversion)
-            model = self._convert_handle_to_model(handle)
+            source = config.get("model", {}).get("source", "cloud")
+            sim_result = api.run_power_flow(model_id=model_rid, source=source, auth=auth)
+            if not sim_result.is_success:
+                raise RuntimeError(
+                    f"基态潮流计算失败: {sim_result.errors[0] if sim_result.errors else 'unknown'}"
+                )
+            model = api.get_system_model(sim_result.job_id) if hasattr(api, "get_system_model") else None
+            if model is None:
+                model = getattr(sim_result, "system_model", None)
+            if model is None:
+                handle = api.get_model_handle(model_rid)
+                model = self._convert_handle_to_model(handle)
 
             # Run analysis with unified model
             result = self._run_unified(model, {
@@ -521,7 +560,27 @@ class VoltageStabilityAnalysis(PowerAnalysis):
             # Add expected keys for test compatibility
             result["model_rid"] = model_rid
             result["total_cases"] = result.get("converged_cases", 0)
-            result["results"] = result.get("pv_curve", [])
+            result["results"] = [
+                {
+                    "scale": scale,
+                    "points": [
+                        point for point in result.get("pv_curve", [])
+                        if point.get("scale") == scale
+                    ],
+                }
+                for scale in result.get("load_scaling", [])
+            ]
+            artifacts = [
+                Artifact(
+                    name="voltage_stability_summary",
+                    type="json",
+                    data={
+                        "model_rid": model_rid,
+                        "converged_cases": result.get("converged_cases", 0),
+                        "critical_point": result.get("critical_point"),
+                    },
+                )
+            ]
 
             # Convert result to SkillResult format
             if result["status"] == "error":
@@ -530,6 +589,7 @@ class VoltageStabilityAnalysis(PowerAnalysis):
                     status=SkillStatus.FAILED,
                     error=result.get("error", "Unknown error"),
                     data=result,
+                    artifacts=artifacts,
                     start_time=start_time,
                     end_time=datetime.now(),
                 )
@@ -538,6 +598,7 @@ class VoltageStabilityAnalysis(PowerAnalysis):
                 skill_name=self.name,
                 status=SkillStatus.SUCCESS,
                 data=result,
+                artifacts=artifacts,
                 start_time=start_time,
                 end_time=datetime.now(),
             )
@@ -988,13 +1049,34 @@ class VoltageStabilityAnalysisLegacy:
             # Add expected keys for test compatibility
             result["model_rid"] = model_rid
             result["total_cases"] = result.get("converged_cases", 0)
-            result["results"] = result.get("pv_curve", [])
+            result["results"] = [
+                {
+                    "scale": scale,
+                    "points": [
+                        point for point in result.get("pv_curve", [])
+                        if point.get("scale") == scale
+                    ],
+                }
+                for scale in result.get("load_scaling", [])
+            ]
+            artifacts = [
+                Artifact(
+                    name="voltage_stability_summary",
+                    type="json",
+                    data={
+                        "model_rid": model_rid,
+                        "converged_cases": result.get("converged_cases", 0),
+                        "critical_point": result.get("critical_point"),
+                    },
+                )
+            ]
 
             # Convert result to SkillResult format
             return SkillResult(
                 skill_name=self.name,
                 status=SkillStatus.SUCCESS if result["status"] == "success" else SkillStatus.FAILED,
                 data=result,
+                artifacts=artifacts,
                 logs=[],
                 error=None if result["status"] == "success" else result.get("error"),
                 start_time=start_time,

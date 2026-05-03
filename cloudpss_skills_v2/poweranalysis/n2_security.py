@@ -152,7 +152,7 @@ class N2SecurityAnalysis(PowerAnalysis):
             model = self._convert_handle_to_model(handle)
 
             # Run analysis with unified model
-            result = self.run_unified(model, {
+            result = self._run_unified(model, {
                 "check_pairs": config.get("analysis", {}).get("branches", []),
                 "voltage_threshold": config.get("analysis", {}).get("voltage_threshold", 0.05),
                 "thermal_threshold": config.get("analysis", {}).get("thermal_threshold", 1.0),
