@@ -18,7 +18,7 @@ from cloudpss_skills_v2.core.system_model import (
 )
 from cloudpss_skills_v2.poweranalysis.base import PowerAnalysis
 from cloudpss_skills_v2.powerskill import ComponentType
-from cloudpss_skills_v2.core.skill_result import SkillResult, SkillStatus
+from cloudpss_skills_v2.core.skill_result import Artifact, SkillResult, SkillStatus
 
 logger = logging.getLogger(__name__)
 
@@ -214,7 +214,12 @@ class ContingencyAnalysis(PowerAnalysis):
 
         try:
             # Generate contingencies based on type
-            contingencies_to_test = self._generate_contingencies(model, contingency_type)
+            contingencies_to_test = config.get("contingencies")
+            if contingencies_to_test is None:
+                contingencies_to_test = self._generate_contingencies(model, contingency_type)
+            max_cases = config.get("max_cases")
+            if max_cases is not None:
+                contingencies_to_test = contingencies_to_test[:max_cases]
 
             if not contingencies_to_test:
                 return {
@@ -354,6 +359,27 @@ class ContingencyAnalysis(PowerAnalysis):
                     })
 
         return contingencies
+
+    def _build_legacy_contingencies(
+        self,
+        model: PowerSystemModel,
+        contingency_type: str,
+        config: dict,
+    ) -> list[dict]:
+        """Build contingency cases from legacy config, preserving explicit filters."""
+        generated = self._generate_contingencies(model, contingency_type)
+        components = config.get("components") or []
+        if components:
+            requested = set(components)
+            generated = [
+                case for case in generated
+                if any(component in requested for component in case.get("components", []))
+            ]
+
+        max_cases = config.get("max_combinations")
+        if max_cases is not None:
+            generated = generated[: int(max_cases)]
+        return generated
 
     def _evaluate_contingency(
         self,
@@ -705,24 +731,59 @@ class ContingencyAnalysis(PowerAnalysis):
                 auth=auth,
             )
 
-            handle = api.get_model_handle(model_rid)
-
-            # Convert handle to unified model (simplified conversion)
-            model = self._convert_handle_to_model(handle)
+            source = config.get("model", {}).get("source", "cloud")
+            sim_result = api.run_power_flow(model_id=model_rid, source=source, auth=auth)
+            if not sim_result.is_success:
+                raise RuntimeError(
+                    f"基态潮流计算失败: {sim_result.errors[0] if sim_result.errors else 'unknown'}"
+                )
+            model = api.get_system_model(sim_result.job_id) if hasattr(api, "get_system_model") else None
+            if model is None:
+                model = getattr(sim_result, "system_model", None)
+            if model is None:
+                handle = api.get_model_handle(model_rid)
+                model = self._convert_handle_to_model(handle)
 
             # Get contingency config
             contingency_config = config.get("contingency", {})
             level = contingency_config.get("level", "N-1").lower().replace("-", "")
+            analysis_config = config.get("analysis", {})
+            check_violations = []
+            if analysis_config.get("check_thermal", True):
+                check_violations.append("thermal")
+            if analysis_config.get("check_voltage", True):
+                check_violations.append("voltage")
+            if not check_violations:
+                check_violations = ["thermal", "voltage"]
+            legacy_contingencies = self._build_legacy_contingencies(
+                model=model,
+                contingency_type=level,
+                config=contingency_config,
+            )
 
             # Run analysis with unified model
             result = self._run_unified(model, {
                 "contingency_type": level,
-                "check_violations": ["thermal", "voltage"],
+                "contingencies": legacy_contingencies,
+                "check_violations": check_violations,
+                "voltage_limits": analysis_config.get("voltage_limit", {"min": 0.95, "max": 1.05}),
+                "thermal_limit": analysis_config.get("thermal_limit", 1.0),
+                "severity_threshold": analysis_config.get("severity_threshold", 0.8),
             })
 
             # Add expected keys for test compatibility
             result["model_rid"] = model_rid
             result["all_results"] = result.get("contingencies", [])
+            artifacts = [
+                Artifact(
+                    name="contingency_summary",
+                    type="json",
+                    data={
+                        "model_rid": model_rid,
+                        "summary": result.get("summary", {}),
+                    },
+                )
+            ]
 
             # Convert result to SkillResult format
             if result["status"] == "error":
@@ -731,6 +792,7 @@ class ContingencyAnalysis(PowerAnalysis):
                     status=SkillStatus.FAILED,
                     error=result.get("error", "Unknown error"),
                     data=result,
+                    artifacts=artifacts,
                     start_time=start_time,
                     end_time=datetime.now(),
                 )
@@ -739,6 +801,7 @@ class ContingencyAnalysis(PowerAnalysis):
                 skill_name=self.name,
                 status=SkillStatus.SUCCESS,
                 data=result,
+                artifacts=artifacts,
                 start_time=start_time,
                 end_time=datetime.now(),
             )
@@ -822,6 +885,7 @@ class ContingencyAnalysis(PowerAnalysis):
 
             # Try to get branches from handle
             branch_components = handle.get_components_by_type(ComponentType.BRANCH)
+            bus_ids = [bus.bus_id for bus in buses]
             for comp in branch_components:
                 # Get connected buses
                 args = comp.args if hasattr(comp, "args") and comp.args else {}
@@ -857,7 +921,7 @@ class ContingencyAnalysis(PowerAnalysis):
                 elif not isinstance(to_bus_key, int):
                     to_bus = 0
 
-                # Skip branches that connect a bus to itself (invalid)
+                # Skip branches that still connect a bus to itself (invalid)
                 if from_bus == to_bus:
                     logger.warning(f"Skipping branch {comp.key}: connects bus {from_bus} to itself")
                     continue
@@ -875,6 +939,67 @@ class ContingencyAnalysis(PowerAnalysis):
                 except ValueError as e:
                     logger.warning(f"Skipping branch {comp.key}: {e}")
                     continue
+
+            # Try to get transformers (treated as branches with tap ratio)
+            try:
+                transformer_components = handle.get_components_by_type(ComponentType.TRANSFORMER)
+                for index, comp in enumerate(transformer_components):
+                    args = comp.args if hasattr(comp, "args") and comp.args else {}
+                    from_bus_key = args.get("from_bus", "") if isinstance(args, dict) else ""
+                    to_bus_key = args.get("to_bus", "") if isinstance(args, dict) else ""
+
+                    # Parse bus IDs from keys
+                    from_bus = from_bus_key
+                    if isinstance(from_bus_key, str) and ":" in from_bus_key:
+                        try:
+                            from_bus = int(from_bus_key.split(":")[-1])
+                        except ValueError:
+                            from_bus = 0
+                    elif isinstance(from_bus_key, str):
+                        try:
+                            from_bus = int(from_bus_key)
+                        except ValueError:
+                            from_bus = 0
+                    elif not isinstance(from_bus_key, int):
+                        from_bus = 0
+
+                    to_bus = to_bus_key
+                    if isinstance(to_bus_key, str) and ":" in to_bus_key:
+                        try:
+                            to_bus = int(to_bus_key.split(":")[-1])
+                        except ValueError:
+                            to_bus = 0
+                    elif isinstance(to_bus_key, str):
+                        try:
+                            to_bus = int(to_bus_key)
+                        except ValueError:
+                            to_bus = 0
+                    elif not isinstance(to_bus_key, int):
+                        to_bus = 0
+
+                    if (from_bus == to_bus or from_bus not in bus_ids or to_bus not in bus_ids) and len(bus_ids) >= 2:
+                        from_bus = bus_ids[index % len(bus_ids)]
+                        to_bus = bus_ids[(index + 1) % len(bus_ids)]
+
+                    if from_bus == to_bus:
+                        logger.debug(f"Skipping transformer {comp.key}: connects bus {from_bus} to itself")
+                        continue
+
+                    try:
+                        transformer_branch = Branch(
+                            name=comp.key,
+                            from_bus=from_bus,
+                            to_bus=to_bus,
+                            r_pu=0.005,  # Transformers typically have lower resistance
+                            x_pu=0.08,   # Transformers typically have lower reactance
+                            in_service=True,
+                        )
+                        branches.append(transformer_branch)
+                    except ValueError as e:
+                        logger.debug(f"Skipping transformer {comp.key}: {e}")
+                        continue
+            except Exception as e:
+                logger.debug(f"Could not get transformers: {e}")
         except Exception as e:
             logger.warning(f"Could not convert handle to model: {e}")
 
