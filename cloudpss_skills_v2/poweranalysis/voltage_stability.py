@@ -555,15 +555,16 @@ class VoltageStabilityAnalysis(PowerAnalysis):
     def _convert_handle_to_model(self, handle) -> PowerSystemModel:
         """Convert model handle to unified PowerSystemModel.
 
-        This is a simplified conversion for demonstration.
-        In production, use the full adapter from powerapi.
+        Converts CloudPSS/pandapower model components to unified PowerSystemModel.
+        Handles buses, branches, generators, and loads.
         """
         from cloudpss_skills_v2.powerskill import ComponentType
-        from cloudpss_skills_v2.core.system_model import Bus, Branch
+        from cloudpss_skills_v2.core.system_model import Bus, Branch, Generator, Load
 
-        # Placeholder conversion - would use actual adapter
         buses = []
         branches = []
+        generators = []
+        loads = []
 
         try:
             # Get ext_grid buses (slack buses) first
@@ -572,113 +573,357 @@ class VoltageStabilityAnalysis(PowerAnalysis):
                 ext_grid_components = handle.get_components_by_type(ComponentType.SOURCE)
                 for comp in ext_grid_components:
                     args = comp.args if hasattr(comp, 'args') and comp.args else {}
-                    bus_idx = args.get('bus', '') if isinstance(args, dict) else ''
+                    if not isinstance(args, dict):
+                        continue
+                    bus_idx = args.get('bus', '')
+                    # Handle different bus key formats
                     if isinstance(bus_idx, int):
+                        slack_bus_indices.add(bus_idx)
                         slack_bus_indices.add(f"bus:{bus_idx}")
-                    elif bus_idx:
-                        slack_bus_indices.add(str(bus_idx))
-            except Exception:
-                pass
+                    elif isinstance(bus_idx, str):
+                        slack_bus_indices.add(bus_idx)
+                        # Also add numeric version if possible
+                        if bus_idx.startswith('bus:'):
+                            try:
+                                slack_bus_indices.add(int(bus_idx.split(':')[1]))
+                            except (ValueError, IndexError):
+                                pass
+            except Exception as e:
+                logger.debug(f"Could not get slack buses: {e}")
+
+            # Build bus index mapping for lookups
+            bus_id_map = {}  # Maps various bus key formats to integer bus_id
 
             # Try to get buses from handle
-            bus_components = handle.get_components_by_type(ComponentType.BUS)
-            for comp in bus_components:
-                # Get base_kv from component args or use default
-                args = comp.args if hasattr(comp, 'args') and comp.args else {}
-                base_kv = args.get('vn_kv', 110.0) if isinstance(args, dict) else 110.0
-                # Parse bus_id from key (e.g., "bus:0" -> 0)
-                bus_id = comp.key
-                if isinstance(bus_id, str) and ':' in bus_id:
+            try:
+                bus_components = handle.get_components_by_type(ComponentType.BUS)
+                for comp in bus_components:
+                    args = comp.args if hasattr(comp, 'args') and comp.args else {}
+                    if not isinstance(args, dict):
+                        args = {}
+
+                    # Get base_kv from component args
+                    base_kv = args.get('vn_kv', 110.0)
                     try:
-                        bus_id = int(bus_id.split(':')[-1])
-                    except ValueError:
-                        bus_id = 0
-                # Determine bus type - check if this is a slack bus
-                bus_type = "SLACK" if comp.key in slack_bus_indices else "PQ"
-                bus = Bus(
-                    bus_id=bus_id,
-                    name=comp.name,
-                    base_kv=float(base_kv) if base_kv else 110.0,
-                    v_magnitude_pu=1.0,
-                    bus_type=bus_type,
-                )
-                buses.append(bus)
+                        base_kv = float(base_kv) if base_kv else 110.0
+                    except (TypeError, ValueError):
+                        base_kv = 110.0
 
-            # Try to get branches from handle
-            branch_components = handle.get_components_by_type(ComponentType.BRANCH)
-            for comp in branch_components:
-                # Get connected buses from args
-                args = comp.args if hasattr(comp, 'args') and comp.args else {}
-                from_bus_key = args.get("from_bus", "") if isinstance(args, dict) else ""
-                to_bus_key = args.get("to_bus", "") if isinstance(args, dict) else ""
+                    # Parse bus_id from key (handle "bus:0", "0", or 0)
+                    bus_id = comp.key
+                    original_key = bus_id
+                    if isinstance(bus_id, str):
+                        if ':' in bus_id:
+                            try:
+                                bus_id = int(bus_id.split(':')[-1])
+                            except ValueError:
+                                bus_id = len(buses)
+                        else:
+                            try:
+                                bus_id = int(bus_id)
+                            except ValueError:
+                                bus_id = len(buses)
+                    elif not isinstance(bus_id, int):
+                        bus_id = len(buses)
 
-                # Parse bus IDs from keys (e.g., "bus:0" -> 0)
-                from_bus = from_bus_key
-                if isinstance(from_bus_key, str) and ":" in from_bus_key:
+                    # Store mapping for this bus
+                    bus_id_map[original_key] = bus_id
+                    bus_id_map[f"bus:{bus_id}"] = bus_id
+                    bus_id_map[str(bus_id)] = bus_id
+                    bus_id_map[bus_id] = bus_id
+
+                    # Determine bus type
+                    is_slack = (
+                        original_key in slack_bus_indices or
+                        bus_id in slack_bus_indices or
+                        f"bus:{bus_id}" in slack_bus_indices
+                    )
+                    bus_type = "SLACK" if is_slack else "PQ"
+
+                    # Get voltage magnitude if available
+                    v_magnitude = args.get('vm_pu', 1.0)
                     try:
-                        from_bus = int(from_bus_key.split(":")[-1])
-                    except ValueError:
-                        from_bus = 0
-                elif isinstance(from_bus_key, str):
+                        v_magnitude = float(v_magnitude) if v_magnitude else 1.0
+                    except (TypeError, ValueError):
+                        v_magnitude = 1.0
+
+                    bus = Bus(
+                        bus_id=bus_id,
+                        name=comp.name or f"Bus{bus_id}",
+                        base_kv=base_kv,
+                        v_magnitude_pu=v_magnitude,
+                        bus_type=bus_type,
+                    )
+                    buses.append(bus)
+            except Exception as e:
+                logger.warning(f"Could not get buses: {e}")
+
+            # Try to get generators
+            try:
+                gen_components = handle.get_components_by_type(ComponentType.GENERATOR)
+                for comp in gen_components:
+                    args = comp.args if hasattr(comp, 'args') and comp.args else {}
+                    if not isinstance(args, dict):
+                        continue
+
+                    bus_key = args.get('bus', '')
+                    bus_id = bus_id_map.get(bus_key)
+                    if bus_id is None:
+                        # Try to parse directly
+                        if isinstance(bus_key, str) and ':' in bus_key:
+                            try:
+                                bus_id = int(bus_key.split(':')[1])
+                            except (ValueError, IndexError):
+                                continue
+                        elif isinstance(bus_key, int):
+                            bus_id = bus_key
+                        else:
+                            continue
+
+                    p_mw = args.get('p_mw', 0.0)
                     try:
-                        from_bus = int(from_bus_key)
-                    except ValueError:
-                        from_bus = 0
-                elif not isinstance(from_bus_key, int):
-                    from_bus = 0
+                        p_mw = float(p_mw) if p_mw else 0.0
+                    except (TypeError, ValueError):
+                        p_mw = 0.0
 
-                to_bus = to_bus_key
-                if isinstance(to_bus_key, str) and ":" in to_bus_key:
+                    gen = Generator(
+                        bus_id=bus_id,
+                        name=comp.name or f"Gen{bus_id}",
+                        p_gen_mw=p_mw,
+                    )
+                    generators.append(gen)
+            except Exception as e:
+                logger.debug(f"Could not get generators: {e}")
+
+            # Try to get loads
+            try:
+                load_components = handle.get_components_by_type(ComponentType.LOAD)
+                for comp in load_components:
+                    args = comp.args if hasattr(comp, 'args') and comp.args else {}
+                    if not isinstance(args, dict):
+                        continue
+
+                    bus_key = args.get('bus', '')
+                    bus_id = bus_id_map.get(bus_key)
+                    if bus_id is None:
+                        # Try to parse directly
+                        if isinstance(bus_key, str) and ':' in bus_key:
+                            try:
+                                bus_id = int(bus_key.split(':')[1])
+                            except (ValueError, IndexError):
+                                continue
+                        elif isinstance(bus_key, int):
+                            bus_id = bus_key
+                        else:
+                            continue
+
+                    p_mw = args.get('p_mw', 0.0)
+                    q_mvar = args.get('q_mvar', 0.0)
                     try:
-                        to_bus = int(to_bus_key.split(":")[-1])
-                    except ValueError:
-                        to_bus = 0
-                elif isinstance(to_bus_key, str):
+                        p_mw = float(p_mw) if p_mw else 0.0
+                    except (TypeError, ValueError):
+                        p_mw = 0.0
                     try:
-                        to_bus = int(to_bus_key)
-                    except ValueError:
-                        to_bus = 0
-                elif not isinstance(to_bus_key, int):
-                    to_bus = 0
+                        q_mvar = float(q_mvar) if q_mvar else 0.0
+                    except (TypeError, ValueError):
+                        q_mvar = 0.0
 
-                # Ensure r_pu and x_pu are floats
-                try:
-                    r_pu = float(args.get("r_pu", 0.001)) if isinstance(args, dict) else 0.001
-                except (TypeError, ValueError):
-                    r_pu = 0.001
-                try:
-                    x_pu = float(args.get("x_pu", 0.01)) if isinstance(args, dict) else 0.01
-                except (TypeError, ValueError):
-                    x_pu = 0.01
+                    load = Load(
+                        bus_id=bus_id,
+                        name=comp.name or f"Load{bus_id}",
+                        p_mw=p_mw,
+                        q_mvar=q_mvar,
+                    )
+                    loads.append(load)
+            except Exception as e:
+                logger.debug(f"Could not get loads: {e}")
 
-                in_service = args.get("in_service", True) if isinstance(args, dict) else True
+            # Try to get branches
+            try:
+                branch_components = handle.get_components_by_type(ComponentType.BRANCH)
+                for comp in branch_components:
+                    args = comp.args if hasattr(comp, 'args') and comp.args else {}
+                    if not isinstance(args, dict):
+                        continue
 
-                # Skip branches that connect a bus to itself (invalid)
-                if from_bus == to_bus:
-                    logger.warning(f"Skipping branch {comp.key}: connects bus {from_bus} to itself")
-                    continue
+                    from_bus_key = args.get("from_bus", "")
+                    to_bus_key = args.get("to_bus", "")
 
-                try:
+                    # Look up bus IDs from mapping
+                    from_bus = bus_id_map.get(from_bus_key)
+                    to_bus = bus_id_map.get(to_bus_key)
+
+                    # Fallback: try direct parsing
+                    if from_bus is None:
+                        if isinstance(from_bus_key, str) and ':' in from_bus_key:
+                            try:
+                                from_bus = int(from_bus_key.split(':')[1])
+                            except (ValueError, IndexError):
+                                from_bus = None
+                        elif isinstance(from_bus_key, int):
+                            from_bus = from_bus_key
+
+                    if to_bus is None:
+                        if isinstance(to_bus_key, str) and ':' in to_bus_key:
+                            try:
+                                to_bus = int(to_bus_key.split(':')[1])
+                            except (ValueError, IndexError):
+                                to_bus = None
+                        elif isinstance(to_bus_key, int):
+                            to_bus = to_bus_key
+
+                    if from_bus is None or to_bus is None:
+                        logger.debug(f"Skipping branch {comp.key}: cannot resolve bus IDs")
+                        continue
+
+                    # Skip branches that connect a bus to itself
+                    if from_bus == to_bus:
+                        continue
+
+                    # Get impedance values
+                    try:
+                        r_pu = float(args.get("r_pu", 0.001))
+                    except (TypeError, ValueError):
+                        r_pu = 0.001
+                    try:
+                        x_pu = float(args.get("x_pu", 0.01))
+                    except (TypeError, ValueError):
+                        x_pu = 0.01
+
+                    in_service = args.get("in_service", True)
+                    if not isinstance(in_service, bool):
+                        in_service = bool(in_service)
+
+                    rate_a = args.get("rate_a_mva", 0.0)
+                    try:
+                        rate_a = float(rate_a) if rate_a else 0.0
+                    except (TypeError, ValueError):
+                        rate_a = 0.0
+
                     branch = Branch(
-                        name=comp.key,
+                        name=comp.key or f"Branch{from_bus}-{to_bus}",
                         from_bus=from_bus,
                         to_bus=to_bus,
                         r_pu=r_pu,
                         x_pu=x_pu,
+                        rate_a_mva=rate_a,
                         in_service=in_service,
                     )
                     branches.append(branch)
-                except ValueError as e:
-                    logger.warning(f"Skipping branch {comp.key}: {e}")
-                    continue
+            except Exception as e:
+                logger.warning(f"Could not get branches: {e}")
+
+            # Try to get transformers (treated as branches with tap ratio)
+            try:
+                transformer_components = handle.get_components_by_type(ComponentType.TRANSFORMER)
+                for comp in transformer_components:
+                    args = comp.args if hasattr(comp, 'args') and comp.args else {}
+                    if not isinstance(args, dict):
+                        continue
+
+                    from_bus_key = args.get("from_bus", "")
+                    to_bus_key = args.get("to_bus", "")
+
+                    # Look up bus IDs from mapping
+                    from_bus = bus_id_map.get(from_bus_key)
+                    to_bus = bus_id_map.get(to_bus_key)
+
+                    # Fallback: try direct parsing
+                    if from_bus is None:
+                        if isinstance(from_bus_key, str) and ':' in from_bus_key:
+                            try:
+                                from_bus = int(from_bus_key.split(':')[1])
+                            except (ValueError, IndexError):
+                                from_bus = None
+                        elif isinstance(from_bus_key, int):
+                            from_bus = from_bus_key
+
+                    if to_bus is None:
+                        if isinstance(to_bus_key, str) and ':' in to_bus_key:
+                            try:
+                                to_bus = int(to_bus_key.split(':')[1])
+                            except (ValueError, IndexError):
+                                to_bus = None
+                        elif isinstance(to_bus_key, int):
+                            to_bus = to_bus_key
+
+                    if from_bus is None or to_bus is None:
+                        logger.debug(f"Skipping transformer {comp.key}: cannot resolve bus IDs")
+                        continue
+
+                    # Skip transformers that connect a bus to itself
+                    if from_bus == to_bus:
+                        continue
+
+                    # Get impedance values (transformers may have different parameter names)
+                    # Try transformer-specific parameters first, then branch-style
+                    try:
+                        r_pu = float(args.get("r_pu", args.get("r_ohm", 0.001)))
+                    except (TypeError, ValueError):
+                        r_pu = 0.001
+                    try:
+                        x_pu = float(args.get("x_pu", args.get("x_ohm", 0.05)))
+                    except (TypeError, ValueError):
+                        x_pu = 0.05
+
+                    in_service = args.get("in_service", True)
+                    if not isinstance(in_service, bool):
+                        in_service = bool(in_service)
+
+                    rate_a = args.get("rate_a_mva", args.get("sn_mva", 0.0))
+                    try:
+                        rate_a = float(rate_a) if rate_a else 0.0
+                    except (TypeError, ValueError):
+                        rate_a = 0.0
+
+                    # Get tap ratio if available (transformer-specific)
+                    tap_ratio = args.get("tap_ratio", args.get("tap_pos", 1.0))
+                    try:
+                        tap_ratio = float(tap_ratio) if tap_ratio else 1.0
+                    except (TypeError, ValueError):
+                        tap_ratio = 1.0
+
+                    # Get phase shift if available
+                    phase_shift = args.get("phase_shift", args.get("shift_degree", 0.0))
+                    try:
+                        phase_shift = float(phase_shift) if phase_shift else 0.0
+                    except (TypeError, ValueError):
+                        phase_shift = 0.0
+
+                    transformer_branch = Branch(
+                        name=comp.key or f"Transformer{from_bus}-{to_bus}",
+                        from_bus=from_bus,
+                        to_bus=to_bus,
+                        r_pu=r_pu,
+                        x_pu=x_pu,
+                        rate_a_mva=rate_a,
+                        in_service=in_service,
+                        tap_ratio=tap_ratio,
+                        phase_shift=phase_shift,
+                    )
+                    branches.append(transformer_branch)
+            except Exception as e:
+                logger.debug(f"Could not get transformers: {e}")
 
         except Exception as e:
             logger.warning(f"Could not convert handle to model: {e}")
 
+        # Ensure we have at least one slack bus
+        if buses and not any(b.bus_type == "SLACK" for b in buses):
+            # Make the first bus a slack bus
+            buses[0] = Bus(
+                bus_id=buses[0].bus_id,
+                name=buses[0].name,
+                base_kv=buses[0].base_kv,
+                v_magnitude_pu=buses[0].v_magnitude_pu or 1.0,
+                bus_type="SLACK",
+            )
+
         return PowerSystemModel(
             buses=buses,
             branches=branches,
-            loads=[],
+            generators=generators,
+            loads=loads,
             base_mva=100.0,
         )
 
