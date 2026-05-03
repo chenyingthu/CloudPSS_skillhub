@@ -586,6 +586,375 @@ class PandapowerPowerFlowAdapter(EngineAdapter):
             )
         return ValidationResult(valid=len(errors) == 0, errors=errors)
 
+    # -------------------------------------------------------------------------
+    # Unified Model Conversion (New Architecture)
+    # -------------------------------------------------------------------------
+
+    def _to_unified_model(self, net: Any) -> Any:
+        """Convert pandapower network to unified PowerSystemModel.
+
+        Args:
+            net: pandapower network object
+
+        Returns:
+            Unified PowerSystemModel
+        """
+        # Import here to avoid circular imports
+        from cloudpss_skills_v2.core.system_model import (
+            Bus, Branch, Generator, Load, PowerSystemModel
+        )
+
+        # Convert buses
+        buses = []
+        for idx, row in net.bus.iterrows():
+            bus_type = _determine_bus_type(idx, net)
+            vm_pu = va_deg = None
+
+            # Get power flow results if available
+            if hasattr(net, 'res_bus') and not net.res_bus.empty and idx in net.res_bus.index:
+                vm_pu = _safe_float(net.res_bus.at[idx, "vm_pu"])
+                va_deg = _safe_float(net.res_bus.at[idx, "va_degree"])
+
+            # Calculate generation and load at this bus
+            p_gen = q_gen = p_load = q_load = 0.0
+
+            # Generation from gen
+            if hasattr(net, 'gen') and not net.gen.empty:
+                for gen_idx, gen in net.gen[net.gen["bus"] == idx].iterrows():
+                    if hasattr(net, 'res_gen') and gen_idx in net.res_gen.index:
+                        p_gen += _safe_float(net.res_gen.at[gen_idx, "p_mw"])
+                        q_gen += _safe_float(net.res_gen.at[gen_idx, "q_mvar"])
+
+            # Generation from ext_grid
+            if hasattr(net, 'ext_grid') and not net.ext_grid.empty:
+                for ext_idx, ext in net.ext_grid[net.ext_grid["bus"] == idx].iterrows():
+                    if hasattr(net, 'res_ext_grid') and ext_idx in net.res_ext_grid.index:
+                        p_gen += _safe_float(net.res_ext_grid.at[ext_idx, "p_mw"])
+                        q_gen += _safe_float(net.res_ext_grid.at[ext_idx, "q_mvar"])
+
+            # Static generators
+            if hasattr(net, 'sgen') and not net.sgen.empty:
+                for sgen_idx, sgen in net.sgen[net.sgen["bus"] == idx].iterrows():
+                    if hasattr(net, 'res_sgen') and sgen_idx in net.res_sgen.index:
+                        p_gen += _safe_float(net.res_sgen.at[sgen_idx, "p_mw"])
+                        q_gen += _safe_float(net.res_sgen.at[sgen_idx, "q_mvar"])
+
+            # Load
+            if hasattr(net, 'load') and not net.load.empty:
+                for load_idx, load in net.load[net.load["bus"] == idx].iterrows():
+                    if hasattr(net, 'res_load') and load_idx in net.res_load.index:
+                        p_load += _safe_float(net.res_load.at[load_idx, "p_mw"])
+                        q_load += _safe_float(net.res_load.at[load_idx, "q_mvar"])
+
+            bus = Bus(
+                bus_id=idx,
+                name=str(row.get("name", f"Bus_{idx}")),
+                base_kv=_safe_float(row.get("vn_kv"), 230.0),
+                bus_type=bus_type.upper(),
+                v_magnitude_pu=vm_pu,
+                v_angle_degree=va_deg,
+                p_injected_mw=(p_gen - p_load) if (p_gen > 0 or p_load > 0) else None,
+                q_injected_mvar=(q_gen - q_load) if (q_gen != 0 or q_load != 0) else None,
+                vm_min_pu=0.9,
+                vm_max_pu=1.1,
+            )
+            buses.append(bus)
+
+        # Convert branches (lines and transformers)
+        branches = []
+
+        # Lines
+        if hasattr(net, 'line') and not net.line.empty:
+            for idx, row in net.line.iterrows():
+                loading = None
+                p_from = q_from = p_to = q_to = None
+
+                if hasattr(net, 'res_line') and not net.res_line.empty and idx in net.res_line.index:
+                    loading = _safe_float(net.res_line.at[idx, "loading_percent"])
+                    p_from = _safe_float(net.res_line.at[idx, "p_from_mw"])
+                    q_from = _safe_float(net.res_line.at[idx, "q_from_mvar"])
+                    p_to = _safe_float(net.res_line.at[idx, "p_to_mw"])
+                    q_to = _safe_float(net.res_line.at[idx, "q_to_mvar"])
+
+                branch = Branch(
+                    from_bus=int(row.get("from_bus", 0)),
+                    to_bus=int(row.get("to_bus", 0)),
+                    name=str(row.get("name", f"Line_{idx}")),
+                    branch_type="LINE",
+                    r_pu=_safe_float(row.get("r_ohm_per_km", 0.0)),
+                    x_pu=_safe_float(row.get("x_ohm_per_km", 0.01)),
+                    b_pu=_safe_float(row.get("c_nf_per_km", 0.0)) / 1e9,  # Convert nF to F
+                    rate_a_mva=_safe_float(row.get("max_i_ka", 1.0)) * _safe_float(row.get("vn_kv", 230.0)) * 1.732,
+                    p_from_mw=p_from,
+                    q_from_mvar=q_from,
+                    p_to_mw=p_to,
+                    q_to_mvar=q_to,
+                    loading_percent=loading,
+                )
+                branches.append(branch)
+
+        # Transformers
+        if hasattr(net, 'trafo') and not net.trafo.empty:
+            for idx, row in net.trafo.iterrows():
+                loading = None
+                p_from = q_from = p_to = q_to = None
+
+                if hasattr(net, 'res_trafo') and not net.res_trafo.empty and idx in net.res_trafo.index:
+                    loading = _safe_float(net.res_trafo.at[idx, "loading_percent"])
+                    p_from = _safe_float(net.res_trafo.at[idx, "p_hv_mw"])
+                    q_from = _safe_float(net.res_trafo.at[idx, "q_hv_mvar"])
+                    p_to = _safe_float(net.res_trafo.at[idx, "p_lv_mw"])
+                    q_to = _safe_float(net.res_trafo.at[idx, "q_lv_mvar"])
+
+                branch = Branch(
+                    from_bus=int(row.get("hv_bus", 0)),
+                    to_bus=int(row.get("lv_bus", 0)),
+                    name=str(row.get("name", f"Trafo_{idx}")),
+                    branch_type="TRANSFORMER",
+                    r_pu=_safe_float(row.get("vkr_percent", 0.0)) / 100.0,
+                    x_pu=_safe_float(row.get("vk_percent", 0.0)) / 100.0,
+                    rate_a_mva=_safe_float(row.get("sn_mva", 100.0)),
+                    p_from_mw=p_from,
+                    q_from_mvar=q_from,
+                    p_to_mw=p_to,
+                    q_to_mvar=q_to,
+                    loading_percent=loading,
+                )
+                branches.append(branch)
+
+        # Convert generators
+        generators = []
+
+        # 1. Convert synchronous generators (net.gen)
+        if hasattr(net, 'gen') and not net.gen.empty:
+            for idx, row in net.gen.iterrows():
+                p_gen = q_gen = v_set = None
+                if hasattr(net, 'res_gen') and not net.res_gen.empty and idx in net.res_gen.index:
+                    p_gen = _safe_float(net.res_gen.at[idx, "p_mw"])
+                    q_gen = _safe_float(net.res_gen.at[idx, "q_mvar"])
+
+                gen = Generator(
+                    bus_id=int(row.get("bus", 0)),
+                    name=str(row.get("name", f"Gen_{idx}")),
+                    p_gen_mw=p_gen if p_gen else _safe_float(row.get("p_mw", 0)),
+                    q_gen_mvar=q_gen,
+                    p_max_mw=_safe_float(row.get("max_p_mw", 9999.0)),
+                    p_min_mw=_safe_float(row.get("min_p_mw", 0.0)),
+                    v_set_pu=_safe_float(row.get("vm_pu", 1.0)),
+                )
+                generators.append(gen)
+
+        # 2. Convert external grid / slack bus (net.ext_grid)
+        if hasattr(net, 'ext_grid') and not net.ext_grid.empty:
+            for idx, row in net.ext_grid.iterrows():
+                p_gen = q_gen = None
+                if hasattr(net, 'res_ext_grid') and not net.res_ext_grid.empty and idx in net.res_ext_grid.index:
+                    p_gen = _safe_float(net.res_ext_grid.at[idx, "p_mw"])
+                    q_gen = _safe_float(net.res_ext_grid.at[idx, "q_mvar"])
+
+                gen = Generator(
+                    bus_id=int(row.get("bus", 0)),
+                    name=str(row.get("name", f"ExtGrid_{idx}")),
+                    p_gen_mw=p_gen if p_gen else 0.0,
+                    q_gen_mvar=q_gen,
+                    p_max_mw=999999.0,  # Slack bus has no limits
+                    p_min_mw=-999999.0,
+                    v_set_pu=_safe_float(row.get("vm_pu", 1.0)),
+                )
+                generators.append(gen)
+
+        # 3. Convert static generators (net.sgen) - treated as negative load or generation
+        if hasattr(net, 'sgen') and not net.sgen.empty:
+            for idx, row in net.sgen.iterrows():
+                p_sgen = q_sgen = None
+                if hasattr(net, 'res_sgen') and not net.res_sgen.empty and idx in net.res_sgen.index:
+                    p_sgen = _safe_float(net.res_sgen.at[idx, "p_mw"])
+                    q_sgen = _safe_float(net.res_sgen.at[idx, "q_mvar"])
+
+                # Static generators are typically DG/PV - add as generators
+                if p_sgen and p_sgen > 0:
+                    gen = Generator(
+                        bus_id=int(row.get("bus", 0)),
+                        name=str(row.get("name", f"SGen_{idx}")),
+                        p_gen_mw=p_sgen,
+                        q_gen_mvar=q_sgen,
+                        p_max_mw=_safe_float(row.get("max_p_mw", p_sgen * 2)),
+                        p_min_mw=0.0,
+                    )
+                    generators.append(gen)
+
+        # Convert loads
+        loads = []
+        if hasattr(net, 'load') and not net.load.empty:
+            for idx, row in net.load.iterrows():
+                p_load = q_load = None
+                if hasattr(net, 'res_load') and not net.res_load.empty and idx in net.res_load.index:
+                    p_load = _safe_float(net.res_load.at[idx, "p_mw"])
+                    q_load = _safe_float(net.res_load.at[idx, "q_mvar"])
+
+                load = Load(
+                    bus_id=int(row.get("bus", 0)),
+                    name=str(row.get("name", f"Load_{idx}")),
+                    p_mw=p_load if p_load else _safe_float(row.get("p_mw", 0)),
+                    q_mvar=q_load if q_load else _safe_float(row.get("q_mvar", 0)),
+                )
+                loads.append(load)
+
+        return PowerSystemModel(
+            buses=buses,
+            branches=branches,
+            generators=generators,
+            loads=loads,
+            base_mva=float(net.sn_mva) if hasattr(net, 'sn_mva') else 100.0,
+            source_engine="pandapower",
+            name=getattr(net, 'name', 'pandapower_net'),
+        )
+
+    def from_unified_model(self, model: PowerSystemModel) -> Any:
+        """Convert unified PowerSystemModel to pandapower network.
+
+        This enables cross-engine comparison by creating an equivalent
+        pandapower network from the unified model representation.
+
+        Args:
+            model: Unified PowerSystemModel
+
+        Returns:
+            pandapower network object
+        """
+        import pandapower as pp
+
+        # Create empty network
+        net = pp.create_empty_network(name=model.name or "unified_model")
+        net.sn_mva = model.base_mva
+
+        # Create buses
+        bus_idx_map = {}  # Map unified bus_id to pandapower bus index
+        for bus in model.buses:
+            pp_bus_idx = pp.create_bus(
+                net,
+                vn_kv=bus.base_kv,
+                name=bus.name,
+                type=bus.bus_type.lower() if bus.bus_type else "b",
+                max_vm_pu=bus.vm_max_pu or 1.1,
+                min_vm_pu=bus.vm_min_pu or 0.9,
+            )
+            bus_idx_map[bus.bus_id] = pp_bus_idx
+
+        # Create external grid (slack bus)
+        slack_bus = model.get_slack_bus()
+
+        # If no explicit slack bus in unified model, try to find one by angle=0
+        if slack_bus is None:
+            # Find bus with angle closest to 0
+            slack_candidate = min(model.buses, key=lambda b: abs(b.v_angle_degree or 999))
+            if abs(slack_candidate.v_angle_degree or 999) < 0.1:
+                slack_bus = slack_candidate
+                print(f"Auto-selected slack bus: {slack_bus.name} (angle=0 reference)")
+
+        if slack_bus:
+            slack_pp_idx = bus_idx_map.get(slack_bus.bus_id)
+            if slack_pp_idx is not None:
+                # Use voltage magnitude as setpoint (Bus doesn't have v_set_pu)
+                vm_pu = slack_bus.v_magnitude_pu if slack_bus.v_magnitude_pu else 1.0
+                pp.create_ext_grid(
+                    net,
+                    bus=slack_pp_idx,
+                    vm_pu=vm_pu,
+                    name=f"{slack_bus.name}_slack",
+                )
+
+        # Track which buses have generators (for PV bus detection)
+        buses_with_gens = {gen.bus_id for gen in model.generators}
+
+        # Create generators (PV buses)
+        for gen in model.generators:
+            pp_bus = bus_idx_map.get(gen.bus_id)
+            if pp_bus is not None:
+                # Find the bus to get voltage setpoint
+                bus = next((b for b in model.buses if b.bus_id == gen.bus_id), None)
+                # Check if this is the slack bus generator
+                if slack_bus and gen.bus_id == slack_bus.bus_id:
+                    # Slack bus generator is already handled by ext_grid
+                    continue
+                # Create generator (treat as PV bus if not slack)
+                pp.create_gen(
+                    net,
+                    bus=pp_bus,
+                    p_mw=gen.p_gen_mw or 0,
+                    vm_pu=gen.v_set_pu or (bus.v_magnitude_pu if bus else 1.0) or 1.0,
+                    name=gen.name,
+                    max_p_mw=gen.p_max_mw or 9999,
+                    min_p_mw=gen.p_min_mw or 0,
+                )
+
+        # Create loads
+        for load in model.loads:
+            pp_bus = bus_idx_map.get(load.bus_id)
+            if pp_bus is not None and (load.p_mw or load.q_mvar):
+                pp.create_load(
+                    net,
+                    bus=pp_bus,
+                    p_mw=load.p_mw or 0,
+                    q_mvar=load.q_mvar or 0,
+                    name=load.name,
+                )
+
+        # Create branches (lines)
+        for branch in model.branches:
+            if branch.branch_type == "LINE":
+                from_bus = bus_idx_map.get(branch.from_bus)
+                to_bus = bus_idx_map.get(branch.to_bus)
+                if from_bus is not None and to_bus is not None:
+                    # Get base voltage for impedance calculation
+                    from_vn = net.bus.at[from_bus, "vn_kv"] if from_bus in net.bus.index else 230.0
+                    # Z_base = V_base^2 / S_base (ohm)
+                    z_base = (from_vn ** 2) / model.base_mva
+                    # Convert pu to ohm: Z_ohm = Z_pu * Z_base
+                    # For line parameters (ohm/km), assume 1 km length
+                    length_km = 1.0
+                    r_ohm = (branch.r_pu or 0) * z_base
+                    x_ohm = (branch.x_pu or 0) * z_base
+                    # B (susceptance) in pu -> S = B_pu * S_base, then C = S / (2*pi*f*V^2)
+                    # For distributed model, B_pu is total line susceptance
+                    b_s = (branch.b_pu or 0) * model.base_mva  # MVar
+                    c_nf = (b_s * 1e6) / (2 * 3.14159 * 50 * (from_vn ** 2)) * 1e9 if b_s > 0 else 0
+
+                    pp.create_line_from_parameters(
+                        net,
+                        from_bus=from_bus,
+                        to_bus=to_bus,
+                        length_km=length_km,
+                        r_ohm_per_km=r_ohm / length_km,
+                        x_ohm_per_km=x_ohm / length_km,
+                        c_nf_per_km=c_nf / length_km,
+                        max_i_ka=(branch.rate_a_mva or 100) / (from_vn * 1.732),
+                        name=branch.name,
+                    )
+            elif branch.branch_type == "TRANSFORMER":
+                from_bus = bus_idx_map.get(branch.from_bus)
+                to_bus = bus_idx_map.get(branch.to_bus)
+                if from_bus is not None and to_bus is not None:
+                    # Get bus voltages for tap calculation
+                    from_vn = net.bus.at[from_bus, "vn_kv"] if from_bus in net.bus.index else 230.0
+                    to_vn = net.bus.at[to_bus, "vn_kv"] if to_bus in net.bus.index else 230.0
+
+                    pp.create_transformer_from_parameters(
+                        net,
+                        hv_bus=from_bus,
+                        lv_bus=to_bus,
+                        sn_mva=branch.rate_a_mva or 100.0,
+                        vn_hv_kv=from_vn,
+                        vn_lv_kv=to_vn,
+                        vkr_percent=(branch.r_pu or 0) * 100,
+                        vk_percent=(branch.x_pu or 0.01) * 100,
+                        pfe_kw=0,
+                        i0_percent=0,
+                        name=branch.name,
+                    )
+
+        return net
+
 
 __all__ = [
     "PandapowerPowerFlowAdapter",

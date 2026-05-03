@@ -5,6 +5,7 @@ Implements the EngineAdapter ABC for the CloudPSS platform, handling:
 - Model loading via Model.fetch / Model.load
 - Power flow execution via model.runPowerFlow
 - Result extraction via result.getBuses / result.getBranches
+- Conversion to unified PowerSystemModel (new architecture)
 """
 
 from __future__ import annotations
@@ -29,6 +30,15 @@ from cloudpss_skills_v2.powerapi.base import (
     ValidationResult,
 )
 from cloudpss_skills_v2.powerskill.model_handle import ComponentInfo, ComponentType
+
+# New architecture: Unified model conversion
+from cloudpss_skills_v2.core.system_model import (
+    Bus,
+    Branch,
+    Generator,
+    Load,
+    PowerSystemModel,
+)
 
 
 def _strip_html(name: str) -> str:
@@ -199,6 +209,7 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
         self._model_cache = {}
         self._result_cache: dict[str, SimulationResult] = {}
         self._original_rid_map = {}
+        self._unified_model_cache: dict[str, PowerSystemModel] = {}
         self._cloudpss = CloudPSSAdapter(
             api_url=CloudPSSAdapter.resolve_api_url(self._config.extra.get("auth", {}))
         )
@@ -228,6 +239,21 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
         self._model_cache.clear()
         self._result_cache.clear()
         self._original_rid_map.clear()
+        self._unified_model_cache.clear()
+
+    def get_unified_model(self, job_id: str) -> PowerSystemModel | None:
+        """Get unified PowerSystemModel for a completed job.
+
+        This is the new architecture method for accessing results
+        in a engine-agnostic format.
+
+        Args:
+            job_id: The simulation job ID
+
+        Returns:
+            Unified PowerSystemModel or None if not found
+        """
+        return self._unified_model_cache.get(job_id)
 
     def _do_load_model(self, model_id: str) -> bool:
         from cloudpss import Model
@@ -339,6 +365,11 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
 
             summary = _generate_pf_summary(normalized_buses, normalized_branches)
 
+            # Build unified PowerSystemModel (new architecture)
+            system_model = self._to_unified_model(
+                normalized_buses, normalized_branches, base_mva=100.0
+            )
+
             result_data = {
                 "model": getattr(model, "name", model_id),
                 "model_rid": model.rid if hasattr(model, "rid") else model_id,
@@ -357,9 +388,14 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
                 data=result_data,
                 started_at=started,
                 completed_at=datetime.now(),
+                system_model=system_model,  # New architecture: unified model
             )
 
-            self._result_cache[getattr(job, "id", job_id)] = sim_result
+            # Cache the unified model separately for retrieval via get_unified_model()
+            job_id_key = getattr(job, "id", job_id)
+            self._unified_model_cache[job_id_key] = system_model
+
+            self._result_cache[job_id_key] = sim_result
             return sim_result
 
         except Exception as e:
@@ -550,6 +586,271 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
                 )
             )
         return ValidationResult(valid=len(errors) == 0, errors=errors)
+
+    # -------------------------------------------------------------------------
+    # Unified Model Conversion (New Architecture)
+    # -------------------------------------------------------------------------
+
+    def _to_unified_model(
+        self,
+        bus_rows: list[dict[str, Any]],
+        branch_rows: list[dict[str, Any]],
+        base_mva: float = 100.0,
+    ) -> PowerSystemModel:
+        """Convert CloudPSS result to unified PowerSystemModel.
+
+        Args:
+            bus_rows: Normalized bus data from CloudPSS
+            branch_rows: Normalized branch data from CloudPSS
+            base_mva: System base MVA
+
+        Returns:
+            Unified PowerSystemModel with DataClass components
+        """
+        buses = self._convert_buses_to_unified(bus_rows)
+        # Build name to index mapping for branch connection lookup
+        bus_name_to_idx = {b.name: i for i, b in enumerate(buses)}
+        branches = self._convert_branches_to_unified(branch_rows, bus_name_to_idx)
+        generators = self._extract_generators_from_buses(bus_rows)
+        loads = self._extract_loads_from_buses(bus_rows)
+
+        return PowerSystemModel(
+            buses=buses,
+            branches=branches,
+            generators=generators,
+            loads=loads,
+            base_mva=base_mva,
+            source_engine="cloudpss",
+        )
+
+    def _convert_buses_to_unified(
+        self, bus_rows: list[dict[str, Any]]
+    ) -> list[Bus]:
+        """Convert CloudPSS bus rows to unified Bus DataClass."""
+        buses = []
+
+        for idx, row in enumerate(bus_rows):
+            # Determine bus type from data or infer
+            bus_type = self._infer_bus_type(row)
+
+            # Get voltage (may be from results or default)
+            v_mag = self._parse_float(row.get("voltage_pu"))
+            v_ang = self._parse_float(row.get("angle_deg"))
+
+            # Get net injection (generation - load)
+            p_gen = self._parse_float(row.get("generation_mw"), 0.0)
+            q_gen = self._parse_float(row.get("generation_mvar"), 0.0)
+            p_load = self._parse_float(row.get("load_mw"), 0.0)
+            q_load = self._parse_float(row.get("load_mvar"), 0.0)
+
+            p_inj = p_gen - p_load if p_gen or p_load else None
+            q_inj = q_gen - q_load if q_gen or q_load else None
+
+            bus = Bus(
+                bus_id=idx,  # Use index as ID if not provided
+                name=row.get("name", f"Bus_{idx}"),
+                base_kv=self._parse_float(row.get("voltage_kv"), 230.0),
+                bus_type=bus_type,
+                v_magnitude_pu=v_mag,
+                v_angle_degree=v_ang,
+                p_injected_mw=p_inj,
+                q_injected_mvar=q_inj,
+                vm_max_pu=1.1,  # Default limits
+                vm_min_pu=0.9,
+            )
+            buses.append(bus)
+
+        # Post-process: Identify slack bus by angle (smallest angle = reference)
+        # CloudPSS uses the bus with minimum angle as slack bus reference
+        if buses:
+            # Find bus with minimum absolute angle
+            slack_idx = min(range(len(buses)), key=lambda i: abs(buses[i].v_angle_degree or 999))
+            # Mark as SLACK (CloudPSS reference bus)
+            buses[slack_idx] = Bus(
+                bus_id=buses[slack_idx].bus_id,
+                name=buses[slack_idx].name,
+                base_kv=buses[slack_idx].base_kv,
+                bus_type="SLACK",  # Override to SLACK
+                v_magnitude_pu=buses[slack_idx].v_magnitude_pu,
+                v_angle_degree=buses[slack_idx].v_angle_degree,
+                p_injected_mw=buses[slack_idx].p_injected_mw,
+                q_injected_mvar=buses[slack_idx].q_injected_mvar,
+                vm_max_pu=buses[slack_idx].vm_max_pu,
+                vm_min_pu=buses[slack_idx].vm_min_pu,
+            )
+
+        return buses
+
+    def _convert_branches_to_unified(
+        self, branch_rows: list[dict[str, Any]], bus_name_to_idx: dict[str, int]
+    ) -> list[Branch]:
+        """Convert CloudPSS branch rows to unified Branch DataClass."""
+        branches = []
+
+        for idx, row in enumerate(branch_rows):
+            # Determine branch type
+            branch_type = self._infer_branch_type(row)
+
+            # Get from/to buses using name mapping
+            from_bus_name = row.get("from_bus", "")
+            to_bus_name = row.get("to_bus", "")
+            from_bus = self._find_bus_index(from_bus_name, bus_name_to_idx)
+            to_bus = self._find_bus_index(to_bus_name, bus_name_to_idx)
+
+            # Get power flows
+            p_from = self._parse_float(row.get("p_from_mw"))
+            q_from = self._parse_float(row.get("q_from_mvar"))
+            p_to = self._parse_float(row.get("p_to_mw"))
+            q_to = self._parse_float(row.get("q_to_mvar"))
+
+            # Calculate loading
+            s_from = (
+                (p_from**2 + q_from**2) ** 0.5
+                if p_from is not None and q_from is not None
+                else None
+            )
+            rate_a = self._parse_float(row.get("rate_a_mva"), 100.0)
+            loading = (s_from / rate_a * 100) if s_from and rate_a else None
+
+            branch = Branch(
+                from_bus=from_bus if from_bus is not None else idx,
+                to_bus=to_bus if to_bus is not None else idx + 1,
+                name=row.get("name", f"Branch_{idx}"),
+                branch_type=branch_type,
+                r_pu=self._parse_float(row.get("r_pu"), 0.0),
+                x_pu=self._parse_float(row.get("x_pu"), 0.01),
+                b_pu=self._parse_float(row.get("b_pu"), 0.0),
+                rate_a_mva=rate_a,
+                p_from_mw=p_from,
+                q_from_mvar=q_from,
+                p_to_mw=p_to,
+                q_to_mvar=q_to,
+                loading_percent=loading,
+            )
+            branches.append(branch)
+
+        return branches
+
+    def _extract_generators_from_buses(
+        self, bus_rows: list[dict[str, Any]]
+    ) -> list[Generator]:
+        """Extract generator information from bus rows."""
+        generators = []
+
+        for idx, row in enumerate(bus_rows):
+            p_gen = self._parse_float(row.get("generation_mw"), 0.0)
+            q_gen = self._parse_float(row.get("generation_mvar"), 0.0)
+
+            # Only create generator if there's generation
+            if p_gen > 0 or q_gen != 0:
+                bus_type = self._infer_bus_type(row)
+                v_set = (
+                    self._parse_float(row.get("voltage_pu"), 1.0)
+                    if bus_type in ("PV", "SLACK")
+                    else None
+                )
+
+                gen = Generator(
+                    bus_id=idx,
+                    name=f"Gen_{row.get('name', f'Bus_{idx}' )}",
+                    p_gen_mw=p_gen,
+                    q_gen_mvar=q_gen if q_gen != 0 else None,
+                    p_max_mw=max(p_gen * 2, 100.0),  # Estimate limits
+                    p_min_mw=0.0,
+                    v_set_pu=v_set,
+                )
+                generators.append(gen)
+
+        return generators
+
+    def _extract_loads_from_buses(
+        self, bus_rows: list[dict[str, Any]]
+    ) -> list[Load]:
+        """Extract load information from bus rows."""
+        loads = []
+
+        for idx, row in enumerate(bus_rows):
+            p_load = self._parse_float(row.get("load_mw"), 0.0)
+            q_load = self._parse_float(row.get("load_mvar"), 0.0)
+
+            # Only create load if there's demand
+            if p_load > 0 or q_load != 0:
+                load = Load(
+                    bus_id=idx,
+                    name=f"Load_{row.get('name', f'Bus_{idx}')}",
+                    p_mw=p_load,
+                    q_mvar=q_load,
+                )
+                loads.append(load)
+
+        return loads
+
+    def _infer_bus_type(self, row: dict[str, Any]) -> str:
+        """Infer bus type from CloudPSS data."""
+        # Check if explicitly specified
+        if "bus_type" in row:
+            bt = str(row["bus_type"]).upper()
+            if bt in ("SLACK", "SWING", "REF"):
+                return "SLACK"
+            if bt in ("PV", "GEN"):
+                return "PV"
+            if bt in ("PQ", "LOAD"):
+                return "PQ"
+
+        # Infer from generation/load
+        p_gen = self._parse_float(row.get("generation_mw"), 0.0)
+        v_mag = self._parse_float(row.get("voltage_pu"))
+
+        # If voltage is specified and generation exists -> PV or SLACK
+        if v_mag is not None and p_gen > 0:
+            # First generator is typically slack
+            return "PV"  # Default to PV, caller can adjust
+
+        return "PQ"
+
+    def _infer_branch_type(self, row: dict[str, Any]) -> str:
+        """Infer branch type from CloudPSS data."""
+        name = str(row.get("name", "")).lower()
+
+        if "transformer" in name or "trans" in name:
+            return "TRANSFORMER"
+        if "phase" in name or "ps" in name:
+            return "PHASE_SHIFTER"
+
+        return "LINE"
+
+    def _find_bus_index(self, bus_name: str, bus_name_to_idx: dict[str, int]) -> int | None:
+        """Find bus index from name using the provided mapping."""
+        if not bus_name:
+            return None
+        # First try direct name lookup
+        if bus_name in bus_name_to_idx:
+            return bus_name_to_idx[bus_name]
+        # Try converting to int (for numeric bus names)
+        try:
+            idx = int(bus_name)
+            # Check if this numeric index exists in the mapping
+            if idx in bus_name_to_idx.values():
+                return idx
+            # If buses are 1-indexed in source but 0-indexed in our model,
+            # try adjusting (but only if the adjusted value exists)
+            if idx - 1 in bus_name_to_idx.values():
+                return idx - 1
+        except (ValueError, TypeError):
+            pass
+        return None
+
+    def _parse_float(
+        self, value: Any, default: float | None = None
+    ) -> float | None:
+        """Safely parse float value."""
+        if value is None:
+            return default
+        try:
+            f = float(value)
+            return f
+        except (ValueError, TypeError):
+            return default
 
 
 def _generate_pf_summary(
