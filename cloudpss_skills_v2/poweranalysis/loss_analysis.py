@@ -177,7 +177,31 @@ class LossAnalysis(PowerAnalysis):
         self.branch_losses: list[BranchLoss] = []
         self.transformer_losses: list[TransformerLoss] = []
 
-    def run(self, model: PowerSystemModel, config: dict) -> dict:
+    def run(self, model_or_config, config: dict | None = None):
+        """Run loss analysis with unified model or config-based interface.
+
+        Supports two calling conventions:
+        1. Unified model: run(model, config) -> dict
+        2. Legacy config: run(config) -> SkillResult
+
+        Args:
+            model_or_config: Either PowerSystemModel (unified) or config dict (legacy)
+            config: Analysis configuration (required for unified interface)
+
+        Returns:
+            dict for unified interface, SkillResult for legacy interface
+        """
+        # Detect which interface is being used
+        if hasattr(model_or_config, 'buses') and config is not None:
+            # Unified model interface: run(model, config)
+            return self._run_unified(model_or_config, config)
+        elif isinstance(model_or_config, dict) and config is None:
+            # Legacy config interface: run(config)
+            return self.run_legacy(model_or_config)
+        else:
+            raise TypeError("Invalid arguments. Use run(model, config) for unified or run(config) for legacy.")
+
+    def _run_unified(self, model: PowerSystemModel, config: dict) -> dict:
         """Run loss analysis on unified PowerSystemModel.
 
         Args:

@@ -37,7 +37,258 @@ class N2SecurityAnalysis(PowerAnalysis):
     name = "n2_security"
     description = "N-2安全校核 - 检查支路对同时断开的安全"
 
-    def run(self, model: PowerSystemModel, config: dict) -> dict:
+    def validate(self, config: dict[str, Any]) -> tuple[bool, list[str]]:
+        """Validate configuration for backward compatibility."""
+        errors = []
+        if not config:
+            errors.append("config is required")
+            return False, errors
+        if not config.get("model", {}).get("rid"):
+            errors.append("model.rid is required")
+        return len(errors) == 0, errors
+
+    def run(self, model_or_config, config: dict | None = None):
+        """Run N-2 security analysis with unified model or config-based interface.
+
+        Supports two calling conventions:
+        1. Unified model: run(model, config) -> dict
+        2. Legacy config: run(config) -> SkillResult
+
+        Args:
+            model_or_config: Either PowerSystemModel (unified) or config dict (legacy)
+            config: Analysis configuration (required for unified interface)
+
+        Returns:
+            dict for unified interface, SkillResult for legacy interface
+        """
+        # Detect which interface is being used
+        if hasattr(model_or_config, 'buses') and config is not None:
+            # Unified model interface: run(model, config)
+            return self._run_unified(model_or_config, config)
+        elif isinstance(model_or_config, dict) and config is None:
+            # Legacy config interface: run(config)
+            return self._run_legacy(model_or_config)
+        else:
+            raise TypeError("Invalid arguments. Use run(model, config) for unified or run(config) for legacy.")
+
+    def _run_legacy(self, config: dict[str, Any]) -> SkillResult:
+        """Run N-2 security analysis with config-based interface (legacy)."""
+        from cloudpss_skills_v2.core.skill_result import SkillResult, SkillStatus
+        from cloudpss_skills_v2.powerskill import Engine
+        from datetime import datetime
+
+        start_time = datetime.now()
+
+        try:
+            # Validate config
+            valid, errors = self.validate(config)
+            if not valid:
+                return SkillResult(
+                    skill_name=self.name,
+                    status=SkillStatus.FAILED,
+                    error="; ".join(errors),
+                    start_time=start_time,
+                    end_time=datetime.now(),
+                )
+
+            # Get model from config
+            model_rid = config.get("model", {}).get("rid", "")
+            engine = config.get("engine", "cloudpss")
+            auth = config.get("auth", {})
+
+            # Create API and get model handle
+            api = Engine.create_powerflow_for_skill(
+                engine=engine,
+                base_url=auth.get("base_url"),
+                auth=auth,
+            )
+
+            handle = api.get_model_handle(model_rid)
+
+            # Convert to unified model
+            model = self._convert_handle_to_model(handle)
+
+            # Run analysis with unified model
+            result = self.run_unified(model, {
+                "check_pairs": config.get("analysis", {}).get("branches", []),
+                "voltage_threshold": config.get("analysis", {}).get("voltage_threshold", 0.05),
+                "thermal_threshold": config.get("analysis", {}).get("thermal_threshold", 1.0),
+                "max_pairs": config.get("analysis", {}).get("max_scenarios"),
+            })
+
+            # Convert result to SkillResult format
+            if result.get("status") == "error":
+                return SkillResult(
+                    skill_name=self.name,
+                    status=SkillStatus.FAILED,
+                    error="; ".join(result.get("errors", ["Unknown error"])),
+                    data=result,
+                    start_time=start_time,
+                    end_time=datetime.now(),
+                )
+
+            return SkillResult(
+                skill_name=self.name,
+                status=SkillStatus.SUCCESS,
+                data=result,
+                start_time=start_time,
+                end_time=datetime.now(),
+            )
+
+        except Exception as e:
+            logger.error(f"N-2 security analysis failed: {e}")
+            return SkillResult(
+                skill_name=self.name,
+                status=SkillStatus.FAILED,
+                error=str(e),
+                start_time=start_time,
+                end_time=datetime.now(),
+            )
+
+    def _convert_handle_to_model(self, handle) -> PowerSystemModel:
+        """Convert model handle to unified PowerSystemModel."""
+        from cloudpss_skills_v2.powerskill import ComponentType
+        from cloudpss_skills_v2.core.system_model import Bus, Branch
+
+        buses = []
+        branches = []
+
+        try:
+            # Get ext_grid buses (slack buses) first
+            slack_bus_indices = set()
+            try:
+                ext_grid_components = handle.get_components_by_type(ComponentType.SOURCE)
+                for comp in ext_grid_components:
+                    args = comp.args if hasattr(comp, 'args') and comp.args else {}
+                    bus_idx = args.get('bus', '') if isinstance(args, dict) else ''
+                    # Handle both int and string bus indices
+                    if isinstance(bus_idx, int):
+                        slack_bus_indices.add(f"bus:{bus_idx}")
+                    elif bus_idx:
+                        # If it's already a string like "bus:0", use it directly
+                        if str(bus_idx).startswith('bus:'):
+                            slack_bus_indices.add(str(bus_idx))
+                        else:
+                            slack_bus_indices.add(f"bus:{bus_idx}")
+            except Exception:
+                pass
+
+            bus_components = handle.get_components_by_type(ComponentType.BUS)
+            for comp in bus_components:
+                # Get base_kv from component args or use default
+                args = comp.args if hasattr(comp, 'args') and comp.args else {}
+                base_kv = args.get('vn_kv', 110.0) if isinstance(args, dict) else 110.0
+                # Ensure base_kv is a float
+                try:
+                    base_kv = float(base_kv) if base_kv else 110.0
+                except (TypeError, ValueError):
+                    base_kv = 110.0
+
+                # Parse bus_id from key (e.g., "bus:0" -> 0)
+                bus_id = comp.key
+                if isinstance(bus_id, str) and ':' in bus_id:
+                    try:
+                        bus_id = int(bus_id.split(':')[-1])
+                    except ValueError:
+                        bus_id = 0
+                elif isinstance(bus_id, str):
+                    # Try to parse as int directly
+                    try:
+                        bus_id = int(bus_id)
+                    except ValueError:
+                        bus_id = 0
+                elif not isinstance(bus_id, int):
+                    bus_id = 0
+
+                # Determine bus type - check if this is a slack bus
+                bus_type = "SLACK" if comp.key in slack_bus_indices else "PQ"
+                bus = Bus(
+                    bus_id=bus_id,
+                    name=comp.name,
+                    base_kv=base_kv,
+                    v_magnitude_pu=1.0,
+                    bus_type=bus_type,
+                )
+                buses.append(bus)
+
+            branch_components = handle.get_components_by_type(ComponentType.BRANCH)
+            for comp in branch_components:
+                # Get connected buses from args (not properties)
+                args = comp.args if hasattr(comp, 'args') and comp.args else {}
+                from_bus_key = args.get("from_bus", "") if isinstance(args, dict) else ""
+                to_bus_key = args.get("to_bus", "") if isinstance(args, dict) else ""
+
+                # Parse bus IDs from keys (e.g., "bus:0" -> 0)
+                from_bus = from_bus_key
+                if isinstance(from_bus_key, str) and ":" in from_bus_key:
+                    try:
+                        from_bus = int(from_bus_key.split(":")[-1])
+                    except ValueError:
+                        from_bus = 0
+                elif isinstance(from_bus_key, str):
+                    try:
+                        from_bus = int(from_bus_key)
+                    except ValueError:
+                        from_bus = 0
+                elif not isinstance(from_bus_key, int):
+                    from_bus = 0
+
+                to_bus = to_bus_key
+                if isinstance(to_bus_key, str) and ":" in to_bus_key:
+                    try:
+                        to_bus = int(to_bus_key.split(":")[-1])
+                    except ValueError:
+                        to_bus = 0
+                elif isinstance(to_bus_key, str):
+                    try:
+                        to_bus = int(to_bus_key)
+                    except ValueError:
+                        to_bus = 0
+                elif not isinstance(to_bus_key, int):
+                    to_bus = 0
+
+                # Ensure r_pu and x_pu are floats
+                try:
+                    r_pu = float(args.get("r_pu", 0.001)) if isinstance(args, dict) else 0.001
+                except (TypeError, ValueError):
+                    r_pu = 0.001
+                try:
+                    x_pu = float(args.get("x_pu", 0.01)) if isinstance(args, dict) else 0.01
+                except (TypeError, ValueError):
+                    x_pu = 0.01
+
+                in_service = args.get("in_service", True) if isinstance(args, dict) else True
+
+                # Skip branches that connect a bus to itself (invalid)
+                if from_bus == to_bus:
+                    logger.warning(f"Skipping branch {comp.key}: connects bus {from_bus} to itself")
+                    continue
+
+                try:
+                    branch = Branch(
+                        name=comp.key,
+                        from_bus=from_bus,
+                        to_bus=to_bus,
+                        r_pu=r_pu,
+                        x_pu=x_pu,
+                        in_service=in_service,
+                    )
+                    branches.append(branch)
+                except ValueError as e:
+                    logger.warning(f"Skipping branch {comp.key}: {e}")
+                    continue
+        except Exception as e:
+            logger.warning(f"Could not convert handle to model: {e}")
+            import traceback
+            logger.warning(traceback.format_exc())
+
+        return PowerSystemModel(
+            buses=buses,
+            branches=branches,
+            base_mva=100.0,
+        )
+
+    def _run_unified(self, model: PowerSystemModel, config: dict) -> dict:
         """Run N-2 security analysis on unified model.
 
         Args:
@@ -73,8 +324,13 @@ class N2SecurityAnalysis(PowerAnalysis):
 
         # Generate branch pairs to check
         if check_pairs:
-            # Use specified pairs
-            pairs = check_pairs
+            # If check_pairs is a list of branch names (not pairs), generate combinations
+            if check_pairs and isinstance(check_pairs[0], str):
+                # It's a list of branch names, generate all combinations of 2
+                pairs = list(combinations(check_pairs, 2))
+            else:
+                # Use specified pairs directly
+                pairs = check_pairs
         else:
             # Generate all combinations of 2 branches
             branch_names = [br.name for br in model.branches if br.in_service]

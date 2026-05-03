@@ -18,7 +18,7 @@ from cloudpss_skills_v2.poweranalysis.renewable_integration import (
     RenewableIntegrationAnalysis,
 )
 from cloudpss_skills_v2.poweranalysis.thevenin_equivalent import (
-    TheveninEquivalentAnalysis,
+    TheveninEquivalentAnalysisLegacy,
 )
 from cloudpss_skills_v2.tests.golden_cases import (
     POWER_QUALITY_BORDERLINE_FAIR,
@@ -125,7 +125,7 @@ def test_builder_validator_accepts_two_bus_pv_golden_case():
 
 def test_thevenin_equivalent_matches_hand_calculated_short_circuit_capacity():
     case = THEVENIN_WEAK_GRID
-    skill = TheveninEquivalentAnalysis()
+    skill = TheveninEquivalentAnalysisLegacy()
 
     z_mag = skill._calculate_impedance_magnitude(case["z_th_pu"]["real"], case["z_th_pu"]["imag"])
     scc = skill._calculate_scc(110.0, z_mag, case["base_mva"])
