@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from cloudpss_skills_v2.core.system_model import Branch, Bus, Generator, Load, PowerSystemModel
 from cloudpss_skills_v2.powerapi.adapters.matpower_cpf import MatpowerCPFAdapter
@@ -69,6 +70,21 @@ def test_matpower_cpf_normalizes_tuple_result():
     assert result["max_lambda"] == 1.2
 
 
+def test_matpower_cpf_normalizes_octave_extracted_result():
+    result = MatpowerCPFAdapter._normalize_result({
+        "cpf": {
+            "lam": np.array([[0.0, 0.5, 1.2]]),
+            "V": np.array([[1.0, 0.99, 0.97], [0.98, 0.9, 0.82]]),
+            "max_lam": 1.2,
+        },
+        "success": False,
+    })
+
+    assert result["success"] is False
+    assert result["max_lambda"] == 1.2
+    assert result["cpf"]["V"].shape == (2, 3)
+
+
 def test_matpower_cpf_extracts_monitored_pv_curve_from_arrays():
     model = _sample_model()
     cpf = {
@@ -90,3 +106,22 @@ def test_matpower_cpf_extracts_monitored_pv_curve_from_arrays():
         {"bus": "Load", "scale": 0.5, "voltage": 0.9, "source": "matpower_runcpf"},
         {"bus": "Load", "scale": 1.0, "voltage": 0.82, "source": "matpower_runcpf"},
     ]
+
+
+@pytest.mark.integration
+def test_matpower_cpf_runs_real_runtime_when_available():
+    status = MatpowerCPFAdapter.runtime_status()
+    if not status["available"]:
+        pytest.skip(f"MATPOWER CPF runtime is not available: {status}")
+
+    result = VoltageStabilityAnalysis().run(
+        _sample_model(),
+        {"method": "matpower_cpf", "target_scale": 1.2, "monitor_buses": ["Load"]},
+    )
+
+    assert result["analysis_mode"] == "matpower_continuation_power_flow"
+    assert result["status"] in {"success", "warning"}
+    assert result["max_loadability"] > 1.0
+    assert len(result["pv_curve"]) > 2
+    assert result["pv_curve"][0]["bus"] == "Load"
+    assert result["matpower_runtime"]["available"] is True

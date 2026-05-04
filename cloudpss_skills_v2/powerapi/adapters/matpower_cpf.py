@@ -203,14 +203,49 @@ class MatpowerCPFAdapter:
         try:
             if engine == "matlab":
                 result = mp.runcpf(base, target, nargout=2)
+            elif engine == "octave":
+                result = self._run_octave_cpf(mp, base, target)
             else:
-                result = mp.runcpf(base, target, nout=2)
+                result = mp.runcpf(base, target)
         finally:
-            stop = getattr(mp, "stop", None) or getattr(mp, "exit", None)
-            if callable(stop):
-                stop()
+            self._stop_session(mp)
 
         return self._normalize_result(result)
+
+    @staticmethod
+    def _run_octave_cpf(mp: Any, base: dict[str, Any], target: dict[str, Any]) -> dict[str, Any]:
+        """Run CPF in Octave without returning MATPOWER's full object graph."""
+        mp.push("cpf_base_case", base, verbose=False)
+        mp.push("cpf_target_case", target, verbose=False)
+        mp.eval(
+            "cpf_mpopt = mpoption('verbose', 0, 'out.all', 0);",
+            verbose=False,
+        )
+        mp.eval(
+            "[cpf_results, cpf_success] = runcpf(cpf_base_case, cpf_target_case, cpf_mpopt);",
+            verbose=False,
+        )
+        mp.eval(
+            "cpf_lam = []; cpf_v = []; cpf_max_lam = NaN;"
+            "if isfield(cpf_results, 'cpf'); "
+            "  if isfield(cpf_results.cpf, 'lam_c'); cpf_lam = cpf_results.cpf.lam_c; "
+            "  elseif isfield(cpf_results.cpf, 'lam'); cpf_lam = cpf_results.cpf.lam; endif; "
+            "  if isfield(cpf_results.cpf, 'V_c'); cpf_v = cpf_results.cpf.V_c; "
+            "  elseif isfield(cpf_results.cpf, 'V'); cpf_v = cpf_results.cpf.V; endif; "
+            "  if isfield(cpf_results.cpf, 'max_lam'); cpf_max_lam = cpf_results.cpf.max_lam; endif; "
+            "endif;",
+            verbose=False,
+        )
+        cpf = {
+            "lam": mp.pull("cpf_lam", verbose=False),
+            "V": mp.pull("cpf_v", verbose=False),
+            "max_lam": mp.pull("cpf_max_lam", verbose=False),
+        }
+        success = mp.pull("cpf_success", verbose=False)
+        return {
+            "cpf": cpf,
+            "success": bool(np.asarray(success).reshape(-1)[0]),
+        }
 
     @staticmethod
     def _normalize_result(result: Any) -> dict[str, Any]:
@@ -244,6 +279,12 @@ class MatpowerCPFAdapter:
             "No MATPOWER runtime is available: install Octave plus 'oct2py' "
             "or install MATLAB Engine for Python"
         )
+
+    @staticmethod
+    def _stop_session(mp: Any) -> None:
+        exit_method = getattr(type(mp), "exit", None)
+        if callable(exit_method):
+            exit_method(mp)
 
 
 def _module_available(name: str) -> bool:

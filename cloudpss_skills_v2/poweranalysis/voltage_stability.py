@@ -497,9 +497,12 @@ class VoltageStabilityAnalysis(PowerAnalysis):
             cpf=cpf_result.get("cpf", {}),
             monitor_buses=monitor_buses,
         )
+        solver_success = bool(cpf_result.get("success", True))
+        status = "success" if solver_success else "warning" if pv_curve else "error"
         critical_point = max_lambda
-        return {
-            "status": "success" if cpf_result.get("success", True) else "error",
+        result = {
+            "status": status,
+            "solver_success": solver_success,
             "pv_curve": pv_curve,
             "critical_point": critical_point,
             "max_loadability": max_lambda,
@@ -522,11 +525,18 @@ class VoltageStabilityAnalysis(PowerAnalysis):
             "limitations": [
                 "Requires external Octave/MATLAB plus the Python MATPOWER bridge",
                 "Current MVP uses all-load proportional scaling only",
+                "MATPOWER solver_success may be false even when a partial CPF trace is available",
             ],
             "matpower_runtime": adapter.runtime_status(),
             "used_singular_ybus_approximation": False,
             "timestamp": datetime.now().isoformat(),
         }
+        if not solver_success:
+            result["warning"] = (
+                "MATPOWER runcpf did not report full convergence, but returned "
+                "a CPF trace and max loadability estimate"
+            )
+        return result
 
     @staticmethod
     def _matpower_cpf_error(error: str, runtime_status: dict | None = None) -> dict:
