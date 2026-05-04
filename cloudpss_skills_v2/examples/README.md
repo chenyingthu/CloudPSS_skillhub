@@ -179,6 +179,28 @@ print(f"Branches: {len(model.branches)}")
 **Returns:**
 - `PowerSystemModel` with 5 buses, 5 branches, 3 generators, and 2 loads
 
+### Voltage Stability Evidence Modes
+
+`voltage_stability` defaults to a fast screening proxy. For an AC power-flow
+validation scan, pass `method: "pandapower_ac"` when running on a unified
+`PowerSystemModel`:
+
+```python
+from cloudpss_skills_v2.poweranalysis.voltage_stability import VoltageStabilityAnalysis
+
+result = VoltageStabilityAnalysis().run(model, {
+    "method": "pandapower_ac",
+    "load_scaling": [1.0, 1.2, 1.4],
+    "monitor_buses": ["Load"],
+})
+
+assert result["analysis_mode"] == "pandapower_ac_power_flow_scan"
+```
+
+This mode uses repeated pandapower AC `runpp` calculations. It is stronger than
+the default screening estimate, but it is still a discrete load-scaling scan and
+not a continuous CPF solver.
+
 ## Architecture Patterns
 
 ### Command Pattern (Example 1)

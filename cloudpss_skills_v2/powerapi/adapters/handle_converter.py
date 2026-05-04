@@ -150,6 +150,23 @@ def convert_handle_to_power_system_model(handle: Any, *, base_mva: float = 100.0
             )
         )
 
+    for component in _components(handle, ComponentType.SHUNT):
+        data = _component_data(component)
+        bus_id = _resolve_bus(data.get("bus"), bus_id_map)
+        if bus_id is None:
+            logger.debug("Skipping shunt %s: cannot resolve bus ID", getattr(component, "key", ""))
+            continue
+        q_mvar = _float_value(data.get("q_mvar", data.get("q_mvar_step")), 0.0)
+        loads.append(
+            Load(
+                bus_id=bus_id,
+                name=getattr(component, "name", None) or str(getattr(component, "key", "")),
+                p_mw=_float_value(data.get("p_mw"), 0.0),
+                q_mvar=-q_mvar,
+                in_service=_bool_value(data.get("in_service"), True),
+            )
+        )
+
     generators: list[Generator] = []
     for component in _components(handle, ComponentType.GENERATOR):
         data = _component_data(component)

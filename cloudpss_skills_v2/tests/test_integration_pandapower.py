@@ -70,6 +70,12 @@ class TestPandapowerAdapterCase14:
     def test_run_case14(self, adapter):
         result = adapter._do_run_simulation({"model_id": "case14"})
         assert result.status in [SimulationStatus.COMPLETED, SimulationStatus.FAILED]
+        if result.status == SimulationStatus.COMPLETED:
+            from cloudpss_skills_v2.core.system_model import PowerSystemModel
+
+            assert isinstance(result.system_model, PowerSystemModel)
+            assert result.system_model.source_engine == "pandapower"
+            assert len(result.system_model.buses) == result.data["bus_count"]
 
     def test_load_case14_model(self, adapter):
         success = adapter._do_load_model("case14")

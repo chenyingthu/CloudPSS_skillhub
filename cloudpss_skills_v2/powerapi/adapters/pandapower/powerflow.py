@@ -102,6 +102,18 @@ def _safe_float(value, default=0.0) -> float:
         return default
 
 
+def _component_name(value, fallback: str) -> str:
+    if value is None:
+        return fallback
+    try:
+        if value != value:
+            return fallback
+    except TypeError:
+        pass
+    text = str(value)
+    return fallback if text in {"", "None", "nan", "NaN"} else text
+
+
 def _load_case(case_name: str):
     import pandapower.networks as nw
 
@@ -449,11 +461,13 @@ class PandapowerPowerFlowAdapter(EngineAdapter):
                 "branches": branch_rows,
                 "summary": summary,
             }
+            system_model = self._to_unified_model(net)
 
             sim_result = SimulationResult(
                 job_id=job_id,
                 status=SimulationStatus.COMPLETED,
                 data=result_data,
+                system_model=system_model,
                 started_at=started,
                 completed_at=datetime.now(),
             )
@@ -679,7 +693,7 @@ class PandapowerPowerFlowAdapter(EngineAdapter):
                 branch = Branch(
                     from_bus=int(row.get("from_bus", 0)),
                     to_bus=int(row.get("to_bus", 0)),
-                    name=str(row.get("name", f"Line_{idx}")),
+                    name=_component_name(row.get("name"), f"line:{idx}"),
                     branch_type="LINE",
                     r_pu=_safe_float(row.get("r_ohm_per_km", 0.0)),
                     x_pu=_safe_float(row.get("x_ohm_per_km", 0.01)),
@@ -709,7 +723,7 @@ class PandapowerPowerFlowAdapter(EngineAdapter):
                 branch = Branch(
                     from_bus=int(row.get("hv_bus", 0)),
                     to_bus=int(row.get("lv_bus", 0)),
-                    name=str(row.get("name", f"Trafo_{idx}")),
+                    name=_component_name(row.get("name"), f"trafo:{idx}"),
                     branch_type="TRANSFORMER",
                     r_pu=_safe_float(row.get("vkr_percent", 0.0)) / 100.0,
                     x_pu=_safe_float(row.get("vk_percent", 0.0)) / 100.0,

@@ -221,10 +221,19 @@ class VoltageStabilityAnalysis(PowerAnalysis):
         load_scaling = config.get("load_scaling", [1.0, 1.2, 1.4, 1.6, 1.8, 2.0])
         monitor_buses = config.get("monitor_buses", [])
         collapse_threshold = config.get("collapse_threshold", 0.7)
+        method = config.get("method", config.get("analysis_method", "screening_proxy"))
 
         # If no specific buses to monitor, use all PQ buses
         if not monitor_buses:
             monitor_buses = [bus.name for bus in model.buses if bus.bus_type == "PQ"]
+
+        if method in {"pandapower_ac", "ac_power_flow"}:
+            return self._run_pandapower_ac_scan(
+                model=model,
+                load_scaling=load_scaling,
+                monitor_buses=monitor_buses,
+                collapse_threshold=collapse_threshold,
+            )
 
         # Initialize results
         pv_curve = []
@@ -324,6 +333,132 @@ class VoltageStabilityAnalysis(PowerAnalysis):
             "used_singular_ybus_approximation": used_singular_ybus_approximation,
             "timestamp": datetime.now().isoformat(),
         }
+
+    def _run_pandapower_ac_scan(
+        self,
+        model: PowerSystemModel,
+        load_scaling: list[float],
+        monitor_buses: list[str],
+        collapse_threshold: float,
+    ) -> dict:
+        """Run an AC power-flow load scan using pandapower when available."""
+        try:
+            import pandapower as pp
+
+            from cloudpss_skills_v2.powerapi.adapters.pandapower.powerflow import (
+                PandapowerPowerFlowAdapter,
+            )
+        except Exception as exc:
+            return {
+                "status": "error",
+                "error": f"pandapower AC scan unavailable: {exc}",
+                "pv_curve": [],
+                "critical_point": None,
+                "max_loadability": None,
+                "analysis_mode": "pandapower_ac_unavailable",
+                "confidence_level": "not_evaluated",
+            }
+
+        adapter = PandapowerPowerFlowAdapter()
+        try:
+            base_net = adapter.from_unified_model(model)
+        except Exception as exc:
+            return {
+                "status": "error",
+                "error": f"failed to convert unified model to pandapower network: {exc}",
+                "pv_curve": [],
+                "critical_point": None,
+                "max_loadability": None,
+                "analysis_mode": "pandapower_ac_conversion_failed",
+                "confidence_level": "not_evaluated",
+            }
+
+        pv_curve = []
+        converged_cases = []
+        failed_cases = []
+        critical_point = None
+        max_loadability = None
+
+        for scale in load_scaling:
+            net = adapter.from_unified_model(model)
+            if hasattr(net, "load") and not net.load.empty:
+                net.load["p_mw"] = base_net.load["p_mw"] * scale
+                net.load["q_mvar"] = base_net.load["q_mvar"] * scale
+
+            try:
+                pp.runpp(net)
+            except Exception as exc:
+                failed_cases.append({"scale": scale, "error": str(exc)})
+                break
+
+            if not getattr(net, "converged", False):
+                failed_cases.append({"scale": scale, "error": "pandapower power flow did not converge"})
+                break
+
+            voltages = {}
+            for bus in model.buses:
+                if bus.name not in monitor_buses:
+                    continue
+                pp_idx = self._find_pandapower_bus_index(net, bus.name)
+                if pp_idx is None or pp_idx not in net.res_bus.index:
+                    continue
+                voltage = float(net.res_bus.at[pp_idx, "vm_pu"])
+                voltages[bus.name] = voltage
+                pv_curve.append({
+                    "bus": bus.name,
+                    "scale": scale,
+                    "voltage": voltage,
+                    "source": "pandapower_ac",
+                })
+                if voltage < collapse_threshold and critical_point is None:
+                    critical_point = scale
+
+            converged_cases.append({"scale": scale, "voltages": voltages})
+            max_loadability = scale
+
+        status = "success" if converged_cases else "error"
+        return {
+            "status": status,
+            "pv_curve": pv_curve,
+            "critical_point": critical_point,
+            "max_loadability": max_loadability,
+            "monitored_buses": monitor_buses,
+            "load_scaling": load_scaling,
+            "collapse_threshold": collapse_threshold,
+            "converged_cases": len(converged_cases),
+            "failed_cases": failed_cases,
+            "analysis_mode": "pandapower_ac_power_flow_scan",
+            "data_source": {
+                "model": "PowerSystemModel converted to pandapower network",
+                "load_scaling": "scan.load_scaling",
+                "voltage_estimate": "pandapower AC runpp bus voltage results",
+            },
+            "confidence_level": "ac_power_flow_scan_not_cpf",
+            "standard_basis": (
+                "Repeated AC power-flow load-scaling scan using pandapower runpp; "
+                "not a continuation power-flow standard calculation"
+            ),
+            "assumptions": [
+                "Unified model can be converted to an equivalent pandapower network",
+                "Discrete load-scaling points are sufficient for a validation scan",
+            ],
+            "limitations": [
+                "Does not run full AC continuation power flow",
+                "Discrete scan may miss the exact voltage-collapse nose point",
+                "Use a dedicated CPF engine before operational decisions",
+            ],
+            "used_singular_ybus_approximation": False,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    @staticmethod
+    def _find_pandapower_bus_index(net, bus_name: str) -> int | None:
+        if not hasattr(net, "bus") or net.bus.empty:
+            return None
+        matches = net.bus[net.bus["name"] == bus_name]
+        if not matches.empty:
+            return int(matches.index[0])
+        return None
 
     def _calculate_voltages(self, model: PowerSystemModel) -> tuple[dict[str, float] | None, bool]:
         """Calculate bus voltages using simplified power flow.

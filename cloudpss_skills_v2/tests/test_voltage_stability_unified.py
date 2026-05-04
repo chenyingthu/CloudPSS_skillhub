@@ -181,6 +181,47 @@ def test_voltage_stability_marks_singular_ybus_screening_path():
     assert result["analysis_mode"] == "screening_proxy"
 
 
+def test_voltage_stability_can_run_pandapower_ac_scan():
+    """Optional pandapower mode should use AC runpp results, not screening estimates."""
+    from cloudpss_skills_v2.poweranalysis.voltage_stability import VoltageStabilityAnalysis
+
+    model = PowerSystemModel(
+        buses=[
+            Bus(bus_id=0, name="Slack", base_kv=110.0, bus_type="SLACK", v_magnitude_pu=1.0),
+            Bus(bus_id=1, name="Load", base_kv=110.0, bus_type="PQ", v_magnitude_pu=0.99),
+        ],
+        branches=[
+            Branch(
+                from_bus=0,
+                to_bus=1,
+                name="Line1",
+                branch_type="LINE",
+                r_pu=0.01,
+                x_pu=0.08,
+                rate_a_mva=100.0,
+            ),
+        ],
+        loads=[Load(bus_id=1, name="L1", p_mw=20, q_mvar=5)],
+        base_mva=100.0,
+    )
+
+    result = VoltageStabilityAnalysis().run(
+        model,
+        {
+            "method": "pandapower_ac",
+            "load_scaling": [1.0, 1.2],
+            "monitor_buses": ["Load"],
+        },
+    )
+
+    assert result["status"] == "success"
+    assert result["analysis_mode"] == "pandapower_ac_power_flow_scan"
+    assert result["confidence_level"] == "ac_power_flow_scan_not_cpf"
+    assert result["used_singular_ybus_approximation"] is False
+    assert len(result["pv_curve"]) == 2
+    assert all(point["source"] == "pandapower_ac" for point in result["pv_curve"])
+
+
 if __name__ == "__main__":
     test_voltage_stability_runs_on_unified_model()
     test_voltage_stability_model_validation()

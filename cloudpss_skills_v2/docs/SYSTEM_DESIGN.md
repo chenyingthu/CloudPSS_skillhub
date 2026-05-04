@@ -82,7 +82,7 @@ User Input → Skill → PowerFlow.run({model_id})
 | `CloudPSSPowerFlowAdapter` | Power Flow | ✅ Working |
 | `CloudPSSShortCircuitAdapter` | Short Circuit (via EMT) | ✅ Working |
 | `CloudPSSEMTAdapter` | EMT Transient | ✅ Working |
-| `PandapowerPowerFlowAdapter` | Power Flow | 🔶 Requires testing |
+| `PandapowerPowerFlowAdapter` | Power Flow | ✅ Working; returns `SimulationResult.system_model` |
 | `PandapowerShortCircuitAdapter` | Short Circuit | 🔶 Requires testing |
 
 ### Shared ModelHandle Conversion
@@ -99,11 +99,26 @@ local `_convert_handle_to_model` implementations. The converter currently maps:
 | `transformer` | `Branch(branch_type="TRANSFORMER")` | Preserves `sn_mva`, tap ratio, and phase shift when provided |
 | `load` | `Load` | Requires an explicit resolvable `bus` |
 | `generator` | `Generator` | Requires an explicit resolvable `bus` |
+| `shunt` | `Load` equivalent | Mapped as negative `q_mvar` at the resolved bus |
 
 The converter is conservative by design: branches and transformers with missing,
 unknown, or self-loop endpoints are skipped rather than connected to fabricated
 buses. Analysis modules may keep `_convert_handle_to_model` as a compatibility
 wrapper, but new conversion behavior should be added in the shared adapter.
+
+### Voltage Stability Analysis Modes
+
+`voltage_stability` supports two explicit evidence levels:
+
+| Method | `analysis_mode` | Evidence boundary |
+|--------|-----------------|-------------------|
+| default / `screening_proxy` | `screening_proxy` | Fast impedance/load voltage-drop screening; not an AC CPF calculation |
+| `pandapower_ac` | `pandapower_ac_power_flow_scan` | Repeated pandapower AC `runpp` load-scaling scan; stronger than screening, still not a continuous CPF solver |
+
+The `pandapower_ac` mode converts the unified `PowerSystemModel` to a
+pandapower network and reads bus voltages from AC power-flow results at each
+load-scaling point. It is intended as a validation scan before a dedicated CPF
+engine is available, not as an operational voltage-collapse certificate.
 
 ## 3. Integration Test Tiers
 

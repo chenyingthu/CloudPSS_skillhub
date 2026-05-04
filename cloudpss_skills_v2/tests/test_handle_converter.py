@@ -61,6 +61,7 @@ def _handle_with_transformer():
             ],
             ComponentType.LOAD: [FakeComponent("load:0", args={"bus": "bus:1", "p_mw": "40", "q_mvar": "8"})],
             ComponentType.GENERATOR: [FakeComponent("gen:0", args={"bus": "bus:0", "p_mw": "45"})],
+            ComponentType.SHUNT: [FakeComponent("shunt:0", args={"bus": "bus:1", "q_mvar": "5"})],
         }
     )
 
@@ -78,6 +79,8 @@ def test_shared_converter_keeps_transformers_and_resolves_real_endpoints():
     assert transformer.tap_ratio == 1.05
     assert transformer.phase_shift_degree == 10
     assert model.loads[0].bus_id == 1
+    assert model.loads[1].name == "shunt:0"
+    assert model.loads[1].q_mvar == -5
     assert model.generators[0].bus_id == 0
 
 
