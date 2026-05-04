@@ -172,6 +172,18 @@ internal `_unified_b_pu` column. Native pandapower cases continue using the
 standard capacitance-to-per-unit formula, so standard cases such as `case9` and
 `case30` remain valid MATPOWER CPF inputs.
 
+Large standard cases are covered as a separate cross-engine validation layer:
+
+| Tier | Cases | Default behavior | Purpose |
+|------|-------|------------------|---------|
+| Default large | `case57`, `case118`, `case300`, `case1354pegase` | Runs in the normal v2 suite | Validate pandapower -> unified -> MATPOWER matrix readiness beyond toy systems |
+| Pressure | `case2869pegase` | Requires `CLOUDPSS_V2_RUN_LARGE_CASES=1` | Exercise multi-thousand-bus conversion without making every test run expensive |
+
+Some available pandapower/MATPOWER-family cases are intentionally not yet hard
+gates. For example, `case3120sp`, `case1888rte`, and `case2848rte` can fail the
+current pandapower power-flow adapter path in this environment, so they should
+be promoted only after their native run behavior is understood and stabilized.
+
 ## 3. Integration Test Tiers
 
 ### Tier 1: Engine Connectivity

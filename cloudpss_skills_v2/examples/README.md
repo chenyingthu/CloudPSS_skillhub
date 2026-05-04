@@ -251,6 +251,19 @@ CloudPSS power flow result
     -> MATPOWER CPF for continuation power-flow results
 ```
 
+Large pandapower standard cases can be used to stress the same conversion path:
+
+```bash
+python3 -m pytest -q cloudpss_skills_v2/tests/test_large_standard_case_chain.py
+
+CLOUDPSS_V2_RUN_LARGE_CASES=1 \
+  python3 -m pytest -q \
+  cloudpss_skills_v2/tests/test_large_standard_case_chain.py::test_pressure_pandapower_cases_are_matpower_ready_when_enabled
+```
+
+The default large layer covers `case57`, `case118`, `case300`, and
+`case1354pegase`. The opt-in pressure layer currently covers `case2869pegase`.
+
 ## Architecture Patterns
 
 ### Command Pattern (Example 1)
