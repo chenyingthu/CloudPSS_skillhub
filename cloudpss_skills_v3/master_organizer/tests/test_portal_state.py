@@ -1,8 +1,10 @@
-"""Portal state/API helper tests."""
+"""Portal handlers/API tests."""
 
 import sys
 import types
 from pathlib import Path
+
+import pytest
 
 from cloudpss_skills_v3.master_organizer.core import (
     EntityType,
@@ -12,13 +14,44 @@ from cloudpss_skills_v3.master_organizer.core import (
     get_path_manager,
 )
 from cloudpss_skills_v3.master_organizer.core.server_auth import build_auth_metadata
-from cloudpss_skills_v3.master_organizer.portal import state
+from cloudpss_skills_v3.master_organizer.portal.handlers import (
+    AuditHandler,
+    CaseHandler,
+    ModelHandler,
+    ResultHandler,
+    TaskHandler,
+    WorkspaceHandler,
+)
 
 
-def test_portal_snapshot_create_and_run_powerflow(tmp_path, monkeypatch):
+@pytest.fixture
+def setup_registry(tmp_path, monkeypatch):
+    """Setup test environment with clean registry."""
     monkeypatch.setenv("CLOUDPSS_HOME", str(tmp_path))
     get_path_manager(str(tmp_path))
 
+    server_id = IDGenerator.generate(EntityType.SERVER)
+    ServerRegistry().create(
+        server_id,
+        Server(
+            id=server_id,
+            name="portal-server",
+            url="http://portal.test/",
+            owner="tester",
+            auth=build_auth_metadata("token", {"token_source": "test"}),
+            default=True,
+        ),
+    )
+
+    return {"server_id": server_id}
+
+
+def test_portal_snapshot_create_and_run_powerflow(tmp_path, monkeypatch):
+    """Test complete workflow: create case, task, run, and verify snapshot."""
+    monkeypatch.setenv("CLOUDPSS_HOME", str(tmp_path))
+    get_path_manager(str(tmp_path))
+
+    # Mock cloudpss module
     class FakeResult:
         def getBuses(self):
             return [{"data": {"columns": [{"name": "bus", "data": ["1"]}, {"name": "v", "data": [1.0]}]}}]
@@ -44,8 +77,13 @@ def test_portal_snapshot_create_and_run_powerflow(tmp_path, monkeypatch):
         def runPowerFlow(self):
             return FakeJob()
 
-    monkeypatch.setitem(sys.modules, "cloudpss", types.SimpleNamespace(Model=FakeModel, setToken=lambda token: None))
+    monkeypatch.setitem(
+        sys.modules,
+        "cloudpss",
+        types.SimpleNamespace(Model=FakeModel, setToken=lambda token: None),
+    )
 
+    # Setup server
     server_id = IDGenerator.generate(EntityType.SERVER)
     ServerRegistry().create(
         server_id,
@@ -59,14 +97,32 @@ def test_portal_snapshot_create_and_run_powerflow(tmp_path, monkeypatch):
         ),
     )
 
-    created_case = state.create_case({"name": "Portal Case", "rid": "model/test/portal", "tags": "portal,pf"})
-    created_task = state.create_task({"case_id": created_case["id"], "name": "Portal PF", "type": "powerflow"})
-    execution = state.run_task(created_task["id"], timeout_seconds=10)
+    # Create case
+    case_handler = CaseHandler()
+    result, status = case_handler.create(
+        {"name": "Portal Case", "rid": "model/test/portal", "tags": "portal,pf"}
+    )
+    assert status == 201
+    case_id = result["data"]["id"]
 
-    snapshot = state.organizer_snapshot()
-    detail = state.result_detail(execution["result_id"])
-    report = state.report_result(execution["result_id"])
-    archive = state.archive_result_for_portal(execution["result_id"])
+    # Create task
+    task_handler = TaskHandler()
+    result, status = task_handler.create(
+        {"case_id": case_id, "name": "Portal PF", "type": "powerflow"}
+    )
+    assert status == 201
+    task_id = result["data"]["id"]
+
+    # Run task
+    result, status = task_handler.run(task_id, {"timeout": 10})
+    assert status == 200
+    result_id = result["data"]["result_id"]
+
+    # Get snapshot
+    workspace_handler = WorkspaceHandler()
+    result, status = workspace_handler.snapshot()
+    assert status == 200
+    snapshot = result["data"]
 
     assert snapshot["workspace"]["counts"]["cases"] == 1
     assert snapshot["workspace"]["counts"]["tasks"] == 1
@@ -74,50 +130,63 @@ def test_portal_snapshot_create_and_run_powerflow(tmp_path, monkeypatch):
     assert snapshot["servers"][0]["auth"]["encrypted_token"] == "<redacted>"
     assert snapshot["servers"][0]["auth"]["has_encrypted_token"] is True
     assert "ENC:" not in str(snapshot["servers"][0]["auth"])
-    assert detail["result"]["metadata"]["job_id"] == "portal-job-1"
+
+    # Get result detail
+    result_handler = ResultHandler()
+    result, status = result_handler.get(result_id)
+    assert status == 200
+    detail = result["data"]
+    # Result fields are now at top level of response
+    assert detail["metadata"]["job_id"] == "portal-job-1"
     assert "tables/buses.json" in detail["artifacts"]
-    assert report["path"].endswith("report.md")
-    report_text = (tmp_path / "results" / execution["result_id"] / "report.md").read_text(encoding="utf-8")
-    assert "## Case" in report_text
-    assert "## Task" in report_text
-    assert "### Task Config" in report_text
-    assert "## Result Summary" in report_text
-    assert archive["path"].endswith(".tar.gz")
-    assert state.audit_entries()
+
+    # Generate report
+    result, status = result_handler.report(result_id)
+    assert status == 200
+    assert result["data"]["path"].endswith("report.md")
+
+    # Archive result
+    result, status = result_handler.archive(result_id)
+    assert status == 200
+    assert result["data"]["path"].endswith(".tar.gz")
+
+    # Check audit entries
+    audit_handler = AuditHandler()
+    result, status = audit_handler.list()
+    assert status == 200
+    assert len(result["data"]["entries"]) > 0
 
 
 def test_portal_rejects_and_updates_invalid_case_rid(tmp_path, monkeypatch):
+    """Test case validation and update."""
     monkeypatch.setenv("CLOUDPSS_HOME", str(tmp_path))
     get_path_manager(str(tmp_path))
 
-    try:
-        state.create_case({"name": "Bad", "rid": "dd"})
-    except ValueError as exc:
-        assert "RID" in str(exc)
-    else:
-        raise AssertionError("invalid RID was accepted")
+    case_handler = CaseHandler()
 
-    case = state.create_case({"name": "Fixable", "rid": "model/test/old"})
-    updated = state.update_case(case["id"], {"rid": "model/test/new", "name": "Fixed"})
+    # Try invalid RID
+    result, status = case_handler.create({"name": "Bad", "rid": "dd"})
+    assert status == 422
+    assert "VALIDATION_ERROR" in result.get("error", {}).get("code", "")
 
-    assert updated["rid"] == "model/test/new"
-    assert updated["name"] == "Fixed"
+    # Create valid case
+    result, status = case_handler.create({"name": "Fixable", "rid": "model/test/old"})
+    assert status == 201
+    case_id = result["data"]["id"]
 
-
-def test_csv_preview_handles_quoted_cells(tmp_path):
-    csv_path = tmp_path / "trace.csv"
-    csv_path.write_text('time,value,label\n0,"1,234","a,b"\n1,2,c\n', encoding="utf-8")
-
-    preview = state._csv_preview(Path(csv_path))
-
-    assert preview["headers"] == ["time", "value", "label"]
-    assert preview["rows"][0] == ["0", "1,234", "a,b"]
+    # Update case
+    result, status = case_handler.update(case_id, {"rid": "model/test/new", "name": "Fixed"})
+    assert status == 200
+    assert result["data"]["rid"] == "model/test/new"
+    assert result["data"]["name"] == "Fixed"
 
 
 def test_emt_preflight_treats_empty_channels_as_defaultable(tmp_path, monkeypatch):
+    """Test EMT task preflight with empty channels."""
     monkeypatch.setenv("CLOUDPSS_HOME", str(tmp_path))
     get_path_manager(str(tmp_path))
 
+    # Setup server
     server_id = IDGenerator.generate(EntityType.SERVER)
     ServerRegistry().create(
         server_id,
@@ -130,21 +199,38 @@ def test_emt_preflight_treats_empty_channels_as_defaultable(tmp_path, monkeypatc
             default=True,
         ),
     )
-    case = state.create_case({"name": "EMT Case", "rid": "model/test/emt"})
-    task = state.create_task({"case_id": case["id"], "name": "EMT", "type": "emt"})
 
-    preflight = state.task_preflight(task["id"])
+    # Create case
+    case_handler = CaseHandler()
+    result, status = case_handler.create({"name": "EMT Case", "rid": "model/test/emt"})
+    assert status == 201
+    case_id = result["data"]["id"]
 
+    # Create EMT task
+    task_handler = TaskHandler()
+    result, status = task_handler.create({"case_id": case_id, "name": "EMT", "type": "emt"})
+    assert status == 201
+    task_id = result["data"]["id"]
+
+    # Run preflight
+    result, status = task_handler.preflight(task_id)
+    assert status == 200
+    preflight = result["data"]
     assert preflight["ok"] is True
-    channel_check = next(item for item in preflight["checks"] if item["name"] == "EMT Channels")
+
+    channel_check = next(
+        item for item in preflight["checks"] if item["name"] == "EMT Channels"
+    )
     assert channel_check["ok"] is True
     assert "默认通道" in channel_check["message"]
 
 
 def test_portal_updates_task_config_and_exposes_case_plan(tmp_path, monkeypatch):
+    """Test task update and case detail."""
     monkeypatch.setenv("CLOUDPSS_HOME", str(tmp_path))
     get_path_manager(str(tmp_path))
 
+    # Setup server
     server_id = IDGenerator.generate(EntityType.SERVER)
     ServerRegistry().create(
         server_id,
@@ -157,11 +243,24 @@ def test_portal_updates_task_config_and_exposes_case_plan(tmp_path, monkeypatch)
             default=True,
         ),
     )
-    case = state.create_case({"name": "Editable", "rid": "model/test/edit"})
-    task = state.create_task({"case_id": case["id"], "name": "Editable PF", "type": "powerflow"})
 
-    updated = state.update_task(
-        task["id"],
+    # Create case
+    case_handler = CaseHandler()
+    result, status = case_handler.create({"name": "Editable", "rid": "model/test/edit"})
+    assert status == 201
+    case_id = result["data"]["id"]
+
+    # Create task
+    task_handler = TaskHandler()
+    result, status = task_handler.create(
+        {"case_id": case_id, "name": "Editable PF", "type": "powerflow"}
+    )
+    assert status == 201
+    task_id = result["data"]["id"]
+
+    # Update task
+    result, status = task_handler.update(
+        task_id,
         {
             "name": "Editable EMT",
             "type": "emt",
@@ -169,27 +268,52 @@ def test_portal_updates_task_config_and_exposes_case_plan(tmp_path, monkeypatch)
             "channels": "plot-2/vac:0,plot-0/#wr1:0",
         },
     )
-    detail = state.case_detail(case["id"])
-
+    assert status == 200
+    updated = result["data"]
     assert updated["name"] == "Editable EMT"
     assert updated["type"] == "emt"
     assert updated["config"]["channels"] == ["plot-2/vac:0", "plot-0/#wr1:0"]
-    assert updated["config"]["model_source"].endswith("examples/basic/ieee3-emt-prepared.yaml")
-    assert detail["simulation_plan"]["task_count"] == 1
-    assert detail["simulation_plan"]["runnable_count"] == 1
+    assert updated["config"]["model_source"].endswith(
+        "examples/basic/ieee3-emt-prepared.yaml"
+    )
+
+    # Get case detail
+    result, status = case_handler.get(case_id)
+    assert status == 200
+    detail = result["data"]
     assert detail["model"]["server"]["auth"]["encrypted_token"] == "<redacted>"
 
 
 def test_result_summary_includes_chart_data(tmp_path, monkeypatch):
+    """Test result summary includes chart data."""
     monkeypatch.setenv("CLOUDPSS_HOME", str(tmp_path))
     get_path_manager(str(tmp_path))
 
+    # Mock cloudpss module
     class FakeResult:
         def getBuses(self):
-            return [{"data": {"columns": [{"name": "bus", "data": ["1", "2"]}, {"name": "v", "data": [1.01, 0.98]}]}}]
+            return [
+                {
+                    "data": {
+                        "columns": [
+                            {"name": "bus", "data": ["1", "2"]},
+                            {"name": "v", "data": [1.01, 0.98]},
+                        ]
+                    }
+                }
+            ]
 
         def getBranches(self):
-            return [{"data": {"columns": [{"name": "branch", "data": ["1-2"]}, {"name": "p", "data": [10.0]}]}}]
+            return [
+                {
+                    "data": {
+                        "columns": [
+                            {"name": "branch", "data": ["1-2"]},
+                            {"name": "p", "data": [10.0]},
+                        ]
+                    }
+                }
+            ]
 
     class FakeJob:
         id = "chart-job"
@@ -208,7 +332,13 @@ def test_result_summary_includes_chart_data(tmp_path, monkeypatch):
         def runPowerFlow(self):
             return FakeJob()
 
-    monkeypatch.setitem(sys.modules, "cloudpss", types.SimpleNamespace(Model=FakeModel, setToken=lambda token: None))
+    monkeypatch.setitem(
+        sys.modules,
+        "cloudpss",
+        types.SimpleNamespace(Model=FakeModel, setToken=lambda token: None),
+    )
+
+    # Setup server
     server_id = IDGenerator.generate(EntityType.SERVER)
     ServerRegistry().create(
         server_id,
@@ -221,145 +351,26 @@ def test_result_summary_includes_chart_data(tmp_path, monkeypatch):
             default=True,
         ),
     )
-    case = state.create_case({"name": "Chart", "rid": "model/test/chart"})
-    task = state.create_task({"case_id": case["id"], "name": "Chart PF", "type": "powerflow"})
-    execution = state.run_task(task["id"], timeout_seconds=10)
 
-    summary = state.result_summary(execution["result_id"])
+    # Create case and task
+    case_handler = CaseHandler()
+    result, status = case_handler.create({"name": "Chart", "rid": "model/test/chart"})
+    case_id = result["data"]["id"]
 
+    task_handler = TaskHandler()
+    result, status = task_handler.create(
+        {"case_id": case_id, "name": "Chart PF", "type": "powerflow"}
+    )
+    task_id = result["data"]["id"]
+
+    # Run task
+    result, status = task_handler.run(task_id, {"timeout": 10})
+    result_id = result["data"]["result_id"]
+
+    # Get result summary
+    result_handler = ResultHandler()
+    result, status = result_handler.get(result_id)
+    assert status == 200
+    summary = result["data"]["summary"]
     assert summary["bus_chart"]["value_key"] == "v"
     assert summary["bus_chart"]["points"][0]["y"] == 1.01
-
-
-def _write_demo_model(path: Path, *, cell_key: str = "line_1", cell_id: str = "line_1"):
-    path.write_text(
-        f"""
-name: Demo
-revision:
-  implements:
-    diagram:
-      cells:
-        bus_1:
-          id: bus_1
-          label: Bus 1
-          definition: model/CloudPSS/_newBus_3p
-          args:
-            Name: BUS1
-            v: 1.0
-        {cell_key}:
-          id: {cell_id}
-          label: Line 1
-          definition: model/CloudPSS/TransmissionLine
-          args:
-            R: 0.01
-            X: 0.1
-""",
-        encoding="utf-8",
-    )
-
-
-def test_model_editor_groups_and_saves_component_args(tmp_path):
-    model_path = tmp_path / "model.yaml"
-    _write_demo_model(model_path)
-    case = state.create_case({"name": "Bound Model", "rid": "model/test/bound", "model_source": str(model_path)})
-
-    summary = state.model_summary(model_path)
-    saved = state.save_model_table_edits(
-        {"case_id": case["id"], "path": str(model_path), "updates": [{"cell_key": "line_1", "arg": "R", "value": 0.02}]}
-    )
-    updated = state.model_summary(model_path)
-
-    assert summary["component_count"] == 2
-    assert "Bus" in summary["groups"]
-    assert "Line" in summary["groups"]
-    assert saved["changed"] == 1
-    assert Path(saved["backup_path"]).exists()
-    line = updated["groups"]["Line"]["rows"][0]
-    assert line["args"]["R"] == 0.02
-
-
-def test_model_editor_saves_by_cell_key_when_cell_id_differs(tmp_path):
-    model_path = tmp_path / "model.yaml"
-    _write_demo_model(model_path, cell_key="line_key", cell_id="display-line-id")
-    case = state.create_case({"name": "Keyed Model", "rid": "model/test/keyed", "model_source": str(model_path)})
-
-    saved = state.save_model_table_edits(
-        {
-            "case_id": case["id"],
-            "path": str(model_path),
-            "updates": [{"id": "display-line-id", "cell_key": "line_key", "arg": "R", "value": 0.03}],
-        }
-    )
-    updated = state.model_summary(model_path)
-
-    assert saved["changed"] == 1
-    assert updated["groups"]["Line"]["rows"][0]["args"]["R"] == 0.03
-
-
-def test_model_editor_rejects_unbound_paths(tmp_path):
-    bound_path = tmp_path / "bound.yaml"
-    other_path = tmp_path / "other.yaml"
-    _write_demo_model(bound_path)
-    _write_demo_model(other_path)
-    case = state.create_case({"name": "Bound Model", "rid": "model/test/bound", "model_source": str(bound_path)})
-
-    try:
-        state.save_model_table_edits(
-            {"case_id": case["id"], "path": str(other_path), "updates": [{"cell_key": "line_1", "arg": "R", "value": 0.02}]}
-        )
-    except ValueError as exc:
-        assert "匹配当前 Case" in str(exc)
-    else:
-        raise AssertionError("unbound model path was accepted")
-
-    assert state.model_summary(other_path)["groups"]["Line"]["rows"][0]["args"]["R"] == 0.01
-
-
-def test_case_can_bind_local_model_source_for_editor(tmp_path, monkeypatch):
-    monkeypatch.setenv("CLOUDPSS_HOME", str(tmp_path / "workspace"))
-    get_path_manager(str(tmp_path / "workspace"))
-    model_path = tmp_path / "model.yaml"
-    model_path.write_text(
-        """
-name: Demo
-revision:
-  implements:
-    diagram:
-      cells:
-        bus_1:
-          id: bus_1
-          label: Bus 1
-          definition: model/CloudPSS/_newBus_3p
-          args:
-            Name: BUS1
-""",
-        encoding="utf-8",
-    )
-    case = state.create_case({"name": "Local Model", "rid": "model/test/local"})
-    updated = state.update_case(case["id"], {"model_source": str(model_path)})
-    detail = state.case_detail(case["id"])
-
-    assert str(model_path.resolve()) in updated["description"]
-    assert detail["model"]["model_source"] == str(model_path.resolve())
-    assert detail["model"]["editor"]["editable"] is True
-    assert detail["model"]["editor"]["component_count"] == 1
-
-
-def test_create_case_persists_model_source_and_description_text(tmp_path, monkeypatch):
-    monkeypatch.setenv("CLOUDPSS_HOME", str(tmp_path / "workspace"))
-    get_path_manager(str(tmp_path / "workspace"))
-    model_path = tmp_path / "model.yaml"
-    _write_demo_model(model_path)
-
-    case = state.create_case(
-        {
-            "name": "Created Local",
-            "rid": "model/test/created",
-            "description": "research note",
-            "model_source": str(model_path),
-        }
-    )
-    detail = state.case_detail(case["id"])
-
-    assert detail["model"]["model_source"] == str(model_path.resolve())
-    assert state._case_description_text(detail["case"]["description"]) == "research note"

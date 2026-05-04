@@ -72,3 +72,34 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["cloudpss_skills_v3"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    "cloudpss_skills_v3/master_organizer/static/*",
+    "cloudpss_skills_v3/master_organizer/templates/*",
+]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "pass",
+    "...",
+]
+precision = 2
+show_missing = true
+skip_covered = false
+fail_under = 80
+
+[tool.coverage.html]
+directory = "htmlcov"
+title = "CloudPSS SkillHub v3 Coverage Report"

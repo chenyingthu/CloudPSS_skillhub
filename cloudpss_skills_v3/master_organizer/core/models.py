@@ -96,14 +96,18 @@ class Task:
 class Result:
     """结果实体"""
     id: str
-    name: str
-    task_id: str
-    case_id: str
+    name: str = ""
+    task_id: str = ""
+    case_id: str = ""
     format: str = "json"
+    status: str = "completed"  # completed, failed, running
+    success: bool = True
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     size_bytes: int = 0
     files: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    output: Dict[str, Any] = field(default_factory=dict)  # Simulation output data
+    metrics: Dict[str, Any] = field(default_factory=dict)  # Performance metrics
     # 导出相关字段
     export_format: Optional[str] = None
     export_path: Optional[str] = None

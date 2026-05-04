@@ -1,6 +1,33 @@
 # CLAUDE.md
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **重要提示**: 本项目使用 OpenSpec + Superpowers + gstack 三件套工作流。详见 [WORKFLOW.md](WORKFLOW.md)
+
+## 快速开始（三件套工作流）
+
+### 新功能开发
+```bash
+# Phase 1: 想清楚
+/opsx:propose <feature-name>
+
+# Phase 2: 拆清楚
+/sc:brainstorm
+/sc:workflow
+/sc:implement
+
+# Phase 3: 做清楚
+/plan-eng-review
+/review
+/sc:test
+/ship
+
+# Phase 4: 复盘归档
+/retro
+```
+
+### 简单修改（直接模式）
+对于简单修改，可以直接使用 Claude Code 而无需走完整流程。
+
 ## Project Overview
 
 CloudPSS SkillHub is a configuration-driven power system simulation framework with 48 specialized skills for electrical power system analysis, including power flow, transient simulation, security analysis, and stability assessment. It wraps the CloudPSS platform API.
@@ -113,3 +140,68 @@ GitHub Actions run on Python 3.10, 3.11, 3.12:
 - Skill docs: `docs/skills/<skill_name>.md`
 - Config examples: `configs/examples/*.yaml`
 - Test naming: `test_<skill>_<type>.py` where type is unit|integration
+
+---
+
+## Development Workflow (OpenSpec + Superpowers + gstack)
+
+### Workflow Configuration
+
+项目使用以下配置文件：
+- `.gstack/config.yaml` - gstack 工作流配置
+- `.openspec/proposal.md` - OpenSpec 提案模板
+
+### Available Commands
+
+**OpenSpec:**
+- `/opsx:propose <feature>` - 创建功能提案
+- `/opsx:archive` - 归档规格
+
+**Superpowers (/sc):**
+- `/sc:brainstorm` - 需求探索
+- `/sc:workflow` - 生成执行计划
+- `/sc:implement` - 功能实现
+- `/sc:analyze` - 代码分析
+- `/sc:design` - 架构设计
+- `/sc:test` - 执行测试
+- `/sc:review` - 代码审查
+
+**gstack:**
+- `/plan-ceo-review` - CEO 视角审查
+- `/plan-eng-review` - 工程审查
+- `/plan-design-review` - 设计审查
+- `/review` - 代码审查
+- `/qa` - QA 测试
+- `/ship` - 部署上线
+- `/retro` - 工程复盘
+
+### Workflow Decision Tree
+
+```
+新功能开发?
+├─ 是 → 走完整三件套流程
+│      1. /opsx:propose
+│      2. /sc:brainstorm
+│      3. /sc:workflow
+│      4. /sc:implement
+│      5. /plan-eng-review
+│      6. /review
+│      7. /ship
+│      8. /retro
+│
+└─ 否 (简单修改)
+       └─ 复杂度 > 3 个文件?
+          ├─ 是 → /sc:implement + /review
+          └─ 否 → 直接使用 Claude Code
+```
+
+### Quality Gates
+
+根据 `.gstack/config.yaml`：
+- 测试覆盖率 ≥ 80%
+- 代码风格检查通过 (ruff)
+- 类型检查通过 (pyright)
+- 安全扫描通过
+
+# currentDate
+Today's date is 2026/05/03.

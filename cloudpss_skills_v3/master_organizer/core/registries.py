@@ -57,6 +57,14 @@ class TaskRegistry(RegistryBase[Task]):
     def _deserialize_data(self, data: dict) -> dict:
         return {k: Task(**v) for k, v in data.get(self.registry_name, {}).items()}
 
+    def filter_by(self, **kwargs) -> list[tuple[str, Task]]:
+        """Filter tasks by criteria (case_id, status, type)."""
+        results = list(self._data.items())
+        for key, value in kwargs.items():
+            if value:
+                results = [(k, v) for k, v in results if getattr(v, key, None) == value]
+        return results
+
 
 class ResultRegistry(RegistryBase[Result]):
     @property
@@ -72,6 +80,14 @@ class ResultRegistry(RegistryBase[Result]):
 
     def _deserialize_data(self, data: dict) -> dict:
         return {k: Result(**v) for k, v in data.get(self.registry_name, {}).items()}
+
+    def filter_by(self, **kwargs) -> list[tuple[str, Result]]:
+        """Filter results by criteria (task_id, case_id, status)."""
+        results = list(self._data.items())
+        for key, value in kwargs.items():
+            if value:
+                results = [(k, v) for k, v in results if getattr(v, key, None) == value]
+        return results
 
 
 class VariantRegistry(RegistryBase[Variant]):

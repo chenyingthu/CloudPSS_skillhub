@@ -278,6 +278,42 @@ class RegistryBase(ABC, Generic[T]):
         """
         return list(self._data.items())
 
+    def list_paginated(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        sort_by: str | None = None,
+        sort_desc: bool = True,
+    ) -> tuple[list[tuple[str, T]], int]:
+        """列出条目（分页优化版本）
+
+        Args:
+            limit: 每页数量
+            offset: 偏移量
+            sort_by: 排序字段（None表示按ID）
+            sort_desc: 是否降序
+
+        Returns:
+            (条目列表, 总数)
+        """
+        items = list(self._data.items())
+        total = len(items)
+
+        # 排序
+        if sort_by:
+            items.sort(
+                key=lambda x: getattr(x[1], sort_by, x[0]),
+                reverse=sort_desc,
+            )
+        elif sort_desc:
+            # 默认按ID降序（最新的在前）
+            items.sort(key=lambda x: x[0], reverse=True)
+
+        # 分页
+        paginated = items[offset:offset + limit]
+
+        return paginated, total
+
     def count(self) -> int:
         """
         获取条目数量

@@ -1,0 +1,1058 @@
+openapi: 3.0.3
+info:
+  title: CloudPSS Master Organizer Portal API
+  description: |
+    RESTful API for CloudPSS Master Organizer Portal.
+
+    The Portal provides a web interface and API for managing power system simulation
+    cases, tasks, and results. It includes features for:
+    - Case management (create, read, update, delete)
+    - Task execution (power flow, EMT, stability analysis)
+    - Result visualization and export
+    - Model editing and validation
+
+  version: 2.0.0
+  contact:
+    name: CloudPSS Support
+
+servers:
+  - url: http://localhost:8765/api
+    description: Local development server
+
+security:
+  - BearerAuth: []
+  - QueryToken: []
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Check if the Portal server is running and accessible
+      operationId: healthCheck
+      security: []  # No authentication required
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /snapshot:
+    get:
+      summary: Get workspace snapshot
+      description: Retrieve a complete snapshot of the current workspace state
+      operationId: getSnapshot
+      responses:
+        '200':
+          description: Workspace snapshot retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SnapshotResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /cases:
+    get:
+      summary: List cases
+      description: Retrieve a paginated list of cases with optional filtering
+      operationId: listCases
+      parameters:
+        - name: status
+          in: query
+          description: Filter by case status
+          schema:
+            type: string
+            enum: [active, archived, deleted]
+        - name: tag
+          in: query
+          description: Filter by tag
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+        - name: offset
+          in: query
+          description: Offset for pagination
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of cases
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCasesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Create case
+      description: Create a new simulation case
+      operationId: createCase
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CaseCreateRequest'
+      responses:
+        '201':
+          description: Case created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /cases/{caseId}:
+    get:
+      summary: Get case
+      description: Retrieve detailed information about a specific case
+      operationId: getCase
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          description: Unique identifier for the case
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Case details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseDetailResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Update case
+      description: Update an existing case
+      operationId: updateCase
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CaseUpdateRequest'
+      responses:
+        '200':
+          description: Case updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /cases/{caseId}/preflight:
+    get:
+      summary: Run case preflight checks
+      description: Validate case configuration before running tasks
+      operationId: preflightCase
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Preflight check results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreflightResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /cases/{caseId}/model:
+    get:
+      summary: Get case model editor
+      description: Retrieve model editor data for a case
+      operationId: getCaseModel
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Model editor data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelEditorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /tasks:
+    get:
+      summary: List tasks
+      description: Retrieve a paginated list of tasks with optional filtering
+      operationId: listTasks
+      parameters:
+        - name: case_id
+          in: query
+          description: Filter by case ID
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filter by task status
+          schema:
+            type: string
+            enum: [created, submitted, running, completed, failed, cancelled]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTasksResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Create task
+      description: Create a new simulation task
+      operationId: createTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCreateRequest'
+      responses:
+        '201':
+          description: Task created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /tasks/{taskId}:
+    get:
+      summary: Get task
+      description: Retrieve detailed information about a specific task
+      operationId: getTask
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Update task
+      description: Update an existing task
+      operationId: updateTask
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpdateRequest'
+      responses:
+        '200':
+          description: Task updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /tasks/{taskId}/run:
+    post:
+      summary: Run task
+      description: Execute a simulation task
+      operationId: runTask
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskRunRequest'
+      responses:
+        '200':
+          description: Task execution result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskRunResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /tasks/{taskId}/preflight:
+    get:
+      summary: Run task preflight checks
+      description: Validate task configuration before execution
+      operationId: preflightTask
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Preflight check results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreflightResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /tasks/{taskId}/logs:
+    get:
+      summary: Get task logs
+      description: Retrieve logs for a task
+      operationId: getTaskLogs
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task logs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskLogsResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /results:
+    get:
+      summary: List results
+      description: Retrieve a paginated list of simulation results
+      operationId: listResults
+      parameters:
+        - name: case_id
+          in: query
+          description: Filter by case ID
+          schema:
+            type: string
+        - name: task_id
+          in: query
+          description: Filter by task ID
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filter by status
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResultsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /results/{resultId}:
+    get:
+      summary: Get result
+      description: Retrieve detailed information about a simulation result
+      operationId: getResult
+      parameters:
+        - name: resultId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Result details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultDetailResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /results/{resultId}/report:
+    post:
+      summary: Generate result report
+      description: Generate a markdown report for a simulation result
+      operationId: generateReport
+      parameters:
+        - name: resultId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Report generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /results/{resultId}/archive:
+    post:
+      summary: Archive result
+      description: Archive a simulation result to a ZIP file
+      operationId: archiveResult
+      parameters:
+        - name: resultId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Result archived successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArchiveResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /models/edits:
+    post:
+      summary: Save model edits
+      description: Save edits to a model
+      operationId: saveModelEdits
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelEditRequest'
+      responses:
+        '200':
+          description: Edits saved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelEditResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /audit:
+    get:
+      summary: List audit logs
+      description: Retrieve audit log entries
+      operationId: listAuditLogs
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 80
+      responses:
+        '200':
+          description: List of audit log entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: apiKey
+      in: header
+      name: X-Portal-Token
+      description: Token-based authentication via header
+    QueryToken:
+      type: apiKey
+      in: query
+      name: token
+      description: Token-based authentication via query parameter
+
+  responses:
+    Unauthorized:
+      description: Unauthorized - invalid or missing token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: UNAUTHORIZED
+              message: Unauthorized
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: NOT_FOUND
+              message: Resource not found
+
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: VALIDATION_ERROR
+              message: Invalid input data
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+
+    HealthResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+              example: healthy
+
+    SnapshotResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            servers:
+              type: array
+              items:
+                type: object
+            cases:
+              type: array
+              items:
+                type: object
+            tasks:
+              type: array
+              items:
+                type: object
+            results:
+              type: array
+              items:
+                type: object
+
+    PaginationInfo:
+      type: object
+      properties:
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        has_more:
+          type: boolean
+
+    Case:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        rid:
+          type: string
+          description: CloudPSS model RID (e.g., model/username/modelname)
+        description:
+          type: string
+        server_id:
+          type: string
+        status:
+          type: string
+          enum: [active, archived, deleted]
+        tags:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CaseCreateRequest:
+      type: object
+      required:
+        - name
+        - rid
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        rid:
+          type: string
+          pattern: '^model/[^/]+/[^/]+$'
+          description: Must follow format model/username/modelname
+        model_source:
+          type: string
+          description: Path to local model file
+        tags:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        server_id:
+          type: string
+
+    CaseUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        rid:
+          type: string
+        model_source:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        server_id:
+          type: string
+        status:
+          type: string
+          enum: [active, archived, deleted]
+
+    CaseResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Case'
+
+    CaseDetailResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            case:
+              $ref: '#/components/schemas/Case'
+            model:
+              type: object
+            tasks:
+              type: array
+            variants:
+              type: array
+            results:
+              type: array
+
+    PaginatedCasesResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Case'
+            pagination:
+              $ref: '#/components/schemas/PaginationInfo'
+
+    Task:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        case_id:
+          type: string
+        type:
+          type: string
+          enum: [powerflow, emt, stability]
+        server_id:
+          type: string
+        status:
+          type: string
+          enum: [created, submitted, running, completed, failed, cancelled]
+        config:
+          type: object
+        channels:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TaskCreateRequest:
+      type: object
+      required:
+        - case_id
+        - name
+      properties:
+        case_id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [powerflow, emt, stability]
+          default: powerflow
+        config:
+          type: object
+        channels:
+          type: array
+          items:
+            type: string
+        model_source:
+          type: string
+
+    TaskUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [powerflow, emt, stability]
+        config:
+          type: object
+        channels:
+          type: array
+          items:
+            type: string
+        model_source:
+          type: string
+
+    TaskResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Task'
+
+    PaginatedTasksResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Task'
+            pagination:
+              $ref: '#/components/schemas/PaginationInfo'
+
+    TaskRunRequest:
+      type: object
+      properties:
+        timeout:
+          type: integer
+          default: 300
+          description: Execution timeout in seconds
+
+    TaskRunResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            success:
+              type: boolean
+            result_id:
+              type: string
+            message:
+              type: string
+
+    TaskLogsResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            task_id:
+              type: string
+            logs:
+              type: array
+              items:
+                type: object
+
+    Result:
+      type: object
+      properties:
+        id:
+          type: string
+        task_id:
+          type: string
+        case_id:
+          type: string
+        format:
+          type: string
+          enum: [powerflow, emt, stability]
+        status:
+          type: string
+        files:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+
+    ResultDetailResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+            task_id:
+              type: string
+            format:
+              type: string
+            directory:
+              type: string
+            summary:
+              type: object
+            artifacts:
+              type: object
+            report:
+              type: string
+
+    PaginatedResultsResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Result'
+            pagination:
+              $ref: '#/components/schemas/PaginationInfo'
+
+    ReportResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            path:
+              type: string
+
+    ArchiveResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            path:
+              type: string
+
+    ModelEditorResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            rid:
+              type: string
+            model_data:
+              type: object
+            editable:
+              type: boolean
+
+    ModelEditRequest:
+      type: object
+      required:
+        - rid
+        - edits
+      properties:
+        rid:
+          type: string
+        edits:
+          type: array
+          items:
+            type: object
+
+    ModelEditResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            success:
+              type: boolean
+            saved_to:
+              type: string
+
+    PreflightCheck:
+      type: object
+      properties:
+        name:
+          type: string
+        ok:
+          type: boolean
+        message:
+          type: string
+
+    PreflightResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            ok:
+              type: boolean
+            checks:
+              type: array
+              items:
+                $ref: '#/components/schemas/PreflightCheck'
+
+    AuditEntry:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        action:
+          type: string
+        entity_type:
+          type: string
+        entity_id:
+          type: string
+        details:
+          type: object
+
+    AuditResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            entries:
+              type: array
+              items:
+                $ref: '#/components/schemas/AuditEntry'

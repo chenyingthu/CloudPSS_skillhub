@@ -1,0 +1,62 @@
+# gstack 项目配置
+# 用于 CloudPSS SkillHub 开发工作流
+
+review:
+  required_checks:
+    - type: test
+      min_coverage: 80
+      command: "pytest --cov=cloudpss_skills --cov-report=term-missing"
+    - type: lint
+      command: "ruff check cloudpss_skills/ --select=E,F,W,C90 --ignore=E501"
+      fail_on_warning: true
+    - type: typecheck
+      command: "pyright cloudpss_skills/core/"
+    - type: security
+      level: strict
+
+qa:
+  environment:
+    - staging
+    - production
+  test_data: "tests/fixtures/"
+  workflows:
+    - skill_initialization
+    - power_flow_execution
+    - emt_simulation
+    - result_export
+
+ship:
+  require_approval: true
+  ci_checks:
+    - lint
+    - unit-tests
+    - skill-smoke-tests
+  deployment:
+    - pypi
+    - github_release
+
+project:
+  name: "CloudPSS SkillHub"
+  type: "python-package"
+  python_version: "3.8+"
+  primary_module: "cloudpss_skills"
+
+workflows:
+  new_skill:
+    phases:
+      - propose
+      - brainstorm
+      - design
+      - implement
+      - review
+      - qa
+      - ship
+      - retro
+
+  bug_fix:
+    phases:
+      - investigate
+      - fix
+      - test
+      - review
+      - ship
