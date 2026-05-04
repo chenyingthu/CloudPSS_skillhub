@@ -284,6 +284,71 @@ class TestCrossEngineConsistency:
             f"expected={expected_va}°"
         )
 
+    def test_unified_to_pandapower_preserves_line_charging_units(self):
+        """b_pu must convert to pandapower capacitance without MVA scaling."""
+        model = PowerSystemModel(
+            buses=[
+                Bus(bus_id=0, name="Slack", base_kv=500.0, bus_type="SLACK"),
+                Bus(bus_id=1, name="Load", base_kv=500.0, bus_type="PQ"),
+            ],
+            branches=[
+                Branch(
+                    from_bus=0,
+                    to_bus=1,
+                    name="Line",
+                    branch_type="LINE",
+                    r_pu=0.001,
+                    x_pu=0.01,
+                    b_pu=0.12,
+                    rate_a_mva=100.0,
+                )
+            ],
+            generators=[Generator(bus_id=0, name="G", p_gen_mw=100.0)],
+            loads=[Load(bus_id=1, name="L", p_mw=50.0, q_mvar=10.0)],
+            base_mva=100.0,
+            frequency_hz=60.0,
+        )
+
+        pp_adapter = PandapowerPowerFlowAdapter(EngineConfig(engine_name="pandapower"))
+        net = pp_adapter.from_unified_model(model)
+
+        expected_c_nf = model.branches[0].b_pu / (
+            2 * 3.14159 * model.frequency_hz * 500.0**2
+        ) * 1e9
+        assert abs(net.line.at[0, "c_nf_per_km"] - expected_c_nf) < 1e-6
+        assert net.f_hz == 60.0
+
+    def test_unified_to_pandapower_orients_transformer_by_voltage_level(self):
+        """Pandapower transformers require hv/lv buses even if unified direction differs."""
+        model = PowerSystemModel(
+            buses=[
+                Bus(bus_id=0, name="LV", base_kv=20.0, bus_type="SLACK"),
+                Bus(bus_id=1, name="HV", base_kv=500.0, bus_type="PQ"),
+            ],
+            branches=[
+                Branch(
+                    from_bus=0,
+                    to_bus=1,
+                    name="StepUp",
+                    branch_type="TRANSFORMER",
+                    r_pu=0.0,
+                    x_pu=0.02,
+                    rate_a_mva=100.0,
+                )
+            ],
+            generators=[Generator(bus_id=0, name="G", p_gen_mw=100.0)],
+            loads=[Load(bus_id=1, name="L", p_mw=50.0, q_mvar=10.0)],
+            base_mva=100.0,
+        )
+
+        pp_adapter = PandapowerPowerFlowAdapter(EngineConfig(engine_name="pandapower"))
+        net = pp_adapter.from_unified_model(model)
+
+        assert net.trafo.at[0, "hv_bus"] == 1
+        assert net.trafo.at[0, "lv_bus"] == 0
+        assert net.trafo.at[0, "vn_hv_kv"] == 500.0
+        assert net.trafo.at[0, "vn_lv_kv"] == 20.0
+
     @pytest.mark.integration
     def test_cloudpss_vs_pandapower_same_source(self):
         """Cross-engine consistency test using SAME data source.

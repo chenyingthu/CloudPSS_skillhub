@@ -854,7 +854,10 @@ class PandapowerPowerFlowAdapter(EngineAdapter):
         import pandapower as pp
 
         # Create empty network
-        net = pp.create_empty_network(name=model.name or "unified_model")
+        net = pp.create_empty_network(
+            name=model.name or "unified_model",
+            f_hz=model.frequency_hz,
+        )
         net.sn_mva = model.base_mva
 
         # Create buses
@@ -944,10 +947,14 @@ class PandapowerPowerFlowAdapter(EngineAdapter):
                     length_km = 1.0
                     r_ohm = (branch.r_pu or 0) * z_base
                     x_ohm = (branch.x_pu or 0) * z_base
-                    # B (susceptance) in pu -> S = B_pu * S_base, then C = S / (2*pi*f*V^2)
-                    # For distributed model, B_pu is total line susceptance
-                    b_s = (branch.b_pu or 0) * model.base_mva  # MVar
-                    c_nf = (b_s * 1e6) / (2 * 3.14159 * 50 * (from_vn ** 2)) * 1e9 if b_s > 0 else 0
+                    # For per-unit admittance, Y_base = S_base / V_base^2, so
+                    # C = B_pu / (2*pi*f*V_base^2) when V is in kV and C in nF.
+                    frequency_hz = getattr(net, "f_hz", model.frequency_hz)
+                    c_nf = (
+                        (branch.b_pu or 0)
+                        / (2 * 3.14159 * frequency_hz * (from_vn ** 2))
+                        * 1e9
+                    ) if branch.b_pu and branch.b_pu > 0 else 0
 
                     pp.create_line_from_parameters(
                         net,
@@ -967,14 +974,18 @@ class PandapowerPowerFlowAdapter(EngineAdapter):
                     # Get bus voltages for tap calculation
                     from_vn = net.bus.at[from_bus, "vn_kv"] if from_bus in net.bus.index else 230.0
                     to_vn = net.bus.at[to_bus, "vn_kv"] if to_bus in net.bus.index else 230.0
+                    hv_bus = from_bus if from_vn >= to_vn else to_bus
+                    lv_bus = to_bus if from_vn >= to_vn else from_bus
+                    hv_vn = max(from_vn, to_vn)
+                    lv_vn = min(from_vn, to_vn)
 
                     pp.create_transformer_from_parameters(
                         net,
-                        hv_bus=from_bus,
-                        lv_bus=to_bus,
+                        hv_bus=hv_bus,
+                        lv_bus=lv_bus,
                         sn_mva=branch.rate_a_mva or 100.0,
-                        vn_hv_kv=from_vn,
-                        vn_lv_kv=to_vn,
+                        vn_hv_kv=hv_vn,
+                        vn_lv_kv=lv_vn,
                         vkr_percent=(branch.r_pu or 0) * 100,
                         vk_percent=(branch.x_pu or 0.01) * 100,
                         pfe_kw=0,

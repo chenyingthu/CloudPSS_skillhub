@@ -812,6 +812,14 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
         branches = self._convert_branches_to_unified(branch_rows, bus_name_to_idx)
         generators = self._extract_generators_from_buses(bus_rows)
         loads = self._extract_loads_from_buses(bus_rows)
+        frequency_hz = next(
+            (
+                self._parse_float(row.get("frequency_hz"))
+                for row in bus_rows
+                if self._parse_float(row.get("frequency_hz")) is not None
+            ),
+            50.0,
+        )
 
         return PowerSystemModel(
             buses=buses,
@@ -819,6 +827,7 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
             generators=generators,
             loads=loads,
             base_mva=base_mva,
+            frequency_hz=frequency_hz,
             source_engine="cloudpss",
         )
 
