@@ -252,6 +252,66 @@ def test_matpower_cpf_runs_real_runtime_on_three_bus_model():
 
 
 @pytest.mark.integration
+def test_matpower_cpf_runs_on_cloudpss_ieee39_unified_model():
+    status = MatpowerCPFAdapter.runtime_status()
+    if not status["available"]:
+        pytest.skip(f"MATPOWER CPF runtime is not available: {status}")
+
+    from pathlib import Path
+
+    from cloudpss_skills_v2.powerapi import EngineConfig, SimulationStatus
+    from cloudpss_skills_v2.powerapi.adapters.cloudpss import (
+        CloudPSSPowerFlowAdapter,
+    )
+
+    token_file = Path(".cloudpss_token_internal")
+    if not token_file.exists():
+        pytest.skip("CloudPSS internal token is not available")
+
+    base_url = "http://166.111.60.76:50001"
+    token = token_file.read_text().strip()
+    adapter = CloudPSSPowerFlowAdapter(
+        EngineConfig(
+            engine_name="cloudpss",
+            base_url=base_url,
+            extra={"auth": {"token": token, "base_url": base_url}},
+        )
+    )
+    adapter.connect()
+    powerflow = adapter.run_simulation(
+        {
+            "model_id": "model/chenying/IEEE39",
+            "auth": {"token": token, "base_url": base_url},
+        }
+    )
+
+    assert powerflow.status == SimulationStatus.COMPLETED
+    assert powerflow.system_model is not None
+    assert powerflow.system_model.source_engine == "cloudpss"
+    assert {branch.branch_type for branch in powerflow.system_model.branches} == {
+        "LINE",
+        "TRANSFORMER",
+    }
+    assert all(branch.x_pu != 0.01 for branch in powerflow.system_model.branches)
+
+    monitor_buses = [
+        bus.name
+        for bus in powerflow.system_model.buses
+        if bus.bus_type == "PQ"
+    ][:3]
+    result = VoltageStabilityAnalysis().run(
+        powerflow.system_model,
+        {"method": "matpower_cpf", "target_scale": 1.02, "monitor_buses": monitor_buses},
+    )
+
+    assert result["analysis_mode"] == "matpower_continuation_power_flow"
+    assert result["status"] == "success"
+    assert result["solver_success"] is True
+    assert result["max_loadability"] > 1.0
+    assert len(result["pv_curve"]) > len(monitor_buses)
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize("case_name", ["case9", "case30"])
 def test_matpower_cpf_runs_on_pandapower_standard_cases(case_name):
     status = MatpowerCPFAdapter.runtime_status()

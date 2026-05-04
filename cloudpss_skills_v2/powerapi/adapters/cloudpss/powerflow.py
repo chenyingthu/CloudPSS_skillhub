@@ -111,6 +111,23 @@ def _normalize_branch_row(raw: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _cloudpss_arg_value(value: Any) -> Any:
+    """Extract the scalar payload from CloudPSS expression wrappers."""
+    if isinstance(value, dict):
+        if "source" in value:
+            return value.get("source")
+        if "value" in value:
+            return value.get("value")
+    return value
+
+
+def _first_present(data: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in data and data[key] not in (None, ""):
+            return data[key]
+    return None
+
+
 def _parse_cloudpss_table(table: Any) -> list[dict[str, Any]]:
     """Parse CloudPSS SDK table format (columnar) into row dicts."""
     if table is None:
@@ -362,6 +379,11 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
 
             normalized_buses = [_normalize_bus_row(b) for b in bus_rows]
             normalized_branches = [_normalize_branch_row(b) for b in branch_rows]
+            self._enrich_rows_from_model_components(
+                model,
+                normalized_buses,
+                normalized_branches,
+            )
 
             summary = _generate_pf_summary(normalized_buses, normalized_branches)
 
@@ -440,6 +462,11 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
         "_newTransformer_3p",
     ]
 
+    _BUS_DEFINITIONS = [
+        "model/CloudPSS/_newBus_3p",
+        "model/CloudPSS/Bus",
+    ]
+
     @staticmethod
     def _classify_component(definition: str) -> str:
         d = str(definition)
@@ -463,6 +490,178 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
                 return ComponentType.GENERATOR
 
         return ComponentType.OTHER
+
+    @staticmethod
+    def _is_bus_definition(definition: str) -> bool:
+        d = str(definition)
+        return any(bus_def in d for bus_def in CloudPSSPowerFlowAdapter._BUS_DEFINITIONS)
+
+    @classmethod
+    def _component_args(cls, component: Any) -> dict[str, Any]:
+        args = getattr(component, "args", None)
+        if not isinstance(args, dict):
+            return {}
+        return {
+            key: _cloudpss_arg_value(value)
+            for key, value in args.items()
+        }
+
+    def _enrich_rows_from_model_components(
+        self,
+        model: Any,
+        bus_rows: list[dict[str, Any]],
+        branch_rows: list[dict[str, Any]],
+    ) -> None:
+        """Merge static CloudPSS model parameters into power-flow result rows."""
+        try:
+            components = model.getAllComponents()
+        except Exception as exc:
+            self._logger.debug("Could not read CloudPSS components for unified enrichment: %s", exc)
+            return
+
+        bus_params_by_component_id: dict[str, dict[str, Any]] = {}
+        bus_params_by_node_name: dict[str, dict[str, Any]] = {}
+        branch_params_by_component_id: dict[str, dict[str, Any]] = {}
+
+        for component_id, component in components.items():
+            definition = getattr(component, "definition", "")
+            args = self._component_args(component)
+
+            if self._is_bus_definition(definition):
+                params = self._extract_bus_component_parameters(component, args)
+                if params:
+                    bus_params_by_component_id[str(component_id)] = params
+                    node_name = params.get("node_name")
+                    if node_name:
+                        bus_params_by_node_name[str(node_name)] = params
+                continue
+
+            component_type = self._classify_component(definition)
+            if component_type in (ComponentType.BRANCH, ComponentType.TRANSFORMER):
+                params = self._extract_branch_component_parameters(
+                    str(component_id),
+                    component,
+                    args,
+                    component_type,
+                )
+                if params:
+                    branch_params_by_component_id[str(component_id)] = params
+
+        for row in bus_rows:
+            params = bus_params_by_component_id.get(str(row.get("name")))
+            if params is None:
+                params = bus_params_by_node_name.get(str(row.get("Node", "")))
+            if params:
+                self._merge_missing_values(row, params, override_keys={"voltage_kv"})
+
+        for row in branch_rows:
+            params = branch_params_by_component_id.get(str(row.get("name")))
+            if params:
+                self._merge_missing_values(
+                    row,
+                    params,
+                    override_keys={"branch_type"},
+                )
+
+    @staticmethod
+    def _merge_missing_values(
+        row: dict[str, Any],
+        params: dict[str, Any],
+        *,
+        override_keys: set[str] | None = None,
+    ) -> None:
+        override_keys = override_keys or set()
+        for key, value in params.items():
+            if value in (None, ""):
+                continue
+            if key in override_keys or key not in row or row[key] in (None, ""):
+                row[key] = value
+
+    def _extract_bus_component_parameters(
+        self,
+        component: Any,
+        args: dict[str, Any],
+    ) -> dict[str, Any]:
+        pins = getattr(component, "pins", {})
+        node_name = None
+        if isinstance(pins, dict):
+            node_name = _first_present(pins, "0")
+
+        return {
+            "node_name": node_name,
+            "voltage_kv": self._parse_float(
+                _first_present(args, "VBase", "Vbase", "base_kv", "voltage_kv"),
+                None,
+            ),
+            "frequency_hz": self._parse_float(_first_present(args, "Freq", "freq"), None),
+        }
+
+    def _extract_branch_component_parameters(
+        self,
+        component_id: str,
+        component: Any,
+        args: dict[str, Any],
+        component_type: str,
+    ) -> dict[str, Any]:
+        if component_type == ComponentType.TRANSFORMER:
+            return self._extract_transformer_component_parameters(component_id, component, args)
+        return self._extract_line_component_parameters(component_id, component, args)
+
+    def _extract_line_component_parameters(
+        self,
+        component_id: str,
+        component: Any,
+        args: dict[str, Any],
+    ) -> dict[str, Any]:
+        r_pu = self._parse_float(_first_present(args, "R1pu", "r_pu", "Rpu"), None)
+        x_pu = self._parse_float(_first_present(args, "X1pu", "x_pu", "Xpu"), None)
+        b_pu = self._parse_float(_first_present(args, "B1pu", "b_pu", "Bpu"), None)
+        sbase = self._parse_float(_first_present(args, "Sbase", "base_mva"), None)
+        vbase = self._parse_float(_first_present(args, "Vbase", "VBase", "base_kv"), None)
+        rate = self._parse_float(_first_present(args, "Rate", "rate_a_mva", "Smva"), None)
+        irated = self._parse_float(_first_present(args, "Irated", "Ir"), None)
+        if rate is None and irated is not None and irated > 0 and vbase:
+            rate = (3**0.5) * vbase * irated
+
+        return {
+            "branch_type": "line",
+            "r_pu": r_pu,
+            "x_pu": x_pu,
+            "b_pu": b_pu,
+            "rate_a_mva": rate,
+            "parameter_source": "cloudpss_model_component",
+            "parameter_component_id": component_id,
+            "parameter_component_definition": getattr(component, "definition", ""),
+            "parameter_base_mva": sbase,
+            "parameter_base_kv": vbase,
+            "static_name": _first_present(args, "Name"),
+        }
+
+    def _extract_transformer_component_parameters(
+        self,
+        component_id: str,
+        component: Any,
+        args: dict[str, Any],
+    ) -> dict[str, Any]:
+        r_pu = self._parse_float(_first_present(args, "Rl", "r_pu", "Rpu"), 0.0)
+        x_pu = self._parse_float(_first_present(args, "Xl", "Xac", "x_pu", "Xpu"), None)
+        rate = self._parse_float(_first_present(args, "Tmva", "Smva", "rate_a_mva"), None)
+        vbase = self._parse_float(_first_present(args, "V1", "Vbase", "VBase"), None)
+        tap_ratio = self._parse_float(_first_present(args, "InitTap", "Tap", "tap_ratio"), None)
+
+        return {
+            "branch_type": "transformer",
+            "r_pu": r_pu,
+            "x_pu": x_pu,
+            "rate_a_mva": rate,
+            "tap_ratio": tap_ratio,
+            "parameter_source": "cloudpss_model_component",
+            "parameter_component_id": component_id,
+            "parameter_component_definition": getattr(component, "definition", ""),
+            "parameter_base_mva": rate,
+            "parameter_base_kv": vbase,
+            "static_name": _first_present(args, "Name"),
+        }
 
     def _ensure_model_loaded(self, model_id: str) -> Any:
         model = self._model_cache.get(model_id)
@@ -721,6 +920,7 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
                 x_pu=self._parse_float(row.get("x_pu"), 0.01),
                 b_pu=self._parse_float(row.get("b_pu"), 0.0),
                 rate_a_mva=rate_a,
+                tap_ratio=self._parse_float(row.get("tap_ratio"), 1.0) or 1.0,
                 p_from_mw=p_from,
                 q_from_mvar=q_from,
                 p_to_mw=p_to,
@@ -810,6 +1010,10 @@ class CloudPSSPowerFlowAdapter(EngineAdapter):
 
     def _infer_branch_type(self, row: dict[str, Any]) -> str:
         """Infer branch type from CloudPSS data."""
+        explicit = str(row.get("branch_type", "")).upper()
+        if explicit in ("LINE", "TRANSFORMER", "PHASE_SHIFTER"):
+            return explicit
+
         name = str(row.get("name", "")).lower()
 
         if "transformer" in name or "trans" in name:

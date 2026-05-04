@@ -237,7 +237,7 @@ class MatpowerCPFAdapter:
         mp.push("cpf_base_case", base, verbose=False)
         mp.push("cpf_target_case", target, verbose=False)
         mp.eval(
-            "cpf_mpopt = mpoption('verbose', 0, 'out.all', 0);",
+            "cpf_mpopt = mpoption('verbose', 0, 'out.all', 0, 'exp.use_legacy_core', 1);",
             verbose=False,
         )
         mp.eval(

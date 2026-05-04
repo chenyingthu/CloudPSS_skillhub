@@ -180,3 +180,85 @@ class TestCloudPSSPowerFlowAdapter:
         adapter = CloudPSSPowerFlowAdapter()
         result = adapter._do_get_result("nonexistent-job")
         assert result.status == SimulationStatus.FAILED
+
+    def test_enriches_rows_from_cloudpss_model_components(self):
+        class FakeComponent:
+            def __init__(self, definition, args, pins=None):
+                self.definition = definition
+                self.args = args
+                self.pins = pins or {}
+
+        class FakeModel:
+            def getAllComponents(self):
+                return {
+                    "bus_a": FakeComponent(
+                        "model/CloudPSS/_newBus_3p",
+                        {"VBase": "500", "Freq": "60"},
+                        {"0": "node-a"},
+                    ),
+                    "branch_1": FakeComponent(
+                        "model/CloudPSS/TransmissionLine",
+                        {
+                            "R1pu": {"source": "0.0012"},
+                            "X1pu": {"source": "0.0123"},
+                            "B1pu": {"source": "0.0456"},
+                            "Sbase": {"source": "100"},
+                            "Vbase": {"source": "500"},
+                            "Name": "line-a-b",
+                        },
+                    ),
+                    "xf_1": FakeComponent(
+                        "model/CloudPSS/_newTransformer_3p2w",
+                        {
+                            "Rl": {"source": "0.002"},
+                            "Xl": {"source": "0.08"},
+                            "Tmva": {"source": "200"},
+                            "InitTap": {"source": "1.02"},
+                        },
+                    ),
+                }
+
+        adapter = CloudPSSPowerFlowAdapter()
+        bus_rows = [{"name": "bus_a", "Node": "node-a", "voltage_kv": 230}]
+        branch_rows = [
+            {"name": "branch_1", "branch_type": "line"},
+            {"name": "xf_1", "branch_type": "line"},
+        ]
+
+        adapter._enrich_rows_from_model_components(FakeModel(), bus_rows, branch_rows)
+
+        assert bus_rows[0]["voltage_kv"] == 500.0
+        assert branch_rows[0]["r_pu"] == 0.0012
+        assert branch_rows[0]["x_pu"] == 0.0123
+        assert branch_rows[0]["b_pu"] == 0.0456
+        assert branch_rows[0]["parameter_source"] == "cloudpss_model_component"
+        assert branch_rows[1]["branch_type"] == "transformer"
+        assert branch_rows[1]["x_pu"] == 0.08
+        assert branch_rows[1]["rate_a_mva"] == 200.0
+        assert branch_rows[1]["tap_ratio"] == 1.02
+
+    def test_unified_conversion_uses_enriched_branch_type(self):
+        adapter = CloudPSSPowerFlowAdapter()
+        model = adapter._to_unified_model(
+            [
+                {"name": "B1", "voltage_pu": 1.0, "angle_deg": 0.0, "voltage_kv": 500.0},
+                {"name": "B2", "voltage_pu": 0.99, "angle_deg": -1.0, "voltage_kv": 20.0},
+            ],
+            [
+                {
+                    "name": "xf",
+                    "from_bus": "B1",
+                    "to_bus": "B2",
+                    "branch_type": "transformer",
+                    "r_pu": 0.002,
+                    "x_pu": 0.08,
+                    "rate_a_mva": 200.0,
+                    "tap_ratio": 1.02,
+                }
+            ],
+        )
+
+        assert model.branches[0].branch_type == "TRANSFORMER"
+        assert model.branches[0].x_pu == 0.08
+        assert model.branches[0].rate_a_mva == 200.0
+        assert model.branches[0].tap_ratio == 1.02
