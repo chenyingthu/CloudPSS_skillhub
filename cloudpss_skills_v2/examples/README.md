@@ -221,6 +221,36 @@ Octave/`oct2py` or MATLAB Engine. If that runtime is unavailable, the skill
 reports `matpower_cpf_unavailable` explicitly and does not substitute the
 screening proxy.
 
+CPF results include explicit quality metadata:
+
+```python
+assert result["model_quality"]["engine_readiness"]["matpower"]["convertible"]
+assert result["cpf_output_quality"]["has_finite_max_loadability"]
+
+for finding in result["model_quality"]["findings"]:
+    print(finding["severity"], finding["code"], finding["message"])
+```
+
+You can run the same unified quality check before choosing an engine:
+
+```python
+from cloudpss_skills_v2.powerapi.model_quality import diagnose_unified_model
+
+quality = diagnose_unified_model(model, include_matpower=True)
+if quality["status"] == "fail":
+    raise ValueError(quality["findings"])
+```
+
+For CloudPSS-origin models, the intended closed loop is:
+
+```
+CloudPSS power flow result
+    -> enriched unified model with static line/transformer parameters
+    -> diagnose_unified_model(include_matpower=True)
+    -> pandapower reverse run for voltage comparison
+    -> MATPOWER CPF for continuation power-flow results
+```
+
 ## Architecture Patterns
 
 ### Command Pattern (Example 1)

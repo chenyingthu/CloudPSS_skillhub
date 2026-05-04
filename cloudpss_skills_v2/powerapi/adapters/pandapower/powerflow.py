@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -698,7 +699,20 @@ class PandapowerPowerFlowAdapter(EngineAdapter):
                 r_pu = _safe_float(row.get("r_ohm_per_km", 0.0)) * length_km / z_base if z_base else 0.0
                 x_pu = _safe_float(row.get("x_ohm_per_km", 0.01)) * length_km / z_base if z_base else 0.01
                 c_nf = _safe_float(row.get("c_nf_per_km", 0.0)) * length_km
-                b_pu = 2 * 3.141592653589793 * 50.0 * c_nf * 1e-9 * (base_kv ** 2) / base_mva
+                preserved_b_pu = _safe_float(row.get("_unified_b_pu"), None)
+                if preserved_b_pu is not None and math.isfinite(preserved_b_pu):
+                    b_pu = preserved_b_pu
+                else:
+                    frequency_hz = float(getattr(net, "f_hz", 50.0) or 50.0)
+                    b_pu = (
+                        2
+                        * 3.141592653589793
+                        * frequency_hz
+                        * c_nf
+                        * 1e-9
+                        * (base_kv ** 2)
+                        / base_mva
+                    )
                 rate_a_mva = (
                     _safe_float(row.get("max_i_ka", 1.0))
                     * base_kv
@@ -835,6 +849,7 @@ class PandapowerPowerFlowAdapter(EngineAdapter):
             generators=generators,
             loads=loads,
             base_mva=float(net.sn_mva) if hasattr(net, 'sn_mva') else 100.0,
+            frequency_hz=float(getattr(net, "f_hz", 50.0) or 50.0),
             source_engine="pandapower",
             name=getattr(net, 'name', 'pandapower_net'),
         )
@@ -967,6 +982,7 @@ class PandapowerPowerFlowAdapter(EngineAdapter):
                         max_i_ka=(branch.rate_a_mva or 100) / (from_vn * 1.732),
                         name=branch.name,
                     )
+                    net.line.at[net.line.index[-1], "_unified_b_pu"] = branch.b_pu or 0.0
             elif branch.branch_type == "TRANSFORMER":
                 from_bus = bus_idx_map.get(branch.from_bus)
                 to_bus = bus_idx_map.get(branch.to_bus)

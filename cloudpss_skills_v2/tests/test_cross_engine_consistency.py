@@ -30,6 +30,7 @@ from cloudpss_skills_v2.powerapi.adapters.pandapower.powerflow import (
     PandapowerPowerFlowAdapter,
 )
 from cloudpss_skills_v2.powerapi.base import EngineConfig
+from cloudpss_skills_v2.powerapi.model_quality import diagnose_unified_model
 
 
 @pytest.fixture
@@ -318,6 +319,10 @@ class TestCrossEngineConsistency:
         assert abs(net.line.at[0, "c_nf_per_km"] - expected_c_nf) < 1e-6
         assert net.f_hz == 60.0
 
+        roundtrip = pp_adapter._to_unified_model(net)
+        assert roundtrip.frequency_hz == 60.0
+        assert abs(roundtrip.branches[0].b_pu - model.branches[0].b_pu) < 1e-6
+
     def test_unified_to_pandapower_orients_transformer_by_voltage_level(self):
         """Pandapower transformers require hv/lv buses even if unified direction differs."""
         model = PowerSystemModel(
@@ -348,6 +353,22 @@ class TestCrossEngineConsistency:
         assert net.trafo.at[0, "lv_bus"] == 0
         assert net.trafo.at[0, "vn_hv_kv"] == 500.0
         assert net.trafo.at[0, "vn_lv_kv"] == 20.0
+
+    @pytest.mark.parametrize("case_name", ["case9", "case14", "case30"])
+    def test_shared_pandapower_standard_cases_have_unified_quality_report(self, case_name):
+        """Shared pandapower cases should produce MATPOWER-ready unified diagnostics."""
+        pp_adapter = PandapowerPowerFlowAdapter(EngineConfig(engine_name="pandapower"))
+        result = pp_adapter._do_run_simulation({"model_id": case_name})
+        assert result.system_model is not None
+
+        report = diagnose_unified_model(result.system_model, include_matpower=True)
+
+        assert report["summary"]["source_engine"] == "pandapower"
+        assert report["summary"]["bus_count"] > 0
+        assert report["summary"]["active_branch_count"] > 0
+        assert report["engine_readiness"]["pandapower"]["convertible"] is True
+        assert report["engine_readiness"]["matpower"]["convertible"] is True
+        assert report["engine_readiness"]["matpower"]["slack_bus_count"] >= 1
 
     @pytest.mark.integration
     def test_cloudpss_vs_pandapower_same_source(self):
@@ -393,6 +414,7 @@ class TestCrossEngineConsistency:
 
         # Try to find IEEE39 model on CloudPSS
         model_rids = [
+            "model/chenying/IEEE39",
             "model/holdme/IEEE39",
             "model/CloudPSS/IEEE39",
             "model/holdme/IEEE-39",
@@ -423,6 +445,14 @@ class TestCrossEngineConsistency:
 
         if unified_model is None:
             pytest.skip("CloudPSS result does not contain unified model")
+
+        quality = diagnose_unified_model(unified_model, include_matpower=True)
+        assert quality["summary"]["source_engine"] == "cloudpss"
+        assert quality["summary"]["bus_count"] == 39
+        assert quality["summary"]["branch_count"] == 46
+        assert quality["summary"]["branch_type_counts"]["TRANSFORMER"] == 12
+        assert quality["parameter_quality"]["default_like_x_pu_branch_count"] == 0
+        assert quality["engine_readiness"]["matpower"]["convertible"] is True
 
         # Create pandapower network from the SAME unified model
         pp_adapter = PandapowerPowerFlowAdapter(EngineConfig(engine_name="pandapower"))

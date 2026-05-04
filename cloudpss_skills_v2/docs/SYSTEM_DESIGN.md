@@ -127,6 +127,51 @@ without the Python `matpower` bridge plus Octave/`oct2py` or MATLAB Engine, the
 skill returns `analysis_mode: "matpower_cpf_unavailable"` with runtime status
 instead of falling back to a screening approximation.
 
+### Unified Model Quality Gate
+
+Cross-engine reuse now has an explicit pre-solver quality layer in
+`powerapi.model_quality.diagnose_unified_model()`. The report is serializable
+and is included in MATPOWER CPF voltage-stability output as `model_quality`.
+It checks:
+
+| Area | Checks |
+|------|--------|
+| Structure | Bus/branch/generator/load counts, active branches, slack bus, connectivity |
+| Parameters | Zero impedance, default-like `x_pu=0.01`, missing ratings, transformer tap validity |
+| Generator data | Placeholder P/Q limits and missing voltage setpoints |
+| Engine readiness | pandapower convertibility and MATPOWER bus/gen/branch matrix sanity |
+
+`matpower_cpf` also reports `cpf_output_quality`, which verifies finite
+`max_loadability`, lambda traces, voltage traces, solver success, and PV-curve
+availability. A failed CPF output quality check makes the analysis status
+`error`; model-quality warnings remain visible but do not hide a successful CPF
+solve.
+
+CloudPSS power-flow result tables do not reliably include all static model
+parameters. The CloudPSS adapter therefore enriches unified buses and branches
+from model components before cross-engine reuse:
+
+| Component | Static fields trusted for unified conversion |
+|-----------|-----------------------------------------------|
+| Bus | `VBase`/`Vbase`, `Freq` |
+| Line | `R1pu`, `X1pu`, `B1pu`, `Sbase`, `Vbase`, `Irated` |
+| Transformer | `Rl`, `Xl`/`Xac`, `Tmva`, `V1`, `InitTap` |
+
+This is the intended validation chain for production hardening:
+
+```
+CloudPSS power flow
+    -> enriched unified PowerSystemModel
+    -> diagnose_unified_model(include_matpower=True)
+    -> pandapower reverse run for cross-engine voltage comparison
+    -> MATPOWER runcpf with model_quality + cpf_output_quality metadata
+```
+
+Pandapower reverse conversion preserves unified-origin line charging through an
+internal `_unified_b_pu` column. Native pandapower cases continue using the
+standard capacitance-to-per-unit formula, so standard cases such as `case9` and
+`case30` remain valid MATPOWER CPF inputs.
+
 ## 3. Integration Test Tiers
 
 ### Tier 1: Engine Connectivity

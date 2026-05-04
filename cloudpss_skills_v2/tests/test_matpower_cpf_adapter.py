@@ -230,6 +230,9 @@ def test_matpower_cpf_runs_real_runtime_when_available():
     assert len(result["pv_curve"]) > 2
     assert result["pv_curve"][0]["bus"] == "Load"
     assert result["matpower_runtime"]["available"] is True
+    assert result["model_quality"]["status"] in {"pass", "warning"}
+    assert result["cpf_output_quality"]["status"] in {"pass", "warning"}
+    assert result["cpf_output_quality"]["has_finite_max_loadability"] is True
 
 
 @pytest.mark.integration
@@ -249,6 +252,8 @@ def test_matpower_cpf_runs_real_runtime_on_three_bus_model():
     assert len(result["pv_curve"]) > 4
     assert {point["bus"] for point in result["pv_curve"]} == {"PV", "Load"}
     assert all(point["source"] == "matpower_runcpf" for point in result["pv_curve"])
+    assert result["model_quality"]["engine_readiness"]["matpower"]["convertible"] is True
+    assert result["cpf_output_quality"]["pv_curve_points"] == len(result["pv_curve"])
 
 
 @pytest.mark.integration
@@ -309,6 +314,10 @@ def test_matpower_cpf_runs_on_cloudpss_ieee39_unified_model():
     assert result["solver_success"] is True
     assert result["max_loadability"] > 1.0
     assert len(result["pv_curve"]) > len(monitor_buses)
+    assert result["model_quality"]["summary"]["source_engine"] == "cloudpss"
+    assert result["model_quality"]["parameter_quality"]["default_like_x_pu_branch_count"] == 0
+    assert result["model_quality"]["engine_readiness"]["matpower"]["convertible"] is True
+    assert result["cpf_output_quality"]["status"] in {"pass", "warning"}
 
 
 @pytest.mark.integration
@@ -344,3 +353,6 @@ def test_matpower_cpf_runs_on_pandapower_standard_cases(case_name):
     assert result["max_loadability"] > 1.0
     assert len(result["pv_curve"]) > len(monitor_buses)
     assert {point["bus"] for point in result["pv_curve"]} == set(monitor_buses)
+    assert result["model_quality"]["summary"]["source_engine"] == "pandapower"
+    assert result["model_quality"]["engine_readiness"]["matpower"]["convertible"] is True
+    assert result["cpf_output_quality"]["has_finite_max_loadability"] is True

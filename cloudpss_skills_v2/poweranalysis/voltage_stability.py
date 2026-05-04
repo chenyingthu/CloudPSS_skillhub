@@ -480,19 +480,29 @@ class VoltageStabilityAnalysis(PowerAnalysis):
                 MatpowerCPFAdapter,
                 MatpowerCPFUnavailable,
             )
+            from cloudpss_skills_v2.powerapi.model_quality import (
+                diagnose_unified_model,
+                evaluate_matpower_cpf_output,
+            )
         except Exception as exc:
             return self._matpower_cpf_error(f"MATPOWER CPF adapter unavailable: {exc}")
 
         adapter = MatpowerCPFAdapter()
+        model_quality = diagnose_unified_model(model, include_matpower=True)
         try:
             cpf_result = adapter.run_cpf(model, target_scale=target_scale)
         except MatpowerCPFUnavailable as exc:
-            return self._matpower_cpf_error(str(exc), runtime_status=adapter.runtime_status())
+            return self._matpower_cpf_error(
+                str(exc),
+                runtime_status=adapter.runtime_status(),
+                model_quality=model_quality,
+            )
         except Exception as exc:
             return self._matpower_cpf_error(
                 f"MATPOWER runcpf failed: {exc}",
                 runtime_status=adapter.runtime_status(),
                 analysis_mode="matpower_cpf_failed",
+                model_quality=model_quality,
             )
 
         max_lambda = cpf_result.get("max_lambda")
@@ -503,6 +513,9 @@ class VoltageStabilityAnalysis(PowerAnalysis):
         )
         solver_success = bool(cpf_result.get("success", True))
         status = "success" if solver_success else "warning" if pv_curve else "error"
+        cpf_quality = evaluate_matpower_cpf_output(model_quality, cpf_result, pv_curve)
+        if cpf_quality["status"] == "fail":
+            status = "error"
         critical_point = max_lambda
         result = {
             "status": status,
@@ -522,6 +535,8 @@ class VoltageStabilityAnalysis(PowerAnalysis):
             },
             "confidence_level": "cpf_solver",
             "standard_basis": "MATPOWER runcpf full AC continuation power flow",
+            "model_quality": model_quality,
+            "cpf_output_quality": cpf_quality,
             "assumptions": [
                 "Unified model can be converted to a valid MATPOWER case",
                 "Target case scales active and reactive loads by target_scale",
@@ -547,6 +562,7 @@ class VoltageStabilityAnalysis(PowerAnalysis):
         error: str,
         runtime_status: dict | None = None,
         analysis_mode: str = "matpower_cpf_unavailable",
+        model_quality: dict | None = None,
     ) -> dict:
         return {
             "status": "error",
@@ -557,6 +573,20 @@ class VoltageStabilityAnalysis(PowerAnalysis):
             "analysis_mode": analysis_mode,
             "confidence_level": "not_evaluated",
             "standard_basis": "MATPOWER runcpf full AC continuation power flow",
+            "model_quality": model_quality or {},
+            "cpf_output_quality": {
+                "status": "fail",
+                "solver_success": False,
+                "has_finite_max_loadability": False,
+                "pv_curve_points": 0,
+                "findings": [
+                    {
+                        "severity": "fail",
+                        "code": "cpf_not_evaluated",
+                        "message": error,
+                    }
+                ],
+            },
             "limitations": [
                 "Requires external Octave/MATLAB plus the Python MATPOWER bridge",
             ],
