@@ -29,6 +29,61 @@ def _sample_model() -> PowerSystemModel:
     )
 
 
+def _three_bus_model() -> PowerSystemModel:
+    return PowerSystemModel(
+        buses=[
+            Bus(bus_id=1, name="Slack", base_kv=230.0, bus_type="SLACK", v_magnitude_pu=1.0),
+            Bus(bus_id=2, name="PV", base_kv=230.0, bus_type="PV", v_magnitude_pu=1.01),
+            Bus(bus_id=3, name="Load", base_kv=230.0, bus_type="PQ", v_magnitude_pu=0.98),
+        ],
+        branches=[
+            Branch(from_bus=1, to_bus=2, name="L12", r_pu=0.02, x_pu=0.06, b_pu=0.03, rate_a_mva=120),
+            Branch(from_bus=2, to_bus=3, name="L23", r_pu=0.08, x_pu=0.24, b_pu=0.025, rate_a_mva=90),
+            Branch(
+                from_bus=1,
+                to_bus=3,
+                name="Outaged",
+                r_pu=0.01,
+                x_pu=0.03,
+                rate_a_mva=50,
+                in_service=False,
+            ),
+        ],
+        generators=[
+            Generator(
+                bus_id=1,
+                name="SlackGen",
+                p_gen_mw=100,
+                q_gen_mvar=20,
+                p_max_mw=250,
+                p_min_mw=0,
+                q_max_mvar=120,
+                q_min_mvar=-80,
+                v_set_pu=1.0,
+            ),
+            Generator(
+                bus_id=2,
+                name="PVGen",
+                p_gen_mw=40,
+                q_gen_mvar=5,
+                p_max_mw=100,
+                p_min_mw=0,
+                q_max_mvar=60,
+                q_min_mvar=-40,
+                v_set_pu=1.01,
+            ),
+            Generator(bus_id=3, name="OfflineGen", p_gen_mw=10, p_max_mw=20, p_min_mw=0, in_service=False),
+        ],
+        loads=[
+            Load(bus_id=2, name="L2", p_mw=20, q_mvar=5),
+            Load(bus_id=3, name="L3", p_mw=80, q_mvar=25),
+            Load(bus_id=3, name="OfflineLoad", p_mw=10, q_mvar=3, in_service=False),
+        ],
+        base_mva=100.0,
+        name="three_bus_cpf",
+    )
+
+
 def test_matpower_cpf_adapter_builds_base_and_target_cases():
     adapter = MatpowerCPFAdapter()
 
@@ -41,6 +96,29 @@ def test_matpower_cpf_adapter_builds_base_and_target_cases():
     assert base["bus"][1, 2] == 50
     assert target["bus"][1, 2] == 100
     assert target["bus"][1, 3] == 20
+
+
+def test_matpower_cpf_adapter_maps_unified_model_details():
+    adapter = MatpowerCPFAdapter()
+
+    base, target = adapter.build_cases(
+        _three_bus_model(),
+        target_scale=1.5,
+        load_bus_ids=[3],
+    )
+
+    assert base["bus"][:, 0].tolist() == [1, 2, 3]
+    assert base["bus"][:, 1].tolist() == [3, 2, 1]
+    assert base["bus"][1, 2] == 20
+    assert base["bus"][1, 3] == 5
+    assert base["bus"][2, 2] == 80
+    assert base["bus"][2, 3] == 25
+    assert base["gen"].shape == (2, 10)
+    assert base["branch"].shape == (2, 13)
+    assert target["bus"][1, 2] == 20
+    assert target["bus"][1, 3] == 5
+    assert target["bus"][2, 2] == 120
+    assert target["bus"][2, 3] == 37.5
 
 
 def test_matpower_cpf_runtime_status_is_structured():
@@ -125,3 +203,22 @@ def test_matpower_cpf_runs_real_runtime_when_available():
     assert len(result["pv_curve"]) > 2
     assert result["pv_curve"][0]["bus"] == "Load"
     assert result["matpower_runtime"]["available"] is True
+
+
+@pytest.mark.integration
+def test_matpower_cpf_runs_real_runtime_on_three_bus_model():
+    status = MatpowerCPFAdapter.runtime_status()
+    if not status["available"]:
+        pytest.skip(f"MATPOWER CPF runtime is not available: {status}")
+
+    result = VoltageStabilityAnalysis().run(
+        _three_bus_model(),
+        {"method": "matpower_cpf", "target_scale": 1.5, "monitor_buses": ["PV", "Load"]},
+    )
+
+    assert result["analysis_mode"] == "matpower_continuation_power_flow"
+    assert result["status"] in {"success", "warning"}
+    assert result["max_loadability"] > 0.0
+    assert len(result["pv_curve"]) > 4
+    assert {point["bus"] for point in result["pv_curve"]} == {"PV", "Load"}
+    assert all(point["source"] == "matpower_runcpf" for point in result["pv_curve"])
