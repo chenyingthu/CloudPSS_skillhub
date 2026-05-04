@@ -201,6 +201,26 @@ This mode uses repeated pandapower AC `runpp` calculations. It is stronger than
 the default screening estimate, but it is still a discrete load-scaling scan and
 not a continuous CPF solver.
 
+For a full continuation power-flow path, pass `method: "matpower_cpf"`:
+
+```python
+result = VoltageStabilityAnalysis().run(model, {
+    "method": "matpower_cpf",
+    "target_scale": 2.0,
+    "monitor_buses": ["Load"],
+})
+
+if result["status"] == "error":
+    print(result["analysis_mode"], result["matpower_runtime"])
+else:
+    assert result["analysis_mode"] == "matpower_continuation_power_flow"
+```
+
+This mode requires the optional Python `matpower` bridge plus either
+Octave/`oct2py` or MATLAB Engine. If that runtime is unavailable, the skill
+reports `matpower_cpf_unavailable` explicitly and does not substitute the
+screening proxy.
+
 ## Architecture Patterns
 
 ### Command Pattern (Example 1)

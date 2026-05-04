@@ -108,17 +108,24 @@ wrapper, but new conversion behavior should be added in the shared adapter.
 
 ### Voltage Stability Analysis Modes
 
-`voltage_stability` supports two explicit evidence levels:
+`voltage_stability` supports explicit evidence levels:
 
 | Method | `analysis_mode` | Evidence boundary |
 |--------|-----------------|-------------------|
 | default / `screening_proxy` | `screening_proxy` | Fast impedance/load voltage-drop screening; not an AC CPF calculation |
 | `pandapower_ac` | `pandapower_ac_power_flow_scan` | Repeated pandapower AC `runpp` load-scaling scan; stronger than screening, still not a continuous CPF solver |
+| `matpower_cpf` / `cpf` | `matpower_continuation_power_flow` | MATPOWER `runcpf` full AC continuation power-flow path when Octave/MATLAB and the Python MATPOWER bridge are installed |
 
 The `pandapower_ac` mode converts the unified `PowerSystemModel` to a
 pandapower network and reads bus voltages from AC power-flow results at each
 load-scaling point. It is intended as a validation scan before a dedicated CPF
 engine is available, not as an operational voltage-collapse certificate.
+
+The `matpower_cpf` mode converts the unified `PowerSystemModel` to MATPOWER
+base and target cases and calls `runcpf`. This runtime is optional and external:
+without the Python `matpower` bridge plus Octave/`oct2py` or MATLAB Engine, the
+skill returns `analysis_mode: "matpower_cpf_unavailable"` with runtime status
+instead of falling back to a screening approximation.
 
 ## 3. Integration Test Tiers
 

@@ -12,6 +12,10 @@ from cloudpss_skills_v2.powerapi.adapters.pandapower import (
 from cloudpss_skills_v2.powerapi.adapters.handle_converter import (
     convert_handle_to_power_system_model,
 )
+from cloudpss_skills_v2.powerapi.adapters.matpower_cpf import (
+    MatpowerCPFAdapter,
+    MatpowerCPFUnavailable,
+)
 
 __all__ = [
     "CloudPSSPowerFlowAdapter",
@@ -23,4 +27,6 @@ __all__ = [
     "AlgoLibFastDecoupledAdapter",
     "AlgoLibShortCircuitAdapter",
     "convert_handle_to_power_system_model",
+    "MatpowerCPFAdapter",
+    "MatpowerCPFUnavailable",
 ]

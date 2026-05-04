@@ -234,6 +234,13 @@ class VoltageStabilityAnalysis(PowerAnalysis):
                 monitor_buses=monitor_buses,
                 collapse_threshold=collapse_threshold,
             )
+        if method in {"matpower_cpf", "cpf"}:
+            return self._run_matpower_cpf(
+                model=model,
+                target_scale=config.get("target_scale", max(load_scaling) if load_scaling else 2.0),
+                monitor_buses=monitor_buses,
+                collapse_threshold=collapse_threshold,
+            )
 
         # Initialize results
         pv_curve = []
@@ -459,6 +466,130 @@ class VoltageStabilityAnalysis(PowerAnalysis):
         if not matches.empty:
             return int(matches.index[0])
         return None
+
+    def _run_matpower_cpf(
+        self,
+        model: PowerSystemModel,
+        target_scale: float,
+        monitor_buses: list[str],
+        collapse_threshold: float,
+    ) -> dict:
+        """Run MATPOWER CPF through the optional adapter."""
+        try:
+            from cloudpss_skills_v2.powerapi.adapters.matpower_cpf import (
+                MatpowerCPFAdapter,
+                MatpowerCPFUnavailable,
+            )
+        except Exception as exc:
+            return self._matpower_cpf_error(f"MATPOWER CPF adapter unavailable: {exc}")
+
+        adapter = MatpowerCPFAdapter()
+        try:
+            cpf_result = adapter.run_cpf(model, target_scale=target_scale)
+        except MatpowerCPFUnavailable as exc:
+            return self._matpower_cpf_error(str(exc), runtime_status=adapter.runtime_status())
+        except Exception as exc:
+            return self._matpower_cpf_error(f"MATPOWER runcpf failed: {exc}")
+
+        max_lambda = cpf_result.get("max_lambda")
+        pv_curve = self._extract_matpower_pv_curve(
+            model=model,
+            cpf=cpf_result.get("cpf", {}),
+            monitor_buses=monitor_buses,
+        )
+        critical_point = max_lambda
+        return {
+            "status": "success" if cpf_result.get("success", True) else "error",
+            "pv_curve": pv_curve,
+            "critical_point": critical_point,
+            "max_loadability": max_lambda,
+            "monitored_buses": monitor_buses,
+            "load_scaling": [1.0, target_scale],
+            "collapse_threshold": collapse_threshold,
+            "converged_cases": len(pv_curve),
+            "analysis_mode": "matpower_continuation_power_flow",
+            "data_source": {
+                "model": "PowerSystemModel converted to MATPOWER case",
+                "target": f"all loads scaled to {target_scale}x",
+                "voltage_estimate": "MATPOWER runcpf continuation power-flow results",
+            },
+            "confidence_level": "cpf_solver",
+            "standard_basis": "MATPOWER runcpf full AC continuation power flow",
+            "assumptions": [
+                "Unified model can be converted to a valid MATPOWER case",
+                "Target case scales active and reactive loads by target_scale",
+            ],
+            "limitations": [
+                "Requires external Octave/MATLAB plus the Python MATPOWER bridge",
+                "Current MVP uses all-load proportional scaling only",
+            ],
+            "matpower_runtime": adapter.runtime_status(),
+            "used_singular_ybus_approximation": False,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    @staticmethod
+    def _matpower_cpf_error(error: str, runtime_status: dict | None = None) -> dict:
+        return {
+            "status": "error",
+            "error": error,
+            "pv_curve": [],
+            "critical_point": None,
+            "max_loadability": None,
+            "analysis_mode": "matpower_cpf_unavailable",
+            "confidence_level": "not_evaluated",
+            "standard_basis": "MATPOWER runcpf full AC continuation power flow",
+            "limitations": [
+                "Requires external Octave/MATLAB plus the Python MATPOWER bridge",
+            ],
+            "matpower_runtime": runtime_status or {},
+            "used_singular_ybus_approximation": False,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    @staticmethod
+    def _extract_matpower_pv_curve(
+        model: PowerSystemModel,
+        cpf: dict,
+        monitor_buses: list[str],
+    ) -> list[dict]:
+        if not cpf:
+            return []
+        bus_by_id = {bus.bus_id: bus for bus in model.buses}
+        monitored = set(monitor_buses)
+        voltage_trace = cpf.get("V_c")
+        if voltage_trace is None:
+            voltage_trace = cpf.get("V")
+        lambda_trace = cpf.get("lam_c")
+        if lambda_trace is None:
+            lambda_trace = cpf.get("lambda")
+        if lambda_trace is None:
+            lambda_trace = cpf.get("lam")
+        if voltage_trace is None or lambda_trace is None:
+            return []
+
+        voltages = np.asarray(voltage_trace)
+        lambdas = np.asarray(lambda_trace).reshape(-1)
+        if voltages.ndim == 1:
+            voltages = voltages.reshape((-1, 1))
+
+        points = []
+        for bus_index, bus in enumerate(model.buses):
+            if bus.name not in monitored:
+                continue
+            if bus_index >= voltages.shape[0]:
+                continue
+            for step, lam in enumerate(lambdas):
+                if step >= voltages.shape[1]:
+                    break
+                value = voltages[bus_index, step]
+                points.append({
+                    "bus": bus_by_id.get(bus.bus_id, bus).name,
+                    "scale": float(lam),
+                    "voltage": float(abs(value)),
+                    "source": "matpower_runcpf",
+                })
+        return points
 
     def _calculate_voltages(self, model: PowerSystemModel) -> tuple[dict[str, float] | None, bool]:
         """Calculate bus voltages using simplified power flow.
