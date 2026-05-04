@@ -489,7 +489,11 @@ class VoltageStabilityAnalysis(PowerAnalysis):
         except MatpowerCPFUnavailable as exc:
             return self._matpower_cpf_error(str(exc), runtime_status=adapter.runtime_status())
         except Exception as exc:
-            return self._matpower_cpf_error(f"MATPOWER runcpf failed: {exc}")
+            return self._matpower_cpf_error(
+                f"MATPOWER runcpf failed: {exc}",
+                runtime_status=adapter.runtime_status(),
+                analysis_mode="matpower_cpf_failed",
+            )
 
         max_lambda = cpf_result.get("max_lambda")
         pv_curve = self._extract_matpower_pv_curve(
@@ -539,14 +543,18 @@ class VoltageStabilityAnalysis(PowerAnalysis):
         return result
 
     @staticmethod
-    def _matpower_cpf_error(error: str, runtime_status: dict | None = None) -> dict:
+    def _matpower_cpf_error(
+        error: str,
+        runtime_status: dict | None = None,
+        analysis_mode: str = "matpower_cpf_unavailable",
+    ) -> dict:
         return {
             "status": "error",
             "error": error,
             "pv_curve": [],
             "critical_point": None,
             "max_loadability": None,
-            "analysis_mode": "matpower_cpf_unavailable",
+            "analysis_mode": analysis_mode,
             "confidence_level": "not_evaluated",
             "standard_basis": "MATPOWER runcpf full AC continuation power flow",
             "limitations": [

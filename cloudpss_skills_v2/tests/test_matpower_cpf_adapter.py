@@ -121,6 +121,33 @@ def test_matpower_cpf_adapter_maps_unified_model_details():
     assert target["bus"][2, 3] == 37.5
 
 
+def test_matpower_cpf_adapter_renumbers_zero_based_unified_buses_and_marks_generator_buses():
+    model = PowerSystemModel(
+        buses=[
+            Bus(bus_id=0, name="Slack", base_kv=230.0, bus_type="SLACK"),
+            Bus(bus_id=1, name="GeneratorBus", base_kv=230.0, bus_type="PQ"),
+            Bus(bus_id=2, name="Load", base_kv=230.0, bus_type="PQ"),
+        ],
+        branches=[
+            Branch(from_bus=0, to_bus=1, name="L01", r_pu=0.01, x_pu=0.05),
+            Branch(from_bus=1, to_bus=2, name="L12", r_pu=0.02, x_pu=0.08),
+        ],
+        generators=[
+            Generator(bus_id=1, name="G1", p_gen_mw=40, p_max_mw=100, p_min_mw=0),
+        ],
+        loads=[
+            Load(bus_id=2, name="L2", p_mw=60, q_mvar=20),
+        ],
+    )
+
+    case = MatpowerCPFAdapter().to_mpc(model)
+
+    assert case["bus"][:, 0].tolist() == [1, 2, 3]
+    assert case["bus"][:, 1].tolist() == [3, 2, 1]
+    assert case["branch"][:, :2].tolist() == [[1, 2], [2, 3]]
+    assert case["gen"][0, 0] == 2
+
+
 def test_matpower_cpf_runtime_status_is_structured():
     status = MatpowerCPFAdapter.runtime_status()
 
@@ -222,3 +249,38 @@ def test_matpower_cpf_runs_real_runtime_on_three_bus_model():
     assert len(result["pv_curve"]) > 4
     assert {point["bus"] for point in result["pv_curve"]} == {"PV", "Load"}
     assert all(point["source"] == "matpower_runcpf" for point in result["pv_curve"])
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("case_name", ["case9", "case30"])
+def test_matpower_cpf_runs_on_pandapower_standard_cases(case_name):
+    status = MatpowerCPFAdapter.runtime_status()
+    if not status["available"]:
+        pytest.skip(f"MATPOWER CPF runtime is not available: {status}")
+
+    from cloudpss_skills_v2.powerapi import SimulationStatus
+    from cloudpss_skills_v2.powerapi.adapters.pandapower import (
+        PandapowerPowerFlowAdapter,
+    )
+
+    powerflow = PandapowerPowerFlowAdapter()._do_run_simulation({"model_id": case_name})
+    assert powerflow.status == SimulationStatus.COMPLETED
+    assert powerflow.system_model is not None
+    assert powerflow.system_model.source_engine == "pandapower"
+
+    monitor_buses = [
+        bus.name
+        for bus in powerflow.system_model.buses
+        if bus.bus_type == "PQ"
+    ][:3]
+    result = VoltageStabilityAnalysis().run(
+        powerflow.system_model,
+        {"method": "matpower_cpf", "target_scale": 1.1, "monitor_buses": monitor_buses},
+    )
+
+    assert result["analysis_mode"] == "matpower_continuation_power_flow"
+    assert result["status"] == "success"
+    assert result["solver_success"] is True
+    assert result["max_loadability"] > 1.0
+    assert len(result["pv_curve"]) > len(monitor_buses)
+    assert {point["bus"] for point in result["pv_curve"]} == set(monitor_buses)

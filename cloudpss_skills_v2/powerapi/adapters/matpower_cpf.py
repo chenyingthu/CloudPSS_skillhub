@@ -99,13 +99,28 @@ class MatpowerCPFAdapter:
 
     def to_mpc(self, model: PowerSystemModel) -> dict[str, Any]:
         """Convert a unified model to a MATPOWER case dict."""
+        bus_number_by_id = {
+            bus.bus_id: idx + 1
+            for idx, bus in enumerate(model.buses)
+        }
+        generator_bus_ids = {
+            gen.bus_id
+            for gen in model.generators
+            if gen.in_service and gen.bus_id in bus_number_by_id
+        }
         bus_rows = []
-        for bus in model.buses:
-            bus_type = 3 if bus.bus_type == "SLACK" else 2 if bus.bus_type == "PV" else 1
+        for idx, bus in enumerate(model.buses):
+            bus_type = (
+                3
+                if bus.bus_type == "SLACK"
+                else 2
+                if bus.bus_type == "PV" or bus.bus_id in generator_bus_ids
+                else 1
+            )
             p_load = sum(load.p_mw for load in model.loads if load.bus_id == bus.bus_id and load.in_service)
             q_load = sum(load.q_mvar for load in model.loads if load.bus_id == bus.bus_id and load.in_service)
             bus_rows.append([
-                bus.bus_id,
+                idx + 1,
                 bus_type,
                 p_load,
                 q_load,
@@ -124,8 +139,10 @@ class MatpowerCPFAdapter:
         for gen in model.generators:
             if not gen.in_service:
                 continue
+            if gen.bus_id not in bus_number_by_id:
+                continue
             gen_rows.append([
-                gen.bus_id,
+                bus_number_by_id[gen.bus_id],
                 gen.p_gen_mw,
                 gen.q_gen_mvar or 0.0,
                 gen.q_max_mvar,
@@ -141,7 +158,7 @@ class MatpowerCPFAdapter:
             slack = model.get_slack_bus()
             if slack is not None:
                 gen_rows.append([
-                    slack.bus_id,
+                    bus_number_by_id[slack.bus_id],
                     model.total_load_mw(),
                     0.0,
                     999999.0,
@@ -157,9 +174,11 @@ class MatpowerCPFAdapter:
         for branch in model.branches:
             if not branch.in_service:
                 continue
+            if branch.from_bus not in bus_number_by_id or branch.to_bus not in bus_number_by_id:
+                continue
             branch_rows.append([
-                branch.from_bus,
-                branch.to_bus,
+                bus_number_by_id[branch.from_bus],
+                bus_number_by_id[branch.to_bus],
                 branch.r_pu,
                 branch.x_pu,
                 branch.b_pu,
@@ -304,6 +323,9 @@ def _extract_max_lambda(cpf: dict[str, Any]) -> float | None:
         return None
 
     values = np.asarray(value).reshape(-1)
+    if values.size == 0:
+        return None
+    values = values[~np.isnan(values)]
     if values.size == 0:
         return None
     return float(np.nanmax(values))

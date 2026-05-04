@@ -122,9 +122,14 @@ class TestModelDescriptionConsistency:
             assert unified_branch.from_bus == from_bus
             assert unified_branch.to_bus == to_bus
 
-            # Check parameters
-            assert abs(unified_branch.r_pu - line_row["r_ohm_per_km"]) < 1e-6
-            assert abs(unified_branch.x_pu - line_row["x_ohm_per_km"]) < 1e-6
+            # Check parameters are normalized to per-unit on the system base.
+            base_kv = net.bus.at[from_bus, "vn_kv"]
+            z_base = (base_kv**2) / net.sn_mva
+            length_km = line_row["length_km"]
+            expected_r_pu = line_row["r_ohm_per_km"] * length_km / z_base
+            expected_x_pu = line_row["x_ohm_per_km"] * length_km / z_base
+            assert abs(unified_branch.r_pu - expected_r_pu) < 1e-6
+            assert abs(unified_branch.x_pu - expected_x_pu) < 1e-6
 
     def test_unified_model_passes_physical_validation(
         self, ieee14_case, pandapower_adapter

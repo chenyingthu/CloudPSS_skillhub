@@ -690,15 +690,30 @@ class PandapowerPowerFlowAdapter(EngineAdapter):
                     p_to = _safe_float(net.res_line.at[idx, "p_to_mw"])
                     q_to = _safe_float(net.res_line.at[idx, "q_to_mvar"])
 
+                length_km = _safe_float(row.get("length_km", 1.0), 1.0)
+                from_bus = int(row.get("from_bus", 0))
+                base_kv = _safe_float(net.bus.at[from_bus, "vn_kv"], 230.0) if from_bus in net.bus.index else 230.0
+                base_mva = float(net.sn_mva) if hasattr(net, "sn_mva") else 100.0
+                z_base = (base_kv ** 2) / base_mva
+                r_pu = _safe_float(row.get("r_ohm_per_km", 0.0)) * length_km / z_base if z_base else 0.0
+                x_pu = _safe_float(row.get("x_ohm_per_km", 0.01)) * length_km / z_base if z_base else 0.01
+                c_nf = _safe_float(row.get("c_nf_per_km", 0.0)) * length_km
+                b_pu = 2 * 3.141592653589793 * 50.0 * c_nf * 1e-9 * (base_kv ** 2) / base_mva
+                rate_a_mva = (
+                    _safe_float(row.get("max_i_ka", 1.0))
+                    * base_kv
+                    * 1.732
+                )
+
                 branch = Branch(
-                    from_bus=int(row.get("from_bus", 0)),
+                    from_bus=from_bus,
                     to_bus=int(row.get("to_bus", 0)),
                     name=_component_name(row.get("name"), f"line:{idx}"),
                     branch_type="LINE",
-                    r_pu=_safe_float(row.get("r_ohm_per_km", 0.0)),
-                    x_pu=_safe_float(row.get("x_ohm_per_km", 0.01)),
-                    b_pu=_safe_float(row.get("c_nf_per_km", 0.0)) / 1e9,  # Convert nF to F
-                    rate_a_mva=_safe_float(row.get("max_i_ka", 1.0)) * _safe_float(row.get("vn_kv", 230.0)) * 1.732,
+                    r_pu=r_pu,
+                    x_pu=x_pu,
+                    b_pu=b_pu,
+                    rate_a_mva=rate_a_mva,
                     p_from_mw=p_from,
                     q_from_mvar=q_from,
                     p_to_mw=p_to,

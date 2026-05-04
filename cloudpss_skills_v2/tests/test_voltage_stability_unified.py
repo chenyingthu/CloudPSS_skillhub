@@ -230,7 +230,7 @@ def test_voltage_stability_matpower_cpf_reports_missing_runtime(monkeypatch):
         MatpowerCPFUnavailable,
     )
 
-    def unavailable(_model, *, target_scale=2.0, load_bus_ids=None):
+    def unavailable(_self, _model, *, target_scale=2.0, load_bus_ids=None):
         raise MatpowerCPFUnavailable("forced unavailable")
 
     model = PowerSystemModel(
@@ -255,6 +255,37 @@ def test_voltage_stability_matpower_cpf_reports_missing_runtime(monkeypatch):
     assert result["analysis_mode"] == "matpower_cpf_unavailable"
     assert "MATPOWER" in result["standard_basis"]
     assert "matpower_runtime" in result
+
+
+def test_voltage_stability_matpower_cpf_reports_solver_failure(monkeypatch):
+    """MATPOWER runtime failures should not be reported as missing runtime."""
+    from cloudpss_skills_v2.poweranalysis.voltage_stability import VoltageStabilityAnalysis
+    from cloudpss_skills_v2.powerapi.adapters.matpower_cpf import MatpowerCPFAdapter
+
+    def failed(_self, _model, *, target_scale=2.0, load_bus_ids=None):
+        raise RuntimeError("forced solver failure")
+
+    model = PowerSystemModel(
+        buses=[
+            Bus(bus_id=1, name="Slack", base_kv=230.0, bus_type="SLACK", v_magnitude_pu=1.0),
+            Bus(bus_id=2, name="Load", base_kv=230.0, bus_type="PQ", v_magnitude_pu=0.98),
+        ],
+        branches=[
+            Branch(from_bus=1, to_bus=2, name="Line1", branch_type="LINE", r_pu=0.01, x_pu=0.1),
+        ],
+        loads=[Load(bus_id=2, name="L1", p_mw=50, q_mvar=10)],
+        base_mva=100.0,
+    )
+
+    monkeypatch.setattr(MatpowerCPFAdapter, "run_cpf", failed)
+    result = VoltageStabilityAnalysis().run(
+        model,
+        {"method": "matpower_cpf", "target_scale": 2.0, "monitor_buses": ["Load"]},
+    )
+
+    assert result["status"] == "error"
+    assert result["analysis_mode"] == "matpower_cpf_failed"
+    assert "forced solver failure" in result["error"]
 
 
 if __name__ == "__main__":
