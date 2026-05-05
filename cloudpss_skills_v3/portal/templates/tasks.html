@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}任务列表 - CloudPSS Skills Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">任务列表</h1>
+    <p class="text-secondary">查看所有仿真任务的状态和结果</p>
+</div>
+
+<!-- Filter Bar -->
+<div class="filter-bar">
+    <div class="filter-group">
+        <label class="filter-label">状态过滤</label>
+        <select class="filter-select" id="status-filter">
+            <option value="">全部</option>
+            <option value="pending">等待中</option>
+            <option value="running">运行中</option>
+            <option value="completed">已完成</option>
+            <option value="failed">失败</option>
+        </select>
+    </div>
+    <button class="refresh-btn" onclick="loadTasks()">刷新</button>
+</div>
+
+<!-- Tasks Table -->
+<div class="card">
+    <div class="table-container">
+        <table id="tasks-table">
+            <thead>
+                <tr>
+                    <th>任务 ID</th>
+                    <th>案例名称</th>
+                    <th>模型 RID</th>
+                    <th>类型</th>
+                    <th>状态</th>
+                    <th>进度</th>
+                    <th>消息</th>
+                    <th>创建时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="tasks-body">
+                <tr>
+                    <td colspan="9" class="empty-state">
+                        <div class="empty-state-icon">⏳</div>
+                        <div>加载中...</div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+    .filter-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        padding: 1rem;
+        background-color: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+    }
+
+    .filter-group {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .filter-label {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+
+    .filter-select {
+        padding: 0.5rem 0.75rem;
+        background-color: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        color: var(--text-primary);
+        font-size: 0.875rem;
+        cursor: pointer;
+    }
+
+    .filter-select:focus {
+        outline: none;
+        border-color: var(--accent-cyan);
+    }
+
+    .refresh-btn {
+        padding: 0.5rem 1rem;
+        background-color: var(--accent-cyan);
+        color: var(--bg-primary);
+        border: none;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: opacity 0.2s;
+    }
+
+    .refresh-btn:hover {
+        opacity: 0.9;
+    }
+
+    .view-link {
+        color: var(--accent-cyan);
+        font-size: 0.875rem;
+        text-decoration: none;
+    }
+
+    .view-link:hover {
+        text-decoration: underline;
+    }
+
+    code {
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        background-color: var(--bg-tertiary);
+        padding: 0.125rem 0.375rem;
+        border-radius: 4px;
+    }
+</style>
+
+<script>
+    // Load tasks
+    async function loadTasks() {
+        try {
+            const statusFilter = document.getElementById('status-filter').value;
+            let url = '/api/tasks';
+            if (statusFilter) {
+                url += `?status=${statusFilter}`;
+            }
+
+            const response = await fetch(url);
+            const data = await response.json();
+
+            const tbody = document.getElementById('tasks-body');
+            if (data.tasks.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" class="empty-state">
+                            <div class="empty-state-icon">📋</div>
+                            <div>暂无任务</div>
+                        </td>
+                    </tr>
+                `;
+            } else {
+                tbody.innerHTML = data.tasks.map(task => `
+                    <tr>
+                        <td><code>${task.task_id}</code></td>
+                        <td class="font-medium">${task.case_name}</td>
+                        <td><code class="text-muted">${task.model_rid}</code></td>
+                        <td><span class="text-secondary">${task.task_type}</span></td>
+                        <td>${getStatusBadge(task.status)}</td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <div class="progress-bar" style="width: 60px;">
+                                    <div class="progress-fill" style="width: ${task.progress}%"></div>
+                                </div>
+                                <span class="text-xs text-muted">${task.progress}%</span>
+                            </div>
+                        </td>
+                        <td class="text-sm">${task.message || '-'}</td>
+                        <td class="text-sm text-muted">${formatDateTime(task.created_at)}</td>
+                        <td><a href="/tasks/${task.task_id}" class="view-link">查看 →</a></td>
+                    </tr>
+                `).join('');
+            }
+        } catch (error) {
+            console.error('Failed to load tasks:', error);
+            document.getElementById('tasks-body').innerHTML = `
+                <tr>
+                    <td colspan="9" class="empty-state">
+                        <div class="empty-state-icon">❌</div>
+                        <div>加载失败</div>
+                    </td>
+                </tr>
+            `;
+        }
+    }
+
+    // Filter change handler
+    document.getElementById('status-filter').addEventListener('change', loadTasks);
+
+    // Load on page load
+    loadTasks();
+
+    // Refresh every 10 seconds
+    setInterval(loadTasks, 10000);
+</script>
+{% endblock %}

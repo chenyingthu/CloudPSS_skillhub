@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}仪表板 - CloudPSS Skills Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">仪表板</h1>
+    <p class="text-secondary">实时监控 Agent 活动和任务状态</p>
+</div>
+
+<!-- Stats Grid -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">总任务数</div>
+        <div class="stat-value" id="stat-total">-</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">已完成</div>
+        <div class="stat-value success" id="stat-completed">-</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">运行中</div>
+        <div class="stat-value info" id="stat-running">-</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">失败</div>
+        <div class="stat-value error" id="stat-failed">-</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">等待中</div>
+        <div class="stat-value warning" id="stat-pending">-</div>
+    </div>
+</div>
+
+<!-- Recent Tasks -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">最近任务 (24小时)</h2>
+        <a href="/tasks" class="text-sm">查看全部 →</a>
+    </div>
+    <div class="table-container">
+        <table id="recent-tasks-table">
+            <thead>
+                <tr>
+                    <th>任务 ID</th>
+                    <th>案例名称</th>
+                    <th>类型</th>
+                    <th>状态</th>
+                    <th>进度</th>
+                    <th>创建时间</th>
+                </tr>
+            </thead>
+            <tbody id="recent-tasks-body">
+                <tr>
+                    <td colspan="6" class="empty-state">
+                        <div class="empty-state-icon">⏳</div>
+                        <div>加载中...</div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+    .page-header {
+        margin-bottom: 2rem;
+    }
+
+    .page-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+</style>
+
+<script>
+    // Load dashboard data
+    async function loadDashboard() {
+        try {
+            const response = await fetch('/api/dashboard/stats');
+            const data = await response.json();
+
+            // Update stats
+            document.getElementById('stat-total').textContent = data.stats.total_tasks;
+            document.getElementById('stat-completed').textContent = data.stats.completed;
+            document.getElementById('stat-running').textContent = data.stats.running;
+            document.getElementById('stat-failed').textContent = data.stats.failed;
+            document.getElementById('stat-pending').textContent = data.stats.pending;
+
+            // Update recent tasks table
+            const tbody = document.getElementById('recent-tasks-body');
+            if (data.recent_tasks.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="empty-state">
+                            <div class="empty-state-icon">📋</div>
+                            <div>暂无任务</div>
+                        </td>
+                    </tr>
+                `;
+            } else {
+                tbody.innerHTML = data.recent_tasks.map(task => `
+                    <tr>
+                        <td><code class="text-mono text-sm">${task.task_id}</code></td>
+                        <td class="font-medium">${task.case_name}</td>
+                        <td><span class="text-secondary">${task.task_type}</span></td>
+                        <td>${getStatusBadge(task.status)}</td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <div class="progress-bar" style="width: 60px;">
+                                    <div class="progress-fill" style="width: ${task.progress}%"></div>
+                                </div>
+                                <span class="text-xs text-muted">${task.progress}%</span>
+                            </div>
+                        </td>
+                        <td class="text-sm text-muted">${formatRelativeTime(task.created_at)}</td>
+                    </tr>
+                `).join('');
+            }
+        } catch (error) {
+            console.error('Failed to load dashboard:', error);
+            document.getElementById('recent-tasks-body').innerHTML = `
+                <tr>
+                    <td colspan="6" class="empty-state">
+                        <div class="empty-state-icon">❌</div>
+                        <div>加载失败</div>
+                    </td>
+                </tr>
+            `;
+        }
+    }
+
+    // Load on page load
+    loadDashboard();
+
+    // Refresh every 5 seconds
+    setInterval(loadDashboard, 5000);
+</script>
+{% endblock %}
