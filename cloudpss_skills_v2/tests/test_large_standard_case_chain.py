@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 pytest.importorskip("pandapower")
+import pandapower as pp
 import pandapower.networks as pn
 
 from cloudpss_skills_v2.powerapi import SimulationStatus
@@ -41,7 +42,7 @@ def _native_case_counts(case_name: str) -> dict[str, int]:
         "buses": len(net.bus),
         "branches": len(net.line) + len(net.trafo),
         "generators": len(net.gen) + len(net.ext_grid) + len(net.sgen),
-        "loads": len(net.load),
+        "loads": len(net.load) + len(net.shunt),
     }
 
 
@@ -85,6 +86,60 @@ def test_large_pandapower_cases_build_finite_matpower_cases(case_name):
     assert np.all(np.isfinite(mpc["gen"]))
     assert np.all(np.isfinite(mpc["branch"]))
     assert np.any(mpc["bus"][:, 1] == 3)
+
+
+@pytest.mark.integration
+@pytest.mark.pandapower
+@pytest.mark.parametrize("case_name", ["case57", "case118", "case300"])
+def test_large_pandapower_cases_roundtrip_back_to_pandapower(case_name):
+    """Verify the reverse unified -> pandapower path on larger standard cases."""
+    original_model = _run_pandapower_standard_case(case_name)
+    pp_net = PandapowerPowerFlowAdapter().from_unified_model(original_model)
+
+    pp.runpp(pp_net)
+    roundtrip_model = PandapowerPowerFlowAdapter()._to_unified_model(pp_net)
+    quality = diagnose_unified_model(roundtrip_model, include_matpower=True)
+
+    assert len(roundtrip_model.buses) == len(original_model.buses)
+    assert len(roundtrip_model.branches) == len(original_model.branches)
+    assert len(roundtrip_model.generators) == len(original_model.generators)
+    assert len(roundtrip_model.loads) == len(original_model.loads)
+    assert quality["status"] in {"pass", "warning"}
+    assert quality["engine_readiness"]["matpower"]["convertible"] is True
+
+    original_voltage = np.array([bus.v_magnitude_pu for bus in original_model.buses], dtype=float)
+    roundtrip_voltage = np.array([bus.v_magnitude_pu for bus in roundtrip_model.buses], dtype=float)
+    voltage_diff = np.abs(original_voltage - roundtrip_voltage)
+    assert float(np.nanmax(voltage_diff)) < 0.10
+
+
+@pytest.mark.integration
+@pytest.mark.pandapower
+@pytest.mark.parametrize("case_name", ["case57", "case118", "case300"])
+def test_large_pandapower_cases_roundtrip_through_matpower_case(case_name):
+    """Verify MATPOWER case -> unified after pandapower-origin conversion."""
+    source_model = _run_pandapower_standard_case(case_name)
+    adapter = MatpowerCPFAdapter()
+    mpc = adapter.to_mpc(source_model)
+    matpower_model = adapter.from_mpc(mpc, name=f"{case_name}_from_matpower")
+    quality = diagnose_unified_model(matpower_model, include_matpower=True)
+    rebuilt = adapter.to_mpc(matpower_model)
+
+    assert matpower_model.source_engine == "matpower"
+    assert len(matpower_model.buses) == len(source_model.buses)
+    assert len(matpower_model.branches) == sum(1 for branch in source_model.branches if branch.in_service)
+    assert len(matpower_model.loads) == sum(
+        1
+        for bus in source_model.buses
+        if any(load.bus_id == bus.bus_id and load.in_service and (load.p_mw or load.q_mvar) for load in source_model.loads)
+    )
+    assert quality["status"] in {"pass", "warning"}
+    assert quality["engine_readiness"]["matpower"]["convertible"] is True
+    assert rebuilt["bus"].shape == mpc["bus"].shape
+    assert rebuilt["gen"].shape == mpc["gen"].shape
+    assert rebuilt["branch"].shape == mpc["branch"].shape
+    assert np.allclose(rebuilt["bus"][:, 1:4], mpc["bus"][:, 1:4])
+    assert np.allclose(rebuilt["branch"][:, :10], mpc["branch"][:, :10])
 
 
 @pytest.mark.integration

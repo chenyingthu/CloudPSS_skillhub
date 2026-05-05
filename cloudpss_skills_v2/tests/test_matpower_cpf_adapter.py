@@ -148,6 +148,72 @@ def test_matpower_cpf_adapter_renumbers_zero_based_unified_buses_and_marks_gener
     assert case["gen"][0, 0] == 2
 
 
+def test_matpower_cpf_adapter_converts_mpc_to_unified_model():
+    mpc = {
+        "version": "2",
+        "baseMVA": 100.0,
+        "bus": np.array([
+            [10, 3, 0, 0, 0, 0, 1, 1.02, 0.0, 230.0, 1, 1.1, 0.9],
+            [20, 1, 50, 15, 0, 0, 1, 0.98, -4.0, 230.0, 1, 1.1, 0.9],
+        ]),
+        "gen": np.array([
+            [10, 80, 5, 100, -50, 1.02, 100, 1, 200, 0],
+        ]),
+        "branch": np.array([
+            [10, 20, 0.01, 0.08, 0.02, 120, 130, 150, 1, 0, 1, -360, 360],
+        ]),
+    }
+
+    model = MatpowerCPFAdapter().from_mpc(mpc, name="mpc_two_bus")
+
+    assert model.name == "mpc_two_bus"
+    assert model.source_engine == "matpower"
+    assert model.base_mva == 100.0
+    assert [bus.bus_id for bus in model.buses] == [10, 20]
+    assert [bus.bus_type for bus in model.buses] == ["SLACK", "PQ"]
+    assert len(model.loads) == 1
+    assert model.loads[0].bus_id == 20
+    assert model.loads[0].p_mw == 50
+    assert len(model.generators) == 1
+    assert model.generators[0].bus_id == 10
+    assert len(model.branches) == 1
+    assert model.branches[0].from_bus == 10
+    assert model.branches[0].to_bus == 20
+    assert model.branches[0].branch_type == "LINE"
+
+
+def test_matpower_cpf_adapter_roundtrips_mpc_through_unified_case():
+    original = {
+        "version": "2",
+        "baseMVA": 100.0,
+        "bus": np.array([
+            [1, 3, 0, 0, 0, 0, 1, 1.0, 0.0, 230.0, 1, 1.1, 0.9],
+            [2, 2, 30, 10, 0, 0, 1, 1.01, -2.0, 230.0, 1, 1.1, 0.9],
+            [3, 1, 70, 25, 0, 0, 1, 0.97, -6.0, 230.0, 1, 1.1, 0.9],
+        ]),
+        "gen": np.array([
+            [1, 100, 20, 120, -80, 1.0, 100, 1, 250, 0],
+            [2, 40, 5, 60, -40, 1.01, 100, 1, 100, 0],
+        ]),
+        "branch": np.array([
+            [1, 2, 0.02, 0.06, 0.03, 120, 120, 120, 1, 0, 1, -360, 360],
+            [2, 3, 0.08, 0.24, 0.025, 90, 90, 90, 1, 0, 1, -360, 360],
+        ]),
+    }
+
+    adapter = MatpowerCPFAdapter()
+    model = adapter.from_mpc(original, name="roundtrip")
+    converted = adapter.to_mpc(model)
+
+    assert converted["baseMVA"] == original["baseMVA"]
+    assert converted["bus"].shape == original["bus"].shape
+    assert converted["gen"].shape == original["gen"].shape
+    assert converted["branch"].shape == original["branch"].shape
+    assert np.allclose(converted["bus"][:, 1:4], original["bus"][:, 1:4])
+    assert np.allclose(converted["gen"][:, :10], original["gen"][:, :10])
+    assert np.allclose(converted["branch"][:, :10], original["branch"][:, :10])
+
+
 def test_matpower_cpf_runtime_status_is_structured():
     status = MatpowerCPFAdapter.runtime_status()
 

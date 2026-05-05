@@ -115,6 +115,26 @@ def _component_name(value, fallback: str) -> str:
     return fallback if text in {"", "None", "nan", "NaN"} else text
 
 
+def _pandapower_tap_ratio(row) -> float:
+    tap_pos = _safe_float(row.get("tap_pos"), None)
+    tap_neutral = _safe_float(row.get("tap_neutral"), 0.0)
+    tap_step_percent = _safe_float(row.get("tap_step_percent"), None)
+    if tap_pos is None or tap_step_percent is None:
+        return 1.0
+    return 1.0 + ((tap_pos - tap_neutral) * tap_step_percent / 100.0)
+
+
+def _unified_tap_parameters(tap_ratio: float) -> dict[str, Any]:
+    if abs(tap_ratio - 1.0) < 1e-12:
+        return {}
+    return {
+        "tap_side": "hv",
+        "tap_neutral": 0.0,
+        "tap_pos": (tap_ratio - 1.0) * 100.0,
+        "tap_step_percent": 1.0,
+    }
+
+
 def _load_case(case_name: str):
     import pandapower.networks as nw
 
@@ -757,6 +777,8 @@ class PandapowerPowerFlowAdapter(EngineAdapter):
                     r_pu=_safe_float(row.get("vkr_percent", 0.0)) / 100.0,
                     x_pu=_safe_float(row.get("vk_percent", 0.0)) / 100.0,
                     rate_a_mva=_safe_float(row.get("sn_mva", 100.0)),
+                    tap_ratio=_pandapower_tap_ratio(row),
+                    phase_shift_degree=_safe_float(row.get("shift_degree", 0.0)),
                     p_from_mw=p_from,
                     q_from_mvar=q_from,
                     p_to_mw=p_to,
@@ -842,6 +864,22 @@ class PandapowerPowerFlowAdapter(EngineAdapter):
                     q_mvar=q_load if q_load else _safe_float(row.get("q_mvar", 0)),
                 )
                 loads.append(load)
+
+        if hasattr(net, 'shunt') and not net.shunt.empty:
+            for idx, row in net.shunt.iterrows():
+                if "in_service" in row and not bool(row.get("in_service", True)):
+                    continue
+                p_mw = _safe_float(row.get("p_mw", 0.0))
+                q_mvar = _safe_float(row.get("q_mvar", 0.0))
+                if p_mw or q_mvar:
+                    loads.append(
+                        Load(
+                            bus_id=int(row.get("bus", 0)),
+                            name=f"Shunt_{_component_name(row.get('name'), str(idx))}",
+                            p_mw=p_mw,
+                            q_mvar=q_mvar,
+                        )
+                    )
 
         return PowerSystemModel(
             buses=buses,
@@ -939,13 +977,22 @@ class PandapowerPowerFlowAdapter(EngineAdapter):
         for load in model.loads:
             pp_bus = bus_idx_map.get(load.bus_id)
             if pp_bus is not None and (load.p_mw or load.q_mvar):
-                pp.create_load(
-                    net,
-                    bus=pp_bus,
-                    p_mw=load.p_mw or 0,
-                    q_mvar=load.q_mvar or 0,
-                    name=load.name,
-                )
+                if str(load.name).startswith("Shunt_"):
+                    pp.create_shunt(
+                        net,
+                        bus=pp_bus,
+                        p_mw=load.p_mw or 0,
+                        q_mvar=load.q_mvar or 0,
+                        name=load.name,
+                    )
+                else:
+                    pp.create_load(
+                        net,
+                        bus=pp_bus,
+                        p_mw=load.p_mw or 0,
+                        q_mvar=load.q_mvar or 0,
+                        name=load.name,
+                    )
 
         # Create branches (lines)
         for branch in model.branches:
@@ -1006,6 +1053,8 @@ class PandapowerPowerFlowAdapter(EngineAdapter):
                         vk_percent=(branch.x_pu or 0.01) * 100,
                         pfe_kw=0,
                         i0_percent=0,
+                        shift_degree=branch.phase_shift_degree or 0.0,
+                        **_unified_tap_parameters(branch.tap_ratio),
                         name=branch.name,
                     )
 

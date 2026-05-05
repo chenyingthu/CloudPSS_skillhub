@@ -179,6 +179,16 @@ Large standard cases are covered as a separate cross-engine validation layer:
 | Default large | `case57`, `case118`, `case300`, `case1354pegase` | Runs in the normal v2 suite | Validate pandapower -> unified -> MATPOWER matrix readiness beyond toy systems |
 | Pressure | `case2869pegase` | Requires `CLOUDPSS_V2_RUN_LARGE_CASES=1` | Exercise multi-thousand-bus conversion without making every test run expensive |
 
+The default layer also validates the reverse paths on representative large
+cases: `pandapower -> unified -> pandapower` must rerun AC power flow with a
+bounded voltage delta, and `pandapower -> unified -> MATPOWER case -> unified ->
+MATPOWER case` must preserve matrix dimensions and key bus/branch/gen columns.
+This is a bidirectional reuse gate, not a claim of fully lossless conversion:
+pandapower-specific controls that are not in `PowerSystemModel` can still cause
+small numeric drift. The adapter now preserves transformer tap ratio/phase shift
+and maps pandapower shunts as equivalent unified load entries to reduce that
+drift.
+
 Some available pandapower/MATPOWER-family cases are intentionally not yet hard
 gates. For example, `case3120sp`, `case1888rte`, and `case2848rte` can fail the
 current pandapower power-flow adapter path in this environment, so they should

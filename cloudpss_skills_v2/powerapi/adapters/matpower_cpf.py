@@ -14,7 +14,7 @@ from typing import Any
 
 import numpy as np
 
-from cloudpss_skills_v2.core.system_model import PowerSystemModel
+from cloudpss_skills_v2.core.system_model import Branch, Bus, Generator, Load, PowerSystemModel
 
 
 class MatpowerCPFUnavailable(RuntimeError):
@@ -200,6 +200,116 @@ class MatpowerCPFAdapter:
             "branch": np.array(branch_rows, dtype=float),
         }
 
+    def from_mpc(self, mpc: dict[str, Any], *, name: str = "") -> PowerSystemModel:
+        """Convert a MATPOWER case dict to a unified model."""
+        bus_matrix = _as_2d_float_array(mpc.get("bus", []))
+        gen_matrix = _as_2d_float_array(mpc.get("gen", []))
+        branch_matrix = _as_2d_float_array(mpc.get("branch", []))
+        base_mva = float(mpc.get("baseMVA", 100.0) or 100.0)
+
+        buses = []
+        bus_ids = set()
+        for idx, row in enumerate(bus_matrix):
+            bus_number = int(row[0])
+            bus_ids.add(bus_number)
+            base_kv = float(row[9]) if row.size > 9 and row[9] > 0 else 1.0
+            vm_max = float(row[11]) if row.size > 11 and row[11] > 0 else 1.1
+            vm_min = float(row[12]) if row.size > 12 and row[12] > 0 else 0.9
+            if vm_min >= vm_max:
+                vm_min, vm_max = 0.9, 1.1
+            buses.append(
+                Bus(
+                    bus_id=bus_number,
+                    name=f"Bus {bus_number}",
+                    base_kv=base_kv,
+                    bus_type=_matpower_bus_type(row[1] if row.size > 1 else 1),
+                    v_magnitude_pu=_valid_voltage(row[7] if row.size > 7 else None),
+                    v_angle_degree=_valid_angle(row[8] if row.size > 8 else None),
+                    vm_max_pu=vm_max,
+                    vm_min_pu=vm_min,
+                    area=int(row[6]) if row.size > 6 else 1,
+                    zone=int(row[10]) if row.size > 10 else 1,
+                )
+            )
+
+        generators = []
+        for idx, row in enumerate(gen_matrix):
+            bus_id = int(row[0])
+            if bus_id not in bus_ids:
+                continue
+            status = bool(row[7]) if row.size > 7 else True
+            p_gen = float(row[1]) if row.size > 1 else 0.0
+            p_max = float(row[8]) if row.size > 8 else max(p_gen, 0.0)
+            p_min = float(row[9]) if row.size > 9 else min(p_gen, 0.0)
+            p_min = min(p_min, p_gen)
+            p_max = max(p_max, p_gen)
+            generators.append(
+                Generator(
+                    bus_id=bus_id,
+                    name=f"Gen {idx + 1} @ Bus {bus_id}",
+                    p_gen_mw=p_gen,
+                    q_gen_mvar=float(row[2]) if row.size > 2 else None,
+                    q_max_mvar=float(row[3]) if row.size > 3 else 999999.0,
+                    q_min_mvar=float(row[4]) if row.size > 4 else -999999.0,
+                    v_set_pu=_valid_voltage(row[5] if row.size > 5 else None) or 1.0,
+                    p_max_mw=p_max,
+                    p_min_mw=p_min,
+                    in_service=status,
+                )
+            )
+
+        loads = []
+        for row in bus_matrix:
+            bus_id = int(row[0])
+            p_load = float(row[2]) if row.size > 2 else 0.0
+            q_load = float(row[3]) if row.size > 3 else 0.0
+            if p_load or q_load:
+                loads.append(
+                    Load(
+                        bus_id=bus_id,
+                        name=f"Load @ Bus {bus_id}",
+                        p_mw=p_load,
+                        q_mvar=q_load,
+                    )
+                )
+
+        branches = []
+        for idx, row in enumerate(branch_matrix):
+            from_bus = int(row[0])
+            to_bus = int(row[1])
+            if from_bus not in bus_ids or to_bus not in bus_ids or from_bus == to_bus:
+                continue
+            tap_ratio = float(row[8]) if row.size > 8 and row[8] else 1.0
+            phase_shift = float(row[9]) if row.size > 9 else 0.0
+            branches.append(
+                Branch(
+                    from_bus=from_bus,
+                    to_bus=to_bus,
+                    name=f"Branch {idx + 1}: {from_bus}-{to_bus}",
+                    branch_type=_matpower_branch_type(tap_ratio, phase_shift),
+                    r_pu=float(row[2]) if row.size > 2 else 0.0,
+                    x_pu=float(row[3]) if row.size > 3 else 0.0,
+                    b_pu=float(row[4]) if row.size > 4 else 0.0,
+                    rate_a_mva=float(row[5]) if row.size > 5 else 0.0,
+                    rate_b_mva=float(row[6]) if row.size > 6 else None,
+                    rate_c_mva=float(row[7]) if row.size > 7 else None,
+                    tap_ratio=tap_ratio,
+                    phase_shift_degree=phase_shift,
+                    in_service=bool(row[10]) if row.size > 10 else True,
+                )
+            )
+
+        return PowerSystemModel(
+            buses=buses,
+            branches=branches,
+            generators=generators,
+            loads=loads,
+            base_mva=base_mva,
+            name=name or str(mpc.get("name", "matpower_case")),
+            source_engine="matpower",
+            version=str(mpc.get("version", "2")),
+        )
+
     def run_cpf(
         self,
         model: PowerSystemModel,
@@ -329,6 +439,52 @@ def _extract_max_lambda(cpf: dict[str, Any]) -> float | None:
     if values.size == 0:
         return None
     return float(np.nanmax(values))
+
+
+def _as_2d_float_array(value: Any) -> np.ndarray:
+    array = np.asarray(value, dtype=float)
+    if array.size == 0:
+        return np.empty((0, 0), dtype=float)
+    if array.ndim == 1:
+        return array.reshape((1, -1))
+    return array
+
+
+def _matpower_bus_type(value: float) -> str:
+    bus_type = int(value)
+    if bus_type == 3:
+        return "SLACK"
+    if bus_type == 2:
+        return "PV"
+    if bus_type == 4:
+        return "ISOLATED"
+    return "PQ"
+
+
+def _matpower_branch_type(tap_ratio: float, phase_shift_degree: float) -> str:
+    if abs(phase_shift_degree) > 1e-12:
+        return "PHASE_SHIFTER"
+    if abs(tap_ratio - 1.0) > 1e-12:
+        return "TRANSFORMER"
+    return "LINE"
+
+
+def _valid_voltage(value: Any) -> float | None:
+    if value is None:
+        return None
+    value = float(value)
+    if 0.5 <= value <= 1.5:
+        return value
+    return None
+
+
+def _valid_angle(value: Any) -> float | None:
+    if value is None:
+        return None
+    value = float(value)
+    if -90.0 <= value <= 90.0:
+        return value
+    return None
 
 
 __all__ = ["MatpowerCPFAdapter", "MatpowerCPFUnavailable"]

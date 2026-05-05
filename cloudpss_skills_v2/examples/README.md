@@ -263,6 +263,10 @@ CLOUDPSS_V2_RUN_LARGE_CASES=1 \
 
 The default large layer covers `case57`, `case118`, `case300`, and
 `case1354pegase`. The opt-in pressure layer currently covers `case2869pegase`.
+The default layer checks both `pandapower -> unified -> MATPOWER` readiness and
+representative reverse paths back to pandapower/MATPOWER. These are bounded
+round-trip gates; they do not imply bit-for-bit or fully lossless engine-native
+case reconstruction.
 
 ## Architecture Patterns
 
