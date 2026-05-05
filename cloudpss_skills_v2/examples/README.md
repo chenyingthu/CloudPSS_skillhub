@@ -245,11 +245,17 @@ For CloudPSS-origin models, the intended closed loop is:
 
 ```
 CloudPSS power flow result
+    -> CloudPSS static component inventory + diagnostics
     -> enriched unified model with static line/transformer parameters
     -> diagnose_unified_model(include_matpower=True)
     -> pandapower reverse run for voltage comparison
     -> MATPOWER CPF for continuation power-flow results
 ```
+
+Completed CloudPSS power-flow results include a `cloudpss_static_inventory`
+diagnostic summary with component counts, static parameter coverage, and missing
+parameter findings. This is an audit/enrichment layer for CloudPSS-origin
+models, not a full unified-model-to-CloudPSS canvas generator.
 
 Large pandapower standard cases can be used to stress the same conversion path:
 

@@ -225,7 +225,11 @@ class TestCloudPSSPowerFlowAdapter:
             {"name": "xf_1", "branch_type": "line"},
         ]
 
-        adapter._enrich_rows_from_model_components(FakeModel(), bus_rows, branch_rows)
+        inventory = adapter._enrich_rows_from_model_components(
+            FakeModel(),
+            bus_rows,
+            branch_rows,
+        )
 
         assert bus_rows[0]["voltage_kv"] == 500.0
         assert branch_rows[0]["r_pu"] == 0.0012
@@ -236,6 +240,11 @@ class TestCloudPSSPowerFlowAdapter:
         assert branch_rows[1]["x_pu"] == 0.08
         assert branch_rows[1]["rate_a_mva"] == 200.0
         assert branch_rows[1]["tap_ratio"] == 1.02
+        assert inventory is not None
+        diagnostics = inventory.diagnostics()
+        assert diagnostics["status"] == "pass"
+        assert diagnostics["component_type_counts"]["bus"] == 1
+        assert diagnostics["parameter_coverage"]["transformer_with_x_count"] == 1
 
     def test_unified_conversion_uses_enriched_branch_type(self):
         adapter = CloudPSSPowerFlowAdapter()

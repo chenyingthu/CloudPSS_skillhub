@@ -148,8 +148,10 @@ availability. A failed CPF output quality check makes the analysis status
 solve.
 
 CloudPSS power-flow result tables do not reliably include all static model
-parameters. The CloudPSS adapter therefore enriches unified buses and branches
-from model components before cross-engine reuse:
+parameters. The CloudPSS adapter therefore builds a static component inventory
+from model components, enriches unified buses and branches from that inventory,
+and includes a `cloudpss_static_inventory` diagnostic summary in completed
+power-flow result data before cross-engine reuse:
 
 | Component | Static fields trusted for unified conversion |
 |-----------|-----------------------------------------------|
@@ -157,10 +159,16 @@ from model components before cross-engine reuse:
 | Line | `R1pu`, `X1pu`, `B1pu`, `Sbase`, `Vbase`, `Irated` |
 | Transformer | `Rl`, `Xl`/`Xac`, `Tmva`, `V1`, `InitTap` |
 
+The inventory records component counts, parameter coverage, and warning
+findings for missing line/transformer impedance or missing bus base voltage.
+It is intentionally a CloudPSS-origin audit and enrichment layer. It does not
+claim full `PowerSystemModel -> CloudPSS` canvas/model generation.
+
 This is the intended validation chain for production hardening:
 
 ```
 CloudPSS power flow
+    -> CloudPSS static component inventory + diagnostics
     -> enriched unified PowerSystemModel
     -> diagnose_unified_model(include_matpower=True)
     -> pandapower reverse run for cross-engine voltage comparison
