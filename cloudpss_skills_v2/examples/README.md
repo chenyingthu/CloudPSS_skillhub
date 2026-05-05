@@ -275,6 +275,16 @@ branch transformers, loads, and generators. Controls, protection logic, EMT
 subsystems, and high-fidelity canvas layout are deliberately outside this first
 generator scope.
 
+The live closed-loop gate is opt-in because it creates a remote CloudPSS model:
+
+```bash
+CLOUDPSS_V2_RUN_LIVE_MODEL_GENERATION=1 \
+  python3 -m pytest -q cloudpss_skills_v2/tests/test_unified_to_cloudpss_live_loop.py -s
+```
+
+That gate verifies `PowerSystemModel -> draft -> CloudPSS SDK write/save ->
+fetch -> static inventory diagnostics -> CloudPSS power flow`.
+
 Large pandapower standard cases can be used to stress the same conversion path:
 
 ```bash

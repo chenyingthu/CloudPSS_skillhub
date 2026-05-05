@@ -255,13 +255,14 @@ class CloudPSSInventoryExtractor:
             return self.extract_transformer_parameters(component_id, component, args)
         if component_type == ComponentType.LOAD:
             return {
-                "p_mw": parse_float(first_present(args, "P", "p_mw", "Pl"), None),
-                "q_mvar": parse_float(first_present(args, "Q", "q_mvar", "Ql"), None),
+                "p_mw": parse_float(first_present(args, "P", "p", "p_mw", "Pl"), None),
+                "q_mvar": parse_float(first_present(args, "Q", "q", "q_mvar", "Ql"), None),
             }
         if component_type == ComponentType.GENERATOR:
             return {
-                "p_mw": parse_float(first_present(args, "P", "p_mw", "Pg"), None),
-                "v_set_pu": parse_float(first_present(args, "V", "Vset", "v_set_pu"), None),
+                "p_mw": parse_float(first_present(args, "P", "pf_P", "p_mw", "Pg"), None),
+                "q_mvar": parse_float(first_present(args, "Q", "pf_Q", "q_mvar", "Qg"), None),
+                "v_set_pu": parse_float(first_present(args, "Vset", "pf_V", "v_set_pu"), None),
             }
         if component_type == ComponentType.SHUNT:
             return {

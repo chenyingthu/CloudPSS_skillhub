@@ -53,11 +53,11 @@ class FakeModel:
             ),
             "load_1": FakeComponent(
                 "model/CloudPSS/_newLoad",
-                {"P": {"source": "80"}, "Q": {"source": "20"}},
+                {"p": {"source": "80"}, "q": {"source": "20"}},
             ),
             "gen_1": FakeComponent(
                 "model/CloudPSS/_newGenerator",
-                {"P": {"source": "120"}, "Vset": {"source": "1.01"}},
+                {"pf_P": {"source": "120"}, "pf_Q": {"source": "12"}, "pf_V": {"source": "1.01"}},
             ),
             "shunt_1": FakeComponent(
                 "model/CloudPSS/_newShunt",
@@ -112,7 +112,11 @@ def test_inventory_extracts_component_types_parameters_and_indexes():
         item for item in inventory.components if item.component_type == ComponentType.SHUNT
     )
     assert load.extracted_parameters == {"p_mw": 80.0, "q_mvar": 20.0}
-    assert generator.extracted_parameters == {"p_mw": 120.0, "v_set_pu": 1.01}
+    assert generator.extracted_parameters == {
+        "p_mw": 120.0,
+        "q_mvar": 12.0,
+        "v_set_pu": 1.01,
+    }
     assert shunt.extracted_parameters == {"q_mvar": -5.0}
 
 

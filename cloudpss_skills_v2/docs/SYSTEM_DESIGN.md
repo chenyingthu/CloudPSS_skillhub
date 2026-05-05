@@ -172,6 +172,20 @@ canvas reconstruction: controls, protection logic, EMT subsystems, custom
 symbols, and high-fidelity visual layout remain outside the first generation
 scope.
 
+The live generation gate is explicit because it creates a remote CloudPSS model:
+
+```bash
+CLOUDPSS_V2_RUN_LIVE_MODEL_GENERATION=1 \
+  python3 -m pytest -q cloudpss_skills_v2/tests/test_unified_to_cloudpss_live_loop.py -s
+```
+
+That test uses the local CloudPSS integration server token, clones the IEEE39
+template as a writable SDK object, clears the template components, writes the
+generated static draft, saves a timestamped model key, fetches it back, verifies
+the `CloudPSSInventoryExtractor` diagnostics, and runs CloudPSS power flow.
+Without the environment variable, the test is skipped so normal suites do not
+create remote models.
+
 This is the intended validation chain for production hardening:
 
 ```

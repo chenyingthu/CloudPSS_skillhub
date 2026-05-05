@@ -18,8 +18,8 @@ from cloudpss_skills_v2.core.system_model import (
 BUS_DEFINITION = "model/CloudPSS/_newBus_3p"
 LINE_DEFINITION = "model/CloudPSS/TransmissionLine"
 TRANSFORMER_DEFINITION = "model/CloudPSS/_newTransformer_3p2w"
-LOAD_DEFINITION = "model/CloudPSS/_newLoad"
-GENERATOR_DEFINITION = "model/CloudPSS/_newGenerator"
+LOAD_DEFINITION = "model/CloudPSS/_newExpLoad_3p"
+GENERATOR_DEFINITION = "model/CloudPSS/SyncGeneratorRouter"
 
 
 @dataclass
@@ -104,19 +104,43 @@ class UnifiedToCloudPSSDraftConverter:
             if not branch.in_service:
                 draft.warnings.append(self._warning("skipped_inactive_branch", branch.name))
                 continue
-            draft.components.append(self._branch_component(branch, bus_by_id, draft.bus_node_names, index))
+            draft.components.append(
+                self._branch_component(
+                    branch,
+                    bus_by_id,
+                    draft.bus_node_names,
+                    index,
+                    draft.base_mva,
+                )
+            )
 
         for index, load in enumerate(model.loads):
             if not load.in_service:
                 draft.warnings.append(self._warning("skipped_inactive_load", load.name))
                 continue
-            draft.components.append(self._load_component(load, draft.bus_node_names, index))
+            draft.components.append(
+                self._load_component(
+                    load,
+                    bus_by_id,
+                    draft.bus_node_names,
+                    index,
+                    draft.frequency_hz,
+                )
+            )
 
         for index, generator in enumerate(model.generators):
             if not generator.in_service:
                 draft.warnings.append(self._warning("skipped_inactive_generator", generator.name))
                 continue
-            draft.components.append(self._generator_component(generator, draft.bus_node_names, index))
+            draft.components.append(
+                self._generator_component(
+                    generator,
+                    bus_by_id,
+                    draft.bus_node_names,
+                    index,
+                    draft.frequency_hz,
+                )
+            )
 
         if model.transformers:
             draft.warnings.append({
@@ -141,7 +165,9 @@ class UnifiedToCloudPSSDraftConverter:
             args={
                 "Name": bus.name,
                 "VBase": self._expr(bus.base_kv),
-                "Freq": self._expr(frequency_hz),
+                "Freq": str(frequency_hz),
+                "V": str(bus.v_magnitude_pu if bus.v_magnitude_pu is not None else 1.0),
+                "Theta": str(bus.v_angle_degree if bus.v_angle_degree is not None else 0.0),
             },
             pins={"0": node_name},
             position=self._position(index, row=0),
@@ -154,10 +180,11 @@ class UnifiedToCloudPSSDraftConverter:
         bus_by_id: dict[int, Bus],
         node_names: dict[int, str],
         index: int,
+        base_mva: float,
     ) -> CloudPSSComponentDraft:
         if branch.branch_type in ("TRANSFORMER", "PHASE_SHIFTER"):
             return self._transformer_component(branch, bus_by_id, node_names, index)
-        return self._line_component(branch, bus_by_id, node_names, index)
+        return self._line_component(branch, bus_by_id, node_names, index, base_mva)
 
     def _line_component(
         self,
@@ -165,6 +192,7 @@ class UnifiedToCloudPSSDraftConverter:
         bus_by_id: dict[int, Bus],
         node_names: dict[int, str],
         index: int,
+        base_mva: float,
     ) -> CloudPSSComponentDraft:
         from_bus = bus_by_id[branch.from_bus]
         return CloudPSSComponentDraft(
@@ -176,7 +204,7 @@ class UnifiedToCloudPSSDraftConverter:
                 "R1pu": self._expr(branch.r_pu),
                 "X1pu": self._expr(branch.x_pu),
                 "B1pu": self._expr(branch.b_pu),
-                "Sbase": self._expr(100.0),
+                "Sbase": self._expr(base_mva),
                 "Vbase": self._expr(from_bus.base_kv),
                 "Rate": self._expr(branch.rate_a_mva),
             },
@@ -223,17 +251,28 @@ class UnifiedToCloudPSSDraftConverter:
     def _load_component(
         self,
         load: Load,
+        bus_by_id: dict[int, Bus],
         node_names: dict[int, str],
         index: int,
+        frequency_hz: float,
     ) -> CloudPSSComponentDraft:
+        bus = bus_by_id[load.bus_id]
         return CloudPSSComponentDraft(
             component_id=f"load_{index}_{self._slug(load.name)}",
             definition=LOAD_DEFINITION,
             label=load.name,
             args={
                 "Name": load.name,
-                "P": self._expr(load.p_mw),
-                "Q": self._expr(load.q_mvar),
+                "p": self._expr(load.p_mw),
+                "q": self._expr(load.q_mvar),
+                "f": self._expr(frequency_hz),
+                "v": self._expr(bus.base_kv),
+                "Vi": self._expr(1.0),
+                "NP": self._expr(2),
+                "NQ": self._expr(2),
+                "KPF": self._expr(0),
+                "KQF": self._expr(0),
+                "NIM": "1",
             },
             pins={"0": node_names[load.bus_id]},
             position=self._position(index, row=3),
@@ -243,15 +282,28 @@ class UnifiedToCloudPSSDraftConverter:
     def _generator_component(
         self,
         generator: Generator,
+        bus_by_id: dict[int, Bus],
         node_names: dict[int, str],
         index: int,
+        frequency_hz: float,
     ) -> CloudPSSComponentDraft:
+        bus = bus_by_id[generator.bus_id]
+        bus_type = "2" if bus.bus_type == "SLACK" else "1"
         args = {
             "Name": generator.name,
-            "P": self._expr(generator.p_gen_mw),
+            "pf_P": self._expr(generator.p_gen_mw),
+            "pf_Q": self._expr(generator.q_gen_mvar or 0.0),
+            "pf_Qmax": self._expr(generator.q_max_mvar),
+            "pf_Qmin": self._expr(generator.q_min_mvar),
+            "pf_V": self._expr(generator.v_set_pu if generator.v_set_pu is not None else 1.0),
+            "pf_Theta": self._expr(0.0),
+            "BusType": bus_type,
+            "Control": "1",
+            "ModelType": "1",
+            "NIM": "1",
+            "freq": self._expr(frequency_hz),
+            "V": self._expr(f"{bus.base_kv}*sqrt(1/3)"),
         }
-        if generator.v_set_pu is not None:
-            args["Vset"] = self._expr(generator.v_set_pu)
         return CloudPSSComponentDraft(
             component_id=f"generator_{index}_{self._slug(generator.name)}",
             definition=GENERATOR_DEFINITION,
@@ -291,9 +343,18 @@ class UnifiedToCloudPSSDraftConverter:
 class CloudPSSModelWriter:
     """Write a CloudPSSModelDraft into a CloudPSS SDK model object."""
 
-    def write(self, model: Any, draft: CloudPSSModelDraft) -> list[dict[str, Any]]:
+    def write(
+        self,
+        model: Any,
+        draft: CloudPSSModelDraft,
+        *,
+        clear_existing: bool = False,
+    ) -> list[dict[str, Any]]:
         if not hasattr(model, "addComponent"):
             raise TypeError("CloudPSS model object must provide addComponent()")
+
+        if clear_existing:
+            self.clear_components(model)
 
         created: list[dict[str, Any]] = []
         for component in draft.components:
@@ -308,9 +369,30 @@ class CloudPSSModelWriter:
                 "component_id": component.component_id,
                 "definition": component.definition,
                 "label": component.label,
+                "sdk_component_key": self._component_key(result),
                 "sdk_result": result,
             })
         return created
+
+    @staticmethod
+    def clear_components(model: Any) -> int:
+        if not hasattr(model, "getAllComponents") or not hasattr(model, "removeComponent"):
+            raise TypeError(
+                "CloudPSS model object must provide getAllComponents() and removeComponent()"
+            )
+        component_keys = list(model.getAllComponents().keys())
+        removed = 0
+        for component_key in component_keys:
+            if model.removeComponent(component_key):
+                removed += 1
+        return removed
+
+    @staticmethod
+    def _component_key(result: Any) -> str | None:
+        if isinstance(result, str):
+            return result
+        key = getattr(result, "id", None) or getattr(result, "key", None)
+        return str(key) if key else None
 
 
 __all__ = [

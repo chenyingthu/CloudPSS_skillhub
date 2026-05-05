@@ -108,6 +108,12 @@ class FakeCloudPSSModel:
     def getAllComponents(self):
         return self.components
 
+    def removeComponent(self, component_key):
+        if component_key not in self.components:
+            return False
+        del self.components[component_key]
+        return True
+
 
 def test_unified_model_converts_to_cloudpss_static_draft():
     draft = UnifiedToCloudPSSDraftConverter().convert(build_three_bus_model())
@@ -131,7 +137,7 @@ def test_unified_model_converts_to_cloudpss_static_draft():
     generator = next(component for component in draft.components if component.label == "PV Gen")
 
     assert bus.args["VBase"]["source"] == "500.0"
-    assert bus.args["Freq"]["source"] == "60.0"
+    assert bus.args["Freq"] == "60.0"
     assert bus.pins["0"] == "node_1_bus_1"
     assert line.pins == {"0": "node_1_bus_1", "1": "node_2_bus_2"}
     assert line.args["R1pu"]["source"] == "0.001"
@@ -142,9 +148,13 @@ def test_unified_model_converts_to_cloudpss_static_draft():
     assert transformer.args["Xl"]["source"] == "0.08"
     assert transformer.args["InitTap"]["source"] == "1.02"
     assert load.pins == {"0": "node_2_bus_2"}
-    assert load.args["P"]["source"] == "90.0"
+    assert load.args["p"]["source"] == "90.0"
+    assert load.args["q"]["source"] == "30.0"
+    assert load.args["v"]["source"] == "500.0"
     assert generator.pins == {"0": "node_3_bus_3"}
-    assert generator.args["Vset"]["source"] == "1.01"
+    assert generator.args["pf_P"]["source"] == "60.0"
+    assert generator.args["pf_V"]["source"] == "1.01"
+    assert generator.args["BusType"] == "1"
 
 
 def test_writer_output_can_be_read_by_cloudpss_inventory_extractor():
@@ -157,6 +167,7 @@ def test_writer_output_can_be_read_by_cloudpss_inventory_extractor():
     diagnostics = inventory.diagnostics()
 
     assert len(created) == len(draft.components)
+    assert created[0]["sdk_component_key"] == "component_1"
     assert diagnostics["status"] == "pass"
     assert diagnostics["component_type_counts"] == {
         "bus": 3,
@@ -172,6 +183,32 @@ def test_writer_output_can_be_read_by_cloudpss_inventory_extractor():
     assert index["branch_by_component_id"]["component_4"]["x_pu"] == 0.01
     assert index["branch_by_component_id"]["component_5"]["branch_type"] == "transformer"
     assert index["branch_by_component_id"]["component_5"]["tap_ratio"] == 1.02
+    load = next(item for item in inventory.components if item.component_type == "load")
+    generator = next(
+        item for item in inventory.components
+        if item.component_type == "generator" and item.name == "PV Gen"
+    )
+    assert load.extracted_parameters["p_mw"] == 90.0
+    assert generator.extracted_parameters["p_mw"] == 60.0
+    assert generator.extracted_parameters["v_set_pu"] == 1.01
+
+
+def test_writer_can_clear_existing_components_before_write():
+    draft = UnifiedToCloudPSSDraftConverter().convert(build_three_bus_model())
+    fake_model = FakeCloudPSSModel()
+    fake_model.addComponent(
+        BUS_DEFINITION,
+        "Old Bus",
+        {"Name": "old", "VBase": "10"},
+        {"0": "old"},
+    )
+
+    created = CloudPSSModelWriter().write(fake_model, draft, clear_existing=True)
+    inventory = CloudPSSInventoryExtractor().extract(fake_model)
+
+    assert len(created) == len(draft.components)
+    assert all(component.name != "Old Bus" for component in inventory.components)
+    assert inventory.diagnostics()["component_type_counts"]["bus"] == 3
 
 
 def test_inactive_components_are_reported_and_not_emitted():
