@@ -91,7 +91,7 @@ python -m cloudpss_skills_v3.master_organizer.portal.server --host 0.0.0.0 --por
 http://127.0.0.1:8765
 ```
 
-第一版 Portal 覆盖：
+### Portal 功能
 
 - Dashboard：workspace、实体数量、存储和最近任务/结果。
 - Case 工作台：Case 树、模型 RID、Server、Variant、Task、Result 关系。
@@ -100,6 +100,17 @@ http://127.0.0.1:8765
 - Reports：生成包含 Case、Task、配置、结果摘要和文件清单的报告，并归档结果目录。
 - Servers：查看 server URL、owner、默认状态和 token 来源；API 输出会隐藏加密 token。
 - Audit：查看 `logs/audit.log`。
+
+### UI 特性 (Phase 5)
+
+- **暗色主题**：支持 light/dark 主题切换，自动保存用户偏好
+- **数据可视化**：集成 Chart.js 4.4.1，支持潮流结果和 EMT 通道的交互式图表
+- **响应式布局**：适配桌面、平板和移动设备
+- **键盘快捷键**：
+  - `?` - 显示快捷键帮助
+  - `Cmd/Ctrl + Shift + T` - 切换主题
+  - `Esc` - 关闭弹窗
+- **加载状态**：骨架屏动画和加载进度提示
 
 EMT 任务可以记录本地模型源和导出通道：
 
@@ -112,6 +123,60 @@ python -m cloudpss_skills_v3.master_organizer.cli.main task create \
   --channel plot-2/vac:0
 python -m cloudpss_skills_v3.master_organizer.cli.main task submit <task_id> --wait --timeout 300
 ```
+
+## 部署 (Phase 6)
+
+### 快速安装
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/cloudpss/skillhub/main/cloudpss_skills_v3/scripts/install.sh | sudo bash
+```
+
+### 手动部署
+
+1. **开发模式**
+   ```bash
+   pip install -e .
+   python -m cloudpss_skills_v3.master_organizer.portal.server
+   ```
+
+2. **生产部署 (systemd)**
+   ```bash
+   sudo ./scripts/install.sh
+   sudo systemctl enable cloudpss-portal
+   sudo systemctl start cloudpss-portal
+   ```
+
+3. **Docker 部署**
+   ```bash
+   docker build -t cloudpss-skills-v3 .
+   docker run -p 8765:8765 cloudpss-skills-v3
+   ```
+
+### 运维脚本
+
+| 脚本 | 用途 |
+|------|------|
+| `scripts/install.sh` | 自动安装和配置 |
+| `scripts/backup.sh` | 备份工作区和配置 |
+| `scripts/restore.sh` | 从备份恢复 |
+| `scripts/security.sh` | 安全加固和审计 |
+| `scripts/optimize.sh` | 性能优化 |
+
+### 安全加固
+
+```bash
+# 运行安全检查
+sudo ./scripts/security.sh
+
+# 关键检查项：
+# - 文件权限 (token 文件 600, 目录 750)
+# - UFW 防火墙规则
+# - 日志轮转配置
+# - 敏感文件扫描
+```
+
+详细部署指南见 `docs/DEPLOYMENT.md`，API 文档见 `docs/API_REFERENCE.md`。
 
 ## 验证
 
