@@ -5,8 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>CloudPSS 收纳大师 Portal</title>
     <link rel="stylesheet" href="/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   </head>
   <body>
+    <!-- Loading overlay -->
+    <div id="loadingOverlay" class="skeleton-overlay">
+      <div class="skeleton-spinner"></div>
+      <div class="skeleton-text">正在加载 CloudPSS 收纳大师...</div>
+    </div>
+    <!-- Loading progress bar -->
+    <div id="loadingBar" class="loading-bar"></div>
+
     <div class="app workbook-app">
       <header class="workbook-header">
         <div class="brand">
@@ -24,6 +33,7 @@
           <button class="menu-button">报告</button>
         </div>
         <div class="topbar-actions">
+          <button id="themeToggleBtn" class="button secondary" title="切换主题">🌙</button>
           <button id="quickNewCaseBtn" class="button">新建 Case</button>
           <button id="quickNewTaskBtn" class="button secondary">新建任务</button>
           <button id="refreshBtn" class="button secondary">刷新</button>

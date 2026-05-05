@@ -89,7 +89,7 @@ class PortalHandler(BaseHTTPRequestHandler):
                 result, status = handler.preflight(parts[2])
                 self._json(result, status)
 
-            elif len(parts) == 4 and parts[:3] == ["api", "cases", "model"]:
+            elif len(parts) == 4 and parts[0] == "api" and parts[1] == "cases" and parts[3] == "model":
                 handler = ModelHandler(self)
                 result, status = handler.get_editor(parts[2])
                 self._json(result, status)
@@ -237,7 +237,7 @@ class PortalHandler(BaseHTTPRequestHandler):
         raw = self.rfile.read(length).decode("utf-8")
         return json.loads(raw) if raw.strip() else {}
 
-    def _json(self, data: dict[str, Any], *, status: int = 200) -> None:
+    def _json(self, data: dict[str, Any], status: int = 200) -> None:
         """Send JSON response."""
         body = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
         self.send_response(status)

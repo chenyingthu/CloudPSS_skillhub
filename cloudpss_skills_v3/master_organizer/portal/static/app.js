@@ -1,3 +1,9 @@
+// Theme initialization
+const savedTheme = localStorage.getItem("cloudpss.portal.theme");
+const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+const initialTheme = savedTheme || (prefersDark ? "dark" : "light");
+document.documentElement.setAttribute("data-theme", initialTheme);
+
 const state = {
   snapshot: null,
   selectedCaseId: null,
@@ -10,6 +16,7 @@ const state = {
   selectedResultDetail: null,
   token: new URLSearchParams(window.location.search).get("token") || "",
   modelEdits: {},
+  theme: initialTheme,
 };
 
 const titles = {
@@ -58,9 +65,9 @@ async function api(path, options = {}) {
   }
 
   if (!response.ok || data.error) {
-    throw new Error(data.error || `HTTP ${response.status}`);
+    throw new Error(data.error?.message || data.error || `HTTP ${response.status}`);
   }
-  return data;
+  return data.data;
 }
 
 function showNotice(message, type = "info") {
@@ -169,7 +176,30 @@ function caseDescriptionText(description) {
 // Static mode flag
 let staticMode = false;
 
+// Loading state management
+function showLoading() {
+  const overlay = $("loadingOverlay");
+  const bar = $("loadingBar");
+  if (overlay) overlay.classList.remove("hidden");
+  if (bar) bar.classList.add("active");
+}
+
+function hideLoading() {
+  const overlay = $("loadingOverlay");
+  const bar = $("loadingBar");
+  if (overlay) {
+    overlay.classList.add("hidden");
+    setTimeout(() => {
+      if (overlay.classList.contains("hidden")) {
+        overlay.style.display = "none";
+      }
+    }, 300);
+  }
+  if (bar) bar.classList.remove("active");
+}
+
 async function refresh() {
+  showLoading();
   try {
     state.snapshot = await api("/api/snapshot");
   } catch (error) {
@@ -182,6 +212,8 @@ async function refresh() {
       showNotice(error.message, "error");
       return;
     }
+  } finally {
+    hideLoading();
   }
   render();
 }
@@ -497,6 +529,17 @@ async function loadCaseDetail(caseId) {
   const plan = detail.simulation_plan || {};
   const model = detail.model || {};
 
+  // Load model editor data from separate endpoint
+  let editor = null;
+  try {
+    const modelData = await api(`/api/cases/${caseId}/model`);
+    editor = modelData;
+    state.model = modelData;  // Store in state for access
+  } catch (e) {
+    // Model may not be available
+    state.model = null;
+  }
+
   // Update workbench title
   $("workbenchTitle").textContent = `${esc(caseRow.name)} - 模型工作台`;
 
@@ -507,25 +550,25 @@ async function loadCaseDetail(caseId) {
   $("editPanelModelName").textContent = model.rid || caseRow.rid || "-";
 
   // Render component navigation and parameter table
-  renderComponentNav(model.editor);
-  renderParameterTable(model.editor, "all");
+  renderComponentNav(editor);
+  renderParameterTable(editor, "all");
 
   // Bind component navigation
-  bindComponentNav(model.editor);
+  bindComponentNav(editor);
 
   // Reset edit state
   state.modelEdits = {};
   updateEditPanel();
 
   // Enable action buttons
-  $("saveModelBtn").disabled = !model.editor?.editable;
-  $("backupModelBtn").disabled = !model.editor?.editable;
+  $("saveModelBtn").disabled = !editor?.editable;
+  $("backupModelBtn").disabled = !editor?.editable;
   $("discardChangesBtn").disabled = true;
   $("exportChangesBtn").disabled = true;
   $("createTaskFromCaseBtn").disabled = false;
 
   // Bind action buttons
-  $("saveModelBtn").onclick = () => saveModelEdits(model.editor?.path);
+  $("saveModelBtn").onclick = () => saveModelEdits(editor?.path);
   $("backupModelBtn").onclick = () => backupModel(caseId);
   $("discardChangesBtn").onclick = () => discardChanges();
   $("exportChangesBtn").onclick = () => exportChanges();
@@ -1730,59 +1773,128 @@ function drawCharts() {
   });
 }
 
+// Store Chart.js instances for cleanup
+const chartInstances = new Map();
+
 function drawChart(canvas, kind, data) {
-  const bounds = canvas.getBoundingClientRect();
-  const cssWidth = Math.max(640, Math.floor(bounds.width || canvas.clientWidth || 900));
-  const cssHeight = Math.max(220, Math.floor(bounds.height || canvas.clientHeight || 260));
-  if (canvas.width !== cssWidth || canvas.height !== cssHeight) {
-    canvas.width = cssWidth;
-    canvas.height = cssHeight;
+  // Destroy existing chart if any
+  if (chartInstances.has(canvas.id)) {
+    chartInstances.get(canvas.id).destroy();
+    chartInstances.delete(canvas.id);
   }
-  const context = canvas.getContext("2d");
-  const width = canvas.width;
-  const height = canvas.height;
-  const pad = 34;
+
   const points = (data.points || []).filter((point) => Number.isFinite(point.y));
-  context.clearRect(0, 0, width, height);
-  context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, width, height);
-  context.strokeStyle = "#d8e0e8";
-  context.lineWidth = 1;
-  context.beginPath();
-  context.moveTo(pad, pad);
-  context.lineTo(pad, height - pad);
-  context.lineTo(width - pad, height - pad);
-  context.stroke();
   if (!points.length) return;
-  const minY = Math.min(...points.map((point) => point.y));
-  const maxY = Math.max(...points.map((point) => point.y));
-  const spanY = maxY - minY || 1;
-  const xAt = (index) => pad + (index / Math.max(points.length - 1, 1)) * (width - pad * 2);
-  const yAt = (value) => height - pad - ((value - minY) / spanY) * (height - pad * 2);
-  context.fillStyle = "#667485";
-  context.font = "12px sans-serif";
-  context.fillText(maxY.toFixed(4), 6, pad + 4);
-  context.fillText(minY.toFixed(4), 6, height - pad);
-  if (kind === "bar") {
-    const barWidth = Math.max(2, (width - pad * 2) / points.length - 1);
-    context.fillStyle = "#265f9e";
-    points.forEach((point, index) => {
-      const x = xAt(index);
-      const y = yAt(point.y);
-      context.fillRect(x, y, barWidth, height - pad - y);
-    });
-  } else {
-    context.strokeStyle = "#116b68";
-    context.lineWidth = 2;
-    context.beginPath();
-    points.forEach((point, index) => {
-      const x = xAt(index);
-      const y = yAt(point.y);
-      if (index === 0) context.moveTo(x, y);
-      else context.lineTo(x, y);
-    });
-    context.stroke();
-  }
+
+  const labels = points.map((point, index) => point.x !== undefined ? point.x : index);
+  const values = points.map((point) => point.y);
+
+  // Detect dark mode
+  const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+
+  // Chart colors based on theme
+  const colors = {
+    primary: isDark ? "#14b8a6" : "#116b68",
+    primaryAlpha: isDark ? "rgba(20, 184, 166, 0.2)" : "rgba(17, 107, 104, 0.2)",
+    grid: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)",
+    text: isDark ? "#e2e8f0" : "#334155",
+    muted: isDark ? "#64748b" : "#64748b",
+  };
+
+  const ctx = canvas.getContext("2d");
+
+  const config = {
+    type: kind === "bar" ? "bar" : "line",
+    data: {
+      labels: labels,
+      datasets: [{
+        label: data.label || "数值",
+        data: values,
+        backgroundColor: kind === "bar" ? colors.primary : colors.primaryAlpha,
+        borderColor: colors.primary,
+        borderWidth: 2,
+        pointRadius: kind === "bar" ? 0 : 3,
+        pointHoverRadius: kind === "bar" ? 0 : 5,
+        pointBackgroundColor: colors.primary,
+        fill: kind === "line",
+        tension: kind === "line" ? 0.1 : 0,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: false,
+        },
+        tooltip: {
+          backgroundColor: isDark ? "#1e293b" : "#ffffff",
+          titleColor: colors.text,
+          bodyColor: colors.text,
+          borderColor: isDark ? "#334155" : "#e2e8f0",
+          borderWidth: 1,
+          padding: 10,
+          displayColors: false,
+          callbacks: {
+            label: function(context) {
+              return `数值: ${context.parsed.y?.toFixed(4) || context.parsed.y}`;
+            }
+          }
+        },
+      },
+      scales: {
+        x: {
+          grid: {
+            color: colors.grid,
+            drawBorder: false,
+          },
+          ticks: {
+            color: colors.muted,
+            font: {
+              size: 11,
+            },
+            maxRotation: 45,
+            minRotation: 0,
+          },
+        },
+        y: {
+          grid: {
+            color: colors.grid,
+            drawBorder: false,
+          },
+          ticks: {
+            color: colors.muted,
+            font: {
+              size: 11,
+            },
+            callback: function(value) {
+              return value.toFixed(3);
+            }
+          },
+        },
+      },
+      interaction: {
+        intersect: false,
+        mode: "index",
+      },
+    },
+  };
+
+  // Create chart instance
+  const chart = new Chart(ctx, config);
+  chartInstances.set(canvas.id, chart);
+}
+
+// Redraw charts when theme changes
+function redrawAllCharts() {
+  document.querySelectorAll("canvas[data-chart]").forEach((canvas) => {
+    try {
+      const payload = JSON.parse(canvas.dataset.chart || "{}");
+      drawChart(canvas, payload.kind, payload.data || {});
+    } catch (_error) {
+      // Ignore errors
+    }
+  });
 }
 
 function renderDataTable(rows) {
@@ -2210,6 +2322,151 @@ function setupEvents() {
       }
     }
   });
+
+  // Theme toggle button
+  $("themeToggleBtn")?.addEventListener("click", () => {
+    const newTheme = state.theme === "light" ? "dark" : "light";
+    state.theme = newTheme;
+    document.documentElement.setAttribute("data-theme", newTheme);
+    localStorage.setItem("cloudpss.portal.theme", newTheme);
+    $("themeToggleBtn").textContent = newTheme === "light" ? "🌙" : "☀️";
+    $("themeToggleBtn").title = newTheme === "light" ? "切换暗色主题" : "切换亮色主题";
+    // Redraw charts with new theme colors
+    redrawAllCharts();
+  });
+
+  // Set initial theme button state
+  if ($("themeToggleBtn")) {
+    $("themeToggleBtn").textContent = state.theme === "light" ? "🌙" : "☀️";
+    $("themeToggleBtn").title = state.theme === "light" ? "切换暗色主题" : "切换亮色主题";
+  }
+}
+
+// Keyboard shortcuts
+document.addEventListener("keydown", (event) => {
+  // Only handle shortcuts when not in an input/textarea
+  if (event.target.matches("input, textarea, select, [contenteditable]")) {
+    // Allow Escape to close dialogs even when in input
+    if (event.key === "Escape") {
+      const openDialog = document.querySelector("dialog[open]");
+      if (openDialog) {
+        event.preventDefault();
+        openDialog.close();
+        return;
+      }
+    }
+    return;
+  }
+
+  const key = event.key.toLowerCase();
+  const ctrl = event.ctrlKey || event.metaKey;
+  const alt = event.altKey;
+
+  // Ctrl/Cmd + R: Refresh
+  if (ctrl && key === "r") {
+    event.preventDefault();
+    refresh();
+    showNotice("已刷新", "info");
+    return;
+  }
+
+  // Ctrl/Cmd + N: New Case
+  if (ctrl && key === "n") {
+    event.preventDefault();
+    $("caseDialog")?.showModal();
+    return;
+  }
+
+  // Ctrl/Cmd + T: New Task
+  if (ctrl && key === "t") {
+    event.preventDefault();
+    if (state.selectedCaseId) {
+      openTaskDialog(state.selectedCaseId);
+    } else if (state.snapshot?.cases?.length > 0) {
+      openTaskDialog(state.snapshot.cases[0].id);
+    } else {
+      showNotice("请先创建一个 Case", "warning");
+    }
+    return;
+  }
+
+  // Alt + 1-7: Switch views
+  if (alt && key >= "1" && key <= "7") {
+    event.preventDefault();
+    const views = ["dashboard", "cases", "tasks", "results", "reports", "servers", "audit"];
+    const index = parseInt(key, 10) - 1;
+    if (views[index]) {
+      switchView(views[index]);
+    }
+    return;
+  }
+
+  // Ctrl/Cmd + D: Toggle theme
+  if (ctrl && key === "d") {
+    event.preventDefault();
+    $("themeToggleBtn")?.click();
+    return;
+  }
+
+  // Ctrl/Cmd + /: Show help
+  if (ctrl && key === "/") {
+    event.preventDefault();
+    showKeyboardShortcuts();
+    return;
+  }
+
+  // Escape: Close dialogs
+  if (key === "escape") {
+    const openDialog = document.querySelector("dialog[open]");
+    if (openDialog) {
+      event.preventDefault();
+      openDialog.close();
+    }
+    return;
+  }
+
+  // Ctrl/Cmd + S: Save (when editing model)
+  if (ctrl && key === "s") {
+    if (state.modelEdits && Object.keys(state.modelEdits).length > 0) {
+      event.preventDefault();
+      $("saveModelBtn")?.click();
+    }
+    return;
+  }
+});
+
+// Show keyboard shortcuts help
+function showKeyboardShortcuts() {
+  const shortcuts = [
+    { key: "Ctrl + R", desc: "刷新数据" },
+    { key: "Ctrl + N", desc: "新建 Case" },
+    { key: "Ctrl + T", desc: "新建任务" },
+    { key: "Ctrl + D", desc: "切换主题" },
+    { key: "Ctrl + S", desc: "保存模型修改" },
+    { key: "Alt + 1~7", desc: "切换视图 (总览/算例/任务/结果/报告/服务/审计)" },
+    { key: "Esc", desc: "关闭对话框" },
+    { key: "Ctrl + /", desc: "显示快捷键帮助" },
+  ];
+
+  const content = shortcuts.map(s => `<div class="shortcut-item"><kbd>${esc(s.key)}</kbd> <span>${esc(s.desc)}</span></div>`).join("");
+
+  const dialog = document.createElement("dialog");
+  dialog.className = "shortcut-dialog";
+  dialog.innerHTML = `
+    <div class="dialog-header">
+      <h3 class="dialog-title">键盘快捷键</h3>
+      <button class="dialog-close" onclick="this.closest('dialog').close()">&times;</button>
+    </div>
+    <div class="dialog-body">
+      ${content}
+    </div>
+    <div class="dialog-footer">
+      <button class="button" onclick="this.closest('dialog').close()">关闭</button>
+    </div>
+  `;
+  document.body.appendChild(dialog);
+  dialog.showModal();
+  dialog.addEventListener("close", () => dialog.remove());
 }
 
 setupEvents();

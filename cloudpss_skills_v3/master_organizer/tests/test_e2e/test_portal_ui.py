@@ -2,6 +2,7 @@
 
 import pytest
 import subprocess
+import sys
 import time
 import socket
 from pathlib import Path
@@ -23,7 +24,7 @@ def portal_server(tmp_path_factory):
     # Start server
     env = {"CLOUDPSS_HOME": str(tmp_path), "PORT": str(port)}
     proc = subprocess.Popen(
-        ["python", "-m", "cloudpss_skills_v3.master_organizer.portal.server", str(port)],
+        [sys.executable, "-m", "cloudpss_skills_v3.master_organizer.portal.server", str(port)],
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
