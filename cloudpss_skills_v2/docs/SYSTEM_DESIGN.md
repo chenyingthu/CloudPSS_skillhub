@@ -161,12 +161,27 @@ power-flow result data before cross-engine reuse:
 
 The inventory records component counts, parameter coverage, and warning
 findings for missing line/transformer impedance or missing bus base voltage.
-It is intentionally a CloudPSS-origin audit and enrichment layer. It does not
-claim full `PowerSystemModel -> CloudPSS` canvas/model generation.
+
+The first `PowerSystemModel -> CloudPSS` generation path is intentionally
+bounded to the static power-flow subset represented by `PowerSystemModel`.
+`UnifiedToCloudPSSDraftConverter` emits an auditable CloudPSS component draft
+for buses, lines, branch transformers, loads, and generators. `CloudPSSModelWriter`
+is the narrow SDK boundary that calls `addComponent()` with generated args,
+pins, and deterministic positions. This is not a claim of arbitrary CloudPSS
+canvas reconstruction: controls, protection logic, EMT subsystems, custom
+symbols, and high-fidelity visual layout remain outside the first generation
+scope.
 
 This is the intended validation chain for production hardening:
 
 ```
+PowerSystemModel
+    -> CloudPSS static component draft
+    -> CloudPSS SDK writer
+    -> CloudPSS static component inventory + diagnostics
+    -> enriched unified PowerSystemModel
+    -> diagnose_unified_model(include_matpower=True)
+
 CloudPSS power flow
     -> CloudPSS static component inventory + diagnostics
     -> enriched unified PowerSystemModel

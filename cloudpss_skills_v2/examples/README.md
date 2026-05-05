@@ -257,6 +257,24 @@ diagnostic summary with component counts, static parameter coverage, and missing
 parameter findings. This is an audit/enrichment layer for CloudPSS-origin
 models, not a full unified-model-to-CloudPSS canvas generator.
 
+For the first bounded `PowerSystemModel -> CloudPSS` generation path, create an
+auditable component draft before writing through the CloudPSS SDK:
+
+```python
+from cloudpss_skills_v2.powerapi.adapters.cloudpss.model_draft import (
+    CloudPSSModelWriter,
+    UnifiedToCloudPSSDraftConverter,
+)
+
+draft = UnifiedToCloudPSSDraftConverter().convert(model)
+created = CloudPSSModelWriter().write(cloudpss_model, draft)
+```
+
+The draft currently covers the static power-flow subset: buses, lines,
+branch transformers, loads, and generators. Controls, protection logic, EMT
+subsystems, and high-fidelity canvas layout are deliberately outside this first
+generator scope.
+
 Large pandapower standard cases can be used to stress the same conversion path:
 
 ```bash
